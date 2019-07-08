@@ -1,2 +1,5 @@
 # status-protocol-go
-Status Protocol implementation in Go
+
+This is the Status Protocol implementation in Go.
+
+TBD
