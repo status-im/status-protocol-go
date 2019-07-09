@@ -15,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/status-im/status-protocol-go/encryption/internal/storage"
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
 	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
 )
@@ -37,17 +38,15 @@ type EncryptionServiceTestSuite struct {
 }
 
 func (s *EncryptionServiceTestSuite) initDatabases(baseConfig *EncryptionServiceConfig) {
-
 	aliceDBFile, err := ioutil.TempFile(os.TempDir(), "alice")
 	s.Require().NoError(err)
-	aliceDBPath := aliceDBFile.Name()
+	aliceDB, err := storage.Open(aliceDBFile.Name(), "", storage.KdfIterationsNumber)
+	s.Require().NoError(err)
 
 	bobDBFile, err := ioutil.TempFile(os.TempDir(), "bob")
 	s.Require().NoError(err)
-	bobDBPath := bobDBFile.Name()
-
-	s.aliceDBPath = aliceDBPath
-	s.bobDBPath = bobDBPath
+	bobDB, err := storage.Open(bobDBFile.Name(), "", storage.KdfIterationsNumber)
+	s.Require().NoError(err)
 
 	if baseConfig == nil {
 		config := DefaultEncryptionServiceConfig(aliceInstallationID)
@@ -59,22 +58,16 @@ func (s *EncryptionServiceTestSuite) initDatabases(baseConfig *EncryptionService
 		bobDBKey   = "bob"
 	)
 
+	baseConfig.InstallationID = aliceInstallationID
+
 	aliceMultideviceConfig := &multidevice.Config{
 		MaxInstallations: 3,
 		InstallationID:   aliceInstallationID,
 		ProtocolVersion:  1,
 	}
-
-	alicePersistence, err := NewSQLLitePersistence(aliceDBPath, aliceDBKey)
-	if err != nil {
-		panic(err)
-	}
-
-	baseConfig.InstallationID = aliceInstallationID
-	aliceEncryptionService := NewEncryptionService(alicePersistence, *baseConfig)
-
-	aliceSharedSecretService := sharedsecret.NewService(alicePersistence.GetSharedSecretStorage())
-	aliceMultideviceService := multidevice.New(aliceMultideviceConfig, alicePersistence.GetMultideviceStorage())
+	aliceMultideviceService := multidevice.New(aliceDB, aliceMultideviceConfig)
+	aliceEncryptionService := NewEncryptionService(aliceDB, *baseConfig)
+	aliceSharedSecretService := sharedsecret.New(aliceDB)
 
 	s.alice = NewProtocolService(
 		aliceEncryptionService,
@@ -84,23 +77,15 @@ func (s *EncryptionServiceTestSuite) initDatabases(baseConfig *EncryptionService
 		func(s []*sharedsecret.Secret) {},
 	)
 
-	bobPersistence, err := NewSQLLitePersistence(bobDBPath, bobDBKey)
-	if err != nil {
-		panic(err)
-	}
-
 	bobMultideviceConfig := &multidevice.Config{
 		MaxInstallations: 3,
 		InstallationID:   bobInstallationID,
 		ProtocolVersion:  1,
 	}
-
-	bobMultideviceService := multidevice.New(bobMultideviceConfig, bobPersistence.GetMultideviceStorage())
-
-	bobSharedSecretService := sharedsecret.NewService(bobPersistence.GetSharedSecretStorage())
-
+	bobMultideviceService := multidevice.New(bobDB, bobMultideviceConfig)
+	bobSharedSecretService := sharedsecret.New(bobDB)
 	baseConfig.InstallationID = bobInstallationID
-	bobEncryptionService := NewEncryptionService(bobPersistence, *baseConfig)
+	bobEncryptionService := NewEncryptionService(bobDB, *baseConfig)
 
 	s.bob = NewProtocolService(
 		bobEncryptionService,
@@ -109,7 +94,6 @@ func (s *EncryptionServiceTestSuite) initDatabases(baseConfig *EncryptionService
 		func(s []*multidevice.Installation) {},
 		func(s []*sharedsecret.Secret) {},
 	)
-
 }
 
 func (s *EncryptionServiceTestSuite) SetupTest() {

@@ -3,12 +3,13 @@ package encryption
 import (
 	"crypto/ecdsa"
 	"fmt"
-	"os"
+	"io/ioutil"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/status-im/status-protocol-go/encryption/internal/storage"
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
 	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
 )
@@ -45,27 +46,28 @@ func setupUser(user string, s *EncryptionServiceMultiDeviceSuite, n int) error {
 
 	for i := 0; i < n; i++ {
 		installationID := fmt.Sprintf("%s%d", user, i+1)
-		dbPath := fmt.Sprintf("/tmp/%s.db", installationID)
-
-		os.Remove(dbPath)
-
-		persistence, err := NewSQLLitePersistence(dbPath, "key")
+		dbFilename := fmt.Sprintf("sqlite-persistence-test-%s.sql", installationID)
+		tmpFile, err := ioutil.TempFile("", dbFilename)
 		if err != nil {
 			return err
 		}
+
+		db, err := storage.Open(tmpFile.Name(), "", storage.KdfIterationsNumber)
+		if err != nil {
+			return err
+		}
+
 		// Initialize sharedsecret
 		multideviceConfig := &multidevice.Config{
 			MaxInstallations: n - 1,
 			InstallationID:   installationID,
 			ProtocolVersion:  1,
 		}
-
-		sharedSecretService := sharedsecret.NewService(persistence.GetSharedSecretStorage())
-		multideviceService := multidevice.New(multideviceConfig, persistence.GetMultideviceStorage())
-
+		multideviceService := multidevice.New(db, multideviceConfig)
+		sharedSecretService := sharedsecret.New(db)
 		protocol := NewProtocolService(
 			NewEncryptionService(
-				persistence,
+				db,
 				DefaultEncryptionServiceConfig(installationID)),
 			sharedSecretService,
 			multideviceService,
@@ -74,7 +76,6 @@ func setupUser(user string, s *EncryptionServiceMultiDeviceSuite, n int) error {
 		)
 
 		s.services[user].services[i] = protocol
-
 	}
 
 	return nil

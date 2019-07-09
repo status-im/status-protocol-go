@@ -1,12 +1,13 @@
 package encryption
 
 import (
-	"os"
+	"io/ioutil"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/status-im/status-protocol-go/encryption/internal/storage"
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
 	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
 )
@@ -22,23 +23,17 @@ type ProtocolServiceTestSuite struct {
 }
 
 func (s *ProtocolServiceTestSuite) SetupTest() {
-	aliceDBPath := "/tmp/alice.db"
+	aliceDBPath, err := ioutil.TempFile("", "alice.db")
+	s.Require().NoError(err)
 	aliceDBKey := "alice"
-	bobDBPath := "/tmp/bob.db"
+	aliceDB, err := storage.Open(aliceDBPath.Name(), aliceDBKey, storage.KdfIterationsNumber)
+	s.Require().NoError(err)
+
+	bobDBPath, err := ioutil.TempFile("", "bob.db")
+	s.Require().NoError(err)
 	bobDBKey := "bob"
-
-	os.Remove(aliceDBPath)
-	os.Remove(bobDBPath)
-
-	alicePersistence, err := NewSQLLitePersistence(aliceDBPath, aliceDBKey)
-	if err != nil {
-		panic(err)
-	}
-
-	bobPersistence, err := NewSQLLitePersistence(bobDBPath, bobDBKey)
-	if err != nil {
-		panic(err)
-	}
+	bobDB, err := storage.Open(bobDBPath.Name(), bobDBKey, storage.KdfIterationsNumber)
+	s.Require().NoError(err)
 
 	addedBundlesHandler := func(addedBundles []*multidevice.Installation) {}
 	onNewSharedSecretHandler := func(secret []*sharedsecret.Secret) {}
@@ -46,13 +41,13 @@ func (s *ProtocolServiceTestSuite) SetupTest() {
 	aliceMultideviceConfig := &multidevice.Config{
 		MaxInstallations: 3,
 		InstallationID:   "1",
-		ProtocolVersion:  ProtocolVersion,
+		ProtocolVersion:  protocolVersion,
 	}
 
 	s.alice = NewProtocolService(
-		NewEncryptionService(alicePersistence, DefaultEncryptionServiceConfig("1")),
-		sharedsecret.NewService(alicePersistence.GetSharedSecretStorage()),
-		multidevice.New(aliceMultideviceConfig, alicePersistence.GetMultideviceStorage()),
+		NewEncryptionService(aliceDB, DefaultEncryptionServiceConfig("1")),
+		sharedsecret.New(aliceDB),
+		multidevice.New(aliceDB, aliceMultideviceConfig),
 		addedBundlesHandler,
 		onNewSharedSecretHandler,
 	)
@@ -60,17 +55,16 @@ func (s *ProtocolServiceTestSuite) SetupTest() {
 	bobMultideviceConfig := &multidevice.Config{
 		MaxInstallations: 3,
 		InstallationID:   "2",
-		ProtocolVersion:  ProtocolVersion,
+		ProtocolVersion:  protocolVersion,
 	}
 
 	s.bob = NewProtocolService(
-		NewEncryptionService(bobPersistence, DefaultEncryptionServiceConfig("2")),
-		sharedsecret.NewService(bobPersistence.GetSharedSecretStorage()),
-		multidevice.New(bobMultideviceConfig, bobPersistence.GetMultideviceStorage()),
+		NewEncryptionService(bobDB, DefaultEncryptionServiceConfig("2")),
+		sharedsecret.New(bobDB),
+		multidevice.New(bobDB, bobMultideviceConfig),
 		addedBundlesHandler,
 		onNewSharedSecretHandler,
 	)
-
 }
 
 func (s *ProtocolServiceTestSuite) TestBuildPublicMessage() {

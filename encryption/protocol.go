@@ -2,89 +2,33 @@ package encryption
 
 import (
 	"crypto/ecdsa"
+	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 
 	"github.com/ethereum/go-ethereum/crypto"
 
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
+	"github.com/status-im/status-protocol-go/encryption/publisher"
 	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
 )
 
 //go:generate protoc --go_out=. ./protocol_message.proto
 
-const ProtocolVersion = 1
-const sharedSecretNegotiationVersion = 1
-const partitionedTopicMinVersion = 1
-const defaultMinVersion = 0
+const (
+	protocolVersion                = 1
+	sharedSecretNegotiationVersion = 1
+	partitionedTopicMinVersion     = 1
+	defaultMinVersion              = 0
+)
 
-type PartitionTopic int
+type PartitionTopicMode int
 
 const (
-	PartitionTopicNoSupport PartitionTopic = iota
+	PartitionTopicNoSupport PartitionTopicMode = iota
 	PartitionTopicV1
 )
-
-type ProtocolService struct {
-	encryption               *EncryptionService
-	secret                   *sharedsecret.Service
-	multidevice              *multidevice.Service
-	addedBundlesHandler      func([]*multidevice.Installation)
-	onNewSharedSecretHandler func([]*sharedsecret.Secret)
-	Enabled                  bool
-}
-
-var (
-	ErrNotProtocolMessage = errors.New("not a protocol message")
-	ErrNoPayload          = errors.New("no payload")
-)
-
-// NewProtocolService creates a new ProtocolService instance
-func NewProtocolService(encryption *EncryptionService, secret *sharedsecret.Service, multidevice *multidevice.Service, addedBundlesHandler func([]*multidevice.Installation), onNewSharedSecretHandler func([]*sharedsecret.Secret)) *ProtocolService {
-	return &ProtocolService{
-		encryption:               encryption,
-		secret:                   secret,
-		multidevice:              multidevice,
-		addedBundlesHandler:      addedBundlesHandler,
-		onNewSharedSecretHandler: onNewSharedSecretHandler,
-	}
-}
-
-func (p *ProtocolService) addBundle(myIdentityKey *ecdsa.PrivateKey, msg *ProtocolMessage, sendSingle bool) (*ProtocolMessage, error) {
-
-	// Get a bundle
-	installations, err := p.multidevice.GetOurActiveInstallations(&myIdentityKey.PublicKey)
-	if err != nil {
-		return nil, err
-	}
-
-	bundle, err := p.encryption.CreateBundle(myIdentityKey, installations)
-	if err != nil {
-		// // p.log.Error("encryption-service", "error creating bundle", err)
-		return nil, err
-	}
-
-	if sendSingle {
-		// DEPRECATED: This is only for backward compatibility, remove once not
-		// an issue anymore
-		msg.Bundle = bundle
-	} else {
-		msg.Bundles = []*Bundle{bundle}
-	}
-
-	return msg, nil
-}
-
-// BuildPublicMessage marshals a public chat message given the user identity private key and a payload
-func (p *ProtocolService) BuildPublicMessage(myIdentityKey *ecdsa.PrivateKey, payload []byte) (*ProtocolMessage, error) {
-	// Build message not encrypted
-	protocolMessage := &ProtocolMessage{
-		InstallationId: p.encryption.config.InstallationID,
-		PublicMessage:  payload,
-	}
-
-	return p.addBundle(myIdentityKey, protocolMessage, false)
-}
 
 type ProtocolMessageSpec struct {
 	Message *ProtocolMessage
@@ -92,10 +36,11 @@ type ProtocolMessageSpec struct {
 	Installations []*multidevice.Installation
 	// SharedSecret is a shared secret established among the installations
 	SharedSecret []byte
+	// Public means that the spec contains a public wrapped message
+	Public bool
 }
 
 func (p *ProtocolMessageSpec) MinVersion() uint32 {
-
 	if len(p.Installations) == 0 {
 		return defaultMinVersion
 	}
@@ -110,15 +55,119 @@ func (p *ProtocolMessageSpec) MinVersion() uint32 {
 	return version
 }
 
-func (p *ProtocolMessageSpec) PartitionedTopic() PartitionTopic {
+func (p *ProtocolMessageSpec) PartitionedTopicMode() PartitionTopicMode {
 	if p.MinVersion() >= partitionedTopicMinVersion {
 		return PartitionTopicV1
 	}
 	return PartitionTopicNoSupport
 }
 
+type Protocol struct {
+	encryption  *encryptor
+	secret      *sharedsecret.SharedSecret
+	multidevice *multidevice.Multidevice
+	publisher   *publisher.Publisher
+
+	onAddedBundlesHandler    func([]*multidevice.Installation)
+	onNewSharedSecretHandler func([]*sharedsecret.Secret)
+
+	systemMessages chan *ProtocolMessageSpec
+}
+
+var (
+	// ErrNoPayload means that there was no payload found in the received protocol message.
+	ErrNoPayload = errors.New("no payload")
+)
+
+// New creates a new ProtocolService instance
+func New(
+	db *sql.DB,
+	installationID string,
+	addedBundlesHandler func([]*multidevice.Installation),
+	onNewSharedSecretHandler func([]*sharedsecret.Secret),
+) *Protocol {
+	encryptionService := newEncryptor(db, defaultEncryptorConfig(installationID))
+	return &Protocol{
+		encryption: encryptionService,
+		secret:     sharedsecret.New(db),
+		multidevice: multidevice.New(db, &multidevice.Config{
+			MaxInstallations: 3,
+			ProtocolVersion:  protocolVersion,
+			InstallationID:   installationID,
+		}),
+		publisher:                publisher.New(db),
+		onAddedBundlesHandler:    addedBundlesHandler,
+		onNewSharedSecretHandler: onNewSharedSecretHandler,
+		systemMessages:           make(chan *ProtocolMessageSpec),
+	}
+}
+
+func (p *Protocol) Start(myIdentity *ecdsa.PrivateKey) {
+	publisherCh := p.publisher.Start()
+
+	go func() {
+		for {
+			select {
+			case <-publisherCh:
+				spec, err := p.buildContactCodeMessage(myIdentity)
+				if err != nil {
+					log.Printf("[Protocol::Start] failed to build a public messages for Publisher: %v", err)
+				} else {
+					p.systemMessages <- spec
+				}
+			}
+		}
+	}()
+}
+
+func (p *Protocol) addBundle(myIdentityKey *ecdsa.PrivateKey, msg *ProtocolMessage, sendSingle bool) error {
+	// Get a bundle
+	installations, err := p.multidevice.GetOurActiveInstallations(&myIdentityKey.PublicKey)
+	if err != nil {
+		return err
+	}
+
+	bundle, err := p.encryption.CreateBundle(myIdentityKey, installations)
+	if err != nil {
+		// // p.log.Error("encryption-service", "error creating bundle", err)
+		return err
+	}
+
+	if sendSingle {
+		// DEPRECATED: This is only for backward compatibility, remove once not
+		// an issue anymore
+		msg.Bundle = bundle
+	} else {
+		msg.Bundles = []*Bundle{bundle}
+	}
+
+	return nil
+}
+
+// BuildPublicMessage marshals a public chat message given the user identity private key and a payload
+func (p *Protocol) BuildPublicMessage(myIdentityKey *ecdsa.PrivateKey, payload []byte) (*ProtocolMessageSpec, error) {
+	// Build message not encrypted
+	message := &ProtocolMessage{
+		InstallationId: p.encryption.config.InstallationID,
+		PublicMessage:  payload,
+	}
+
+	err := p.addBundle(myIdentityKey, message, false)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ProtocolMessageSpec{Message: message, Public: true}, nil
+}
+
+// buildContactCodeMessage creates a contact code message. It's a public message
+// without any data but it carries bundle information.
+func (p *Protocol) buildContactCodeMessage(myIdentityKey *ecdsa.PrivateKey) (*ProtocolMessageSpec, error) {
+	return p.BuildPublicMessage(myIdentityKey, nil)
+}
+
 // BuildDirectMessage returns a 1:1 chat message and optionally a negotiated topic given the user identity private key, the recipient's public key, and a payload
-func (p *ProtocolService) BuildDirectMessage(myIdentityKey *ecdsa.PrivateKey, publicKey *ecdsa.PublicKey, payload []byte) (*ProtocolMessageSpec, error) {
+func (p *Protocol) BuildDirectMessage(myIdentityKey *ecdsa.PrivateKey, publicKey *ecdsa.PublicKey, payload []byte) (*ProtocolMessageSpec, error) {
 	activeInstallations, err := p.multidevice.GetActiveInstallations(publicKey)
 	if err != nil {
 		return nil, err
@@ -132,12 +181,12 @@ func (p *ProtocolService) BuildDirectMessage(myIdentityKey *ecdsa.PrivateKey, pu
 	}
 
 	// Build message
-	protocolMessage := &ProtocolMessage{
+	message := &ProtocolMessage{
 		InstallationId: p.encryption.config.InstallationID,
 		DirectMessage:  encryptionResponse,
 	}
 
-	msg, err := p.addBundle(myIdentityKey, protocolMessage, true)
+	err = p.addBundle(myIdentityKey, message, true)
 	if err != nil {
 		return nil, err
 	}
@@ -147,13 +196,13 @@ func (p *ProtocolService) BuildDirectMessage(myIdentityKey *ecdsa.PrivateKey, pu
 	var installationIDs []string
 	var sharedSecret *sharedsecret.Secret
 	var agreed bool
-	for installationID := range protocolMessage.GetDirectMessage() {
+	for installationID := range message.GetDirectMessage() {
 		if installationID != noInstallationID {
 			installationIDs = append(installationIDs, installationID)
 		}
 	}
 
-	sharedSecret, agreed, err = p.secret.Send(myIdentityKey, p.encryption.config.InstallationID, publicKey, installationIDs)
+	sharedSecret, agreed, err = p.secret.Agreed(myIdentityKey, p.encryption.config.InstallationID, publicKey, installationIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +212,7 @@ func (p *ProtocolService) BuildDirectMessage(myIdentityKey *ecdsa.PrivateKey, pu
 		p.onNewSharedSecretHandler([]*sharedsecret.Secret{sharedSecret})
 	}
 	response := &ProtocolMessageSpec{
-		Message:       msg,
+		Message:       message,
 		Installations: installations,
 	}
 
@@ -174,7 +223,7 @@ func (p *ProtocolService) BuildDirectMessage(myIdentityKey *ecdsa.PrivateKey, pu
 }
 
 // BuildDHMessage builds a message with DH encryption so that it can be decrypted by any other device.
-func (p *ProtocolService) BuildDHMessage(myIdentityKey *ecdsa.PrivateKey, destination *ecdsa.PublicKey, payload []byte) (*ProtocolMessageSpec, error) {
+func (p *Protocol) BuildDHMessage(myIdentityKey *ecdsa.PrivateKey, destination *ecdsa.PublicKey, payload []byte) (*ProtocolMessageSpec, error) {
 	// Encrypt payload
 	encryptionResponse, err := p.encryption.EncryptPayloadWithDH(destination, payload)
 	if err != nil {
@@ -183,21 +232,21 @@ func (p *ProtocolService) BuildDHMessage(myIdentityKey *ecdsa.PrivateKey, destin
 	}
 
 	// Build message
-	protocolMessage := &ProtocolMessage{
+	message := &ProtocolMessage{
 		InstallationId: p.encryption.config.InstallationID,
 		DirectMessage:  encryptionResponse,
 	}
 
-	msg, err := p.addBundle(myIdentityKey, protocolMessage, true)
+	err = p.addBundle(myIdentityKey, message, true)
 	if err != nil {
 		return nil, err
 	}
 
-	return &ProtocolMessageSpec{Message: msg}, nil
+	return &ProtocolMessageSpec{Message: message}, nil
 }
 
 // ProcessPublicBundle processes a received X3DH bundle.
-func (p *ProtocolService) ProcessPublicBundle(myIdentityKey *ecdsa.PrivateKey, bundle *Bundle) ([]*multidevice.Installation, error) {
+func (p *Protocol) ProcessPublicBundle(myIdentityKey *ecdsa.PrivateKey, bundle *Bundle) ([]*multidevice.Installation, error) {
 	// p.log.Debug("Processing bundle", "bundle", bundle)
 
 	if err := p.encryption.ProcessPublicBundle(myIdentityKey, bundle); err != nil {
@@ -218,7 +267,7 @@ func (p *ProtocolService) ProcessPublicBundle(myIdentityKey *ecdsa.PrivateKey, b
 // recoverInstallationsFromBundle extracts installations from the bundle.
 // It returns extracted installations and true if the installations
 // are ours, i.e. the bundle was created by our identity key.
-func (p *ProtocolService) recoverInstallationsFromBundle(myIdentityKey *ecdsa.PrivateKey, bundle *Bundle) ([]*multidevice.Installation, bool, error) {
+func (p *Protocol) recoverInstallationsFromBundle(myIdentityKey *ecdsa.PrivateKey, bundle *Bundle) ([]*multidevice.Installation, bool, error) {
 	var installations []*multidevice.Installation
 
 	theirIdentity, err := ExtractIdentity(bundle)
@@ -247,7 +296,7 @@ func (p *ProtocolService) recoverInstallationsFromBundle(myIdentityKey *ecdsa.Pr
 }
 
 // GetBundle retrieves or creates a X3DH bundle, given a private identity key.
-func (p *ProtocolService) GetBundle(myIdentityKey *ecdsa.PrivateKey) (*Bundle, error) {
+func (p *Protocol) GetBundle(myIdentityKey *ecdsa.PrivateKey) (*Bundle, error) {
 	installations, err := p.multidevice.GetOurActiveInstallations(&myIdentityKey.PublicKey)
 	if err != nil {
 		return nil, err
@@ -257,27 +306,27 @@ func (p *ProtocolService) GetBundle(myIdentityKey *ecdsa.PrivateKey) (*Bundle, e
 }
 
 // EnableInstallation enables an installation for multi-device sync.
-func (p *ProtocolService) EnableInstallation(myIdentityKey *ecdsa.PublicKey, installationID string) error {
+func (p *Protocol) EnableInstallation(myIdentityKey *ecdsa.PublicKey, installationID string) error {
 	return p.multidevice.EnableInstallation(myIdentityKey, installationID)
 }
 
 // DisableInstallation disables an installation for multi-device sync.
-func (p *ProtocolService) DisableInstallation(myIdentityKey *ecdsa.PublicKey, installationID string) error {
+func (p *Protocol) DisableInstallation(myIdentityKey *ecdsa.PublicKey, installationID string) error {
 	return p.multidevice.DisableInstallation(myIdentityKey, installationID)
 }
 
 // GetOurInstallations returns all the installations available given an identity
-func (p *ProtocolService) GetOurInstallations(myIdentityKey *ecdsa.PublicKey) ([]*multidevice.Installation, error) {
+func (p *Protocol) GetOurInstallations(myIdentityKey *ecdsa.PublicKey) ([]*multidevice.Installation, error) {
 	return p.multidevice.GetOurInstallations(myIdentityKey)
 }
 
 // SetInstallationMetadata sets the metadata for our own installation
-func (p *ProtocolService) SetInstallationMetadata(myIdentityKey *ecdsa.PublicKey, installationID string, data *multidevice.InstallationMetadata) error {
+func (p *Protocol) SetInstallationMetadata(myIdentityKey *ecdsa.PublicKey, installationID string, data *multidevice.InstallationMetadata) error {
 	return p.multidevice.SetInstallationMetadata(myIdentityKey, installationID, data)
 }
 
 // GetPublicBundle retrieves a public bundle given an identity
-func (p *ProtocolService) GetPublicBundle(theirIdentityKey *ecdsa.PublicKey) (*Bundle, error) {
+func (p *Protocol) GetPublicBundle(theirIdentityKey *ecdsa.PublicKey) (*Bundle, error) {
 	installations, err := p.multidevice.GetActiveInstallations(theirIdentityKey)
 	if err != nil {
 		return nil, err
@@ -286,16 +335,12 @@ func (p *ProtocolService) GetPublicBundle(theirIdentityKey *ecdsa.PublicKey) (*B
 }
 
 // ConfirmMessagesProcessed confirms and deletes message keys for the given messages
-func (p *ProtocolService) ConfirmMessagesProcessed(messageIDs [][]byte) error {
+func (p *Protocol) ConfirmMessagesProcessed(messageIDs [][]byte) error {
 	return p.encryption.ConfirmMessagesProcessed(messageIDs)
 }
 
-func (p *ProtocolService) GetSharedSecretService() *sharedsecret.Service {
-	return p.secret
-}
-
 // HandleMessage unmarshals a message and processes it, decrypting it if it is a 1:1 message.
-func (p *ProtocolService) HandleMessage(myIdentityKey *ecdsa.PrivateKey, theirPublicKey *ecdsa.PublicKey, protocolMessage *ProtocolMessage, messageID []byte) ([]byte, error) {
+func (p *Protocol) HandleMessage(myIdentityKey *ecdsa.PrivateKey, theirPublicKey *ecdsa.PublicKey, protocolMessage *ProtocolMessage, messageID []byte) ([]byte, error) {
 	// p.log.Debug("Received message from", "public-key", theirPublicKey)
 	if p.encryption == nil {
 		return nil, errors.New("encryption service not initialized")
@@ -309,7 +354,7 @@ func (p *ProtocolService) HandleMessage(myIdentityKey *ecdsa.PrivateKey, theirPu
 			return nil, err
 		}
 
-		p.addedBundlesHandler(addedBundles)
+		p.onAddedBundlesHandler(addedBundles)
 	}
 
 	// Process bundles
@@ -320,7 +365,7 @@ func (p *ProtocolService) HandleMessage(myIdentityKey *ecdsa.PrivateKey, theirPu
 			return nil, err
 		}
 
-		p.addedBundlesHandler(addedBundles)
+		p.onAddedBundlesHandler(addedBundles)
 	}
 
 	// Check if it's a public message
@@ -344,7 +389,7 @@ func (p *ProtocolService) HandleMessage(myIdentityKey *ecdsa.PrivateKey, theirPu
 		// p.log.Debug("Message version is", "version", version)
 		if version >= sharedSecretNegotiationVersion {
 			// p.log.Debug("Negotiating shared secret")
-			sharedSecret, err := p.secret.Receive(myIdentityKey, theirPublicKey, protocolMessage.GetInstallationId())
+			sharedSecret, err := p.secret.Generate(myIdentityKey, theirPublicKey, protocolMessage.GetInstallationId())
 			if err != nil {
 				return nil, err
 			}

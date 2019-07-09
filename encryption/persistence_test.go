@@ -2,18 +2,15 @@ package encryption
 
 import (
 	"database/sql"
-	"os"
+	"io/ioutil"
+	"path/filepath"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/status-im/status-protocol-go/encryption/internal/storage"
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
-)
-
-const (
-	dbPath = "/tmp/status-key-store.db"
-	key    = "blahblahblah"
 )
 
 func TestSQLLitePersistenceTestSuite(t *testing.T) {
@@ -24,25 +21,17 @@ type SQLLitePersistenceTestSuite struct {
 	suite.Suite
 	// nolint: structcheck, megacheck
 	db      *sql.DB
-	service Persistence
+	service *sqlitePersistence
 }
 
 func (s *SQLLitePersistenceTestSuite) SetupTest() {
-	os.Remove(dbPath)
-
-	p, err := NewSQLLitePersistence(dbPath, key)
-	s.Require().NoError(err)
-	s.service = p
-}
-
-func (s *SQLLitePersistenceTestSuite) TestMultipleInit() {
-	os.Remove(dbPath)
-
-	_, err := NewSQLLitePersistence(dbPath, key)
+	dir, err := ioutil.TempDir("", "sqlite-persistence")
 	s.Require().NoError(err)
 
-	_, err = NewSQLLitePersistence(dbPath, key)
+	db, err := storage.Open(filepath.Join(dir, "db.sql"), "", storage.KdfIterationsNumber)
 	s.Require().NoError(err)
+
+	s.service = newSQLitePersistence(db)
 }
 
 func (s *SQLLitePersistenceTestSuite) TestPrivateBundle() {

@@ -42,11 +42,17 @@ type Chat struct {
 	FilterID string `json:"filterId"`
 	// SymKeyID is the symmetric key id used for symmetric chats
 	SymKeyID string `json:"symKeyId"`
+	// OneToOne tells us if we need to use asymmetric encryption for this chat
+	OneToOne bool `json:"oneToOne"`
 	// Identity is the public key of the other recipient for non-public chats.
 	// It's encoded using encoding/hex.
 	Identity string `json:"identity"`
 	// Topic is the whisper topic
 	Topic whisper.TopicType `json:"topic"`
+	// Discovery is whether this is a discovery topic
+	Discovery bool `json:"discovery"`
+	// Negotiated tells us whether is a negotiated topic
+	Negotiated bool `json:"negotiated"`
 }
 
 type Messages struct {
@@ -269,11 +275,12 @@ func (s *ChatsManager) LoadNegotiated(secret NegodiatedSecret) (*Chat, error) {
 	}
 
 	chat := &Chat{
-		ChatID:   chatID,
-		Topic:    filter.Topic,
-		SymKeyID: filter.SymKeyID,
-		FilterID: filter.FilterID,
-		Identity: publicKeyToStr(secret.PublicKey),
+		ChatID:     chatID,
+		Topic:      filter.Topic,
+		SymKeyID:   filter.SymKeyID,
+		FilterID:   filter.FilterID,
+		Identity:   publicKeyToStr(secret.PublicKey),
+		Negotiated: true,
 	}
 
 	s.chats[chat.ChatID] = chat
@@ -295,8 +302,9 @@ func (s *ChatsManager) loadDiscovery() error {
 	identityStr := publicKeyToStr(&s.privateKey.PublicKey)
 
 	discoveryChat := &Chat{
-		ChatID:   discoveryTopic,
-		Identity: identityStr,
+		ChatID:    discoveryTopic,
+		Identity:  identityStr,
+		Discovery: true,
 	}
 
 	discoveryResponse, err := s.addAsymmetric(discoveryChat.ChatID, true)

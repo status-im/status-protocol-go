@@ -1,11 +1,14 @@
 package encryption
 
 import (
-	"os"
+	"io/ioutil"
+	"path/filepath"
 	"testing"
 
 	dr "github.com/status-im/doubleratchet"
 	"github.com/stretchr/testify/suite"
+
+	"github.com/status-im/status-protocol-go/encryption/internal/storage"
 )
 
 var (
@@ -28,16 +31,16 @@ type SQLLitePersistenceKeysStorageTestSuite struct {
 }
 
 func (s *SQLLitePersistenceKeysStorageTestSuite) SetupTest() {
-	dbPath := "/tmp/status-key-store.db"
+	dir, err := ioutil.TempDir("", "keys-storage-persistence")
+	s.Require().NoError(err)
+
 	key := "blahblahblah"
 
-	os.Remove(dbPath)
+	db, err := storage.Open(filepath.Join(dir, "db.sql"), key, storage.KdfIterationsNumber)
+	s.Require().NoError(err)
 
-	p, err := NewSQLLitePersistence(dbPath, key)
-	if err != nil {
-		panic(err)
-	}
-	s.service = p.GetKeysStorage()
+	p := newSQLitePersistence(db)
+	s.service = p.KeysStorage()
 }
 
 func (s *SQLLitePersistenceKeysStorageTestSuite) TestKeysStorageSqlLiteGetMissing() {

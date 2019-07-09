@@ -2,6 +2,7 @@ package multidevice
 
 import (
 	"crypto/ecdsa"
+	"database/sql"
 
 	"github.com/ethereum/go-ethereum/crypto"
 )
@@ -36,28 +37,28 @@ type Config struct {
 	InstallationID   string
 }
 
-func New(config *Config, persistence Persistence) *Service {
-	return &Service{
-		config:      config,
-		persistence: persistence,
-	}
-}
-
-type Service struct {
-	persistence Persistence
+type Multidevice struct {
+	persistence *sqlitePersistence
 	config      *Config
 }
 
-func (s *Service) InstallationID() string {
+func New(db *sql.DB, config *Config) *Multidevice {
+	return &Multidevice{
+		config:      config,
+		persistence: newSQLitePersistence(db),
+	}
+}
+
+func (s *Multidevice) InstallationID() string {
 	return s.config.InstallationID
 }
 
-func (s *Service) GetActiveInstallations(identity *ecdsa.PublicKey) ([]*Installation, error) {
+func (s *Multidevice) GetActiveInstallations(identity *ecdsa.PublicKey) ([]*Installation, error) {
 	identityC := crypto.CompressPubkey(identity)
 	return s.persistence.GetActiveInstallations(s.config.MaxInstallations, identityC)
 }
 
-func (s *Service) GetOurActiveInstallations(identity *ecdsa.PublicKey) ([]*Installation, error) {
+func (s *Multidevice) GetOurActiveInstallations(identity *ecdsa.PublicKey) ([]*Installation, error) {
 	identityC := crypto.CompressPubkey(identity)
 	installations, err := s.persistence.GetActiveInstallations(s.config.MaxInstallations-1, identityC)
 	if err != nil {
@@ -72,7 +73,7 @@ func (s *Service) GetOurActiveInstallations(identity *ecdsa.PublicKey) ([]*Insta
 	return installations, nil
 }
 
-func (s *Service) GetOurInstallations(identity *ecdsa.PublicKey) ([]*Installation, error) {
+func (s *Multidevice) GetOurInstallations(identity *ecdsa.PublicKey) ([]*Installation, error) {
 	var found bool
 	identityC := crypto.CompressPubkey(identity)
 	installations, err := s.persistence.GetInstallations(identityC)
@@ -99,21 +100,21 @@ func (s *Service) GetOurInstallations(identity *ecdsa.PublicKey) ([]*Installatio
 	return installations, nil
 }
 
-func (s *Service) AddInstallations(identity []byte, timestamp int64, installations []*Installation, defaultEnabled bool) ([]*Installation, error) {
+func (s *Multidevice) AddInstallations(identity []byte, timestamp int64, installations []*Installation, defaultEnabled bool) ([]*Installation, error) {
 	return s.persistence.AddInstallations(identity, timestamp, installations, defaultEnabled)
 }
 
-func (s *Service) SetInstallationMetadata(identity *ecdsa.PublicKey, installationID string, metadata *InstallationMetadata) error {
+func (s *Multidevice) SetInstallationMetadata(identity *ecdsa.PublicKey, installationID string, metadata *InstallationMetadata) error {
 	identityC := crypto.CompressPubkey(identity)
 	return s.persistence.SetInstallationMetadata(identityC, installationID, metadata)
 }
 
-func (s *Service) EnableInstallation(identity *ecdsa.PublicKey, installationID string) error {
+func (s *Multidevice) EnableInstallation(identity *ecdsa.PublicKey, installationID string) error {
 	identityC := crypto.CompressPubkey(identity)
 	return s.persistence.EnableInstallation(identityC, installationID)
 }
 
-func (s *Service) DisableInstallation(myIdentityKey *ecdsa.PublicKey, installationID string) error {
+func (s *Multidevice) DisableInstallation(myIdentityKey *ecdsa.PublicKey, installationID string) error {
 	myIdentityKeyC := crypto.CompressPubkey(myIdentityKey)
 	return s.persistence.DisableInstallation(myIdentityKeyC, installationID)
 }

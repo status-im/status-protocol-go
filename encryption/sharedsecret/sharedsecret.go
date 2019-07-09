@@ -1,7 +1,11 @@
 package sharedsecret
 
 import (
+	"bytes"
 	"crypto/ecdsa"
+	"database/sql"
+	"errors"
+	"log"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/ecies"
@@ -14,18 +18,17 @@ type Secret struct {
 	Key      []byte
 }
 
-type Service struct {
-	persistence Persistence
+type SharedSecret struct {
+	persistence *sqlitePersistence
 }
 
-func NewService(persistence Persistence) *Service {
-	return &Service{
-		persistence: persistence,
+func New(db *sql.DB) *SharedSecret {
+	return &SharedSecret{
+		persistence: newSQLitePersistence(db),
 	}
 }
 
-func (s *Service) setup(myPrivateKey *ecdsa.PrivateKey, theirPublicKey *ecdsa.PublicKey, installationID string) (*Secret, error) {
-	// s.log.Debug("Setup called for", "installationID", installationID)
+func (s *SharedSecret) generate(myPrivateKey *ecdsa.PrivateKey, theirPublicKey *ecdsa.PublicKey, installationID string) (*Secret, error) {
 	sharedKey, err := ecies.ImportECDSA(myPrivateKey).GenerateShared(
 		ecies.ImportECDSAPublic(theirPublicKey),
 		sskLen,
@@ -43,16 +46,17 @@ func (s *Service) setup(myPrivateKey *ecdsa.PrivateKey, theirPublicKey *ecdsa.Pu
 	return &Secret{Key: sharedKey, Identity: theirPublicKey}, err
 }
 
-// Receive will generate a shared secret for a given identity, and return it
-func (s *Service) Receive(myPrivateKey *ecdsa.PrivateKey, theirPublicKey *ecdsa.PublicKey, installationID string) (*Secret, error) {
-	// s.log.Debug("Received message, setting up topic", "public-key", theirPublicKey, "installation-id", installationID)
-	return s.setup(myPrivateKey, theirPublicKey, installationID)
+// Generate will generate a shared secret for a given identity, and return it.
+func (s *SharedSecret) Generate(myPrivateKey *ecdsa.PrivateKey, theirPublicKey *ecdsa.PublicKey, installationID string) (*Secret, error) {
+	log.Printf("[SharedSecret::Generate] generates a new shared secret")
+	return s.generate(myPrivateKey, theirPublicKey, installationID)
 }
 
-// Send returns a shared key and whether it has been acknowledged from all the installationIDs
-func (s *Service) Send(myPrivateKey *ecdsa.PrivateKey, myInstallationID string, theirPublicKey *ecdsa.PublicKey, theirInstallationIDs []string) (*Secret, bool, error) {
-	// s.log.Debug("Checking against:", "installation-ids", theirInstallationIDs)
-	secret, err := s.setup(myPrivateKey, theirPublicKey, myInstallationID)
+// Agreed returns true if a secret has been acknowledged by all the installationIDs.
+func (s *SharedSecret) Agreed(myPrivateKey *ecdsa.PrivateKey, myInstallationID string, theirPublicKey *ecdsa.PublicKey, theirInstallationIDs []string) (*Secret, bool, error) {
+	log.Printf("[SharedSecret::Agreed] checking against their installation: %s", theirInstallationIDs)
+
+	secret, err := s.generate(myPrivateKey, theirPublicKey, myInstallationID)
 	if err != nil {
 		return nil, false, err
 	}
@@ -74,12 +78,14 @@ func (s *Service) Send(myPrivateKey *ecdsa.PrivateKey, myInstallationID string, 
 		}
 	}
 
-	// s.log.Debug("shared secret found")
+	if !bytes.Equal(secret.Key, response.secret) {
+		return nil, false, errors.New("computed and saved secrets are different for a given identity")
+	}
 
 	return secret, true, nil
 }
 
-func (s *Service) All() ([]*Secret, error) {
+func (s *SharedSecret) All() ([]*Secret, error) {
 	var secrets []*Secret
 	tuples, err := s.persistence.All()
 	if err != nil {

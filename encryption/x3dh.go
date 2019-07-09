@@ -68,7 +68,7 @@ func NewBundleContainer(identity *ecdsa.PrivateKey, installationID string) (*Bun
 	encodedPreKey := crypto.FromECDSA(preKey)
 	signedPreKeys := make(map[string]*SignedPreKey)
 	signedPreKeys[installationID] = &SignedPreKey{
-		ProtocolVersion: ProtocolVersion,
+		ProtocolVersion: protocolVersion,
 		SignedPreKey:    compressedPreKey,
 	}
 

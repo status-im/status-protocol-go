@@ -21,7 +21,7 @@ type SQLLitePersistenceTestSuite struct {
 	suite.Suite
 	// nolint: structcheck, megacheck
 	db      *sql.DB
-	service Persistence
+	service *sqlitePersistence
 }
 
 func (s *SQLLitePersistenceTestSuite) SetupTest() {
@@ -30,7 +30,7 @@ func (s *SQLLitePersistenceTestSuite) SetupTest() {
 	db, err := storage.Open(dbPath, "", 0)
 	s.Require().NoError(err)
 
-	s.service = NewSQLLitePersistence(db)
+	s.service = newSQLitePersistence(db)
 }
 
 func (s *SQLLitePersistenceTestSuite) TestAddInstallations() {
