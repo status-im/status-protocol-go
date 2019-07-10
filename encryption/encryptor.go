@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -105,28 +107,27 @@ func confirmationIDString(id []byte) string {
 }
 
 // ConfirmMessagesProcessed confirms and deletes message keys for the given messages
-func (s *encryptor) ConfirmMessagesProcessed(messageIDs [][]byte) error {
+func (s *encryptor) ConfirmMessageProcessed(messageID []byte) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	for _, idByte := range messageIDs {
-		id := confirmationIDString(idByte)
-		confirmationData, ok := s.messageIDs[id]
-		if !ok {
-			// s.log.Debug("Could not confirm message", "messageID", id)
-			continue
-		}
-
-		// Load session from store first
-		session, err := s.getDRSession(confirmationData.drInfo.ID)
-		if err != nil {
-			return err
-		}
-
-		if err := session.DeleteMk(confirmationData.header.DH, confirmationData.header.N); err != nil {
-			return err
-		}
+	id := confirmationIDString(messageID)
+	confirmationData, ok := s.messageIDs[id]
+	if !ok {
+		// s.log.Debug("Could not confirm message", "messageID", id)
+		return fmt.Errorf("message with ID %#x not found", messageID)
 	}
+
+	// Load session from store first
+	session, err := s.getDRSession(confirmationData.drInfo.ID)
+	if err != nil {
+		return err
+	}
+
+	if err := session.DeleteMk(confirmationData.header.DH, confirmationData.header.N); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -139,8 +140,14 @@ func (s *encryptor) CreateBundle(privateKey *ecdsa.PrivateKey, installations []*
 		return nil, err
 	}
 
+	expired := bundleContainer != nil && bundleContainer.GetBundle().Timestamp < time.Now().Add(-1*time.Duration(s.config.BundleRefreshInterval)*time.Millisecond).UnixNano()
+
+	if bundleContainer != nil {
+		log.Printf("================ expired: %t (%d vs %d)", expired, bundleContainer.GetBundle().Timestamp, time.Now().Add(-1*time.Duration(s.config.BundleRefreshInterval)*time.Millisecond).UnixNano())
+	}
+
 	// If the bundle has expired we create a new one
-	if bundleContainer != nil && bundleContainer.GetBundle().Timestamp < time.Now().Add(-1*time.Duration(s.config.BundleRefreshInterval)*time.Millisecond).UnixNano() {
+	if expired {
 		// Mark sessions has expired
 		if err := s.persistence.MarkBundleExpired(bundleContainer.GetBundle().GetIdentity()); err != nil {
 			return nil, err

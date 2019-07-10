@@ -31,13 +31,13 @@ func TestEncryptionServiceTestSuite(t *testing.T) {
 
 type EncryptionServiceTestSuite struct {
 	suite.Suite
-	alice       *ProtocolService
-	bob         *ProtocolService
+	alice       *Protocol
+	bob         *Protocol
 	aliceDBPath string
 	bobDBPath   string
 }
 
-func (s *EncryptionServiceTestSuite) initDatabases(baseConfig *EncryptionServiceConfig) {
+func (s *EncryptionServiceTestSuite) initDatabases(config encryptorConfig) {
 	aliceDBFile, err := ioutil.TempFile(os.TempDir(), "alice")
 	s.Require().NoError(err)
 	aliceDB, err := storage.Open(aliceDBFile.Name(), "", storage.KdfIterationsNumber)
@@ -48,56 +48,29 @@ func (s *EncryptionServiceTestSuite) initDatabases(baseConfig *EncryptionService
 	bobDB, err := storage.Open(bobDBFile.Name(), "", storage.KdfIterationsNumber)
 	s.Require().NoError(err)
 
-	if baseConfig == nil {
-		config := DefaultEncryptionServiceConfig(aliceInstallationID)
-		baseConfig = &config
-	}
+	config.InstallationID = aliceInstallationID
 
-	const (
-		aliceDBKey = "alice"
-		bobDBKey   = "bob"
-	)
-
-	baseConfig.InstallationID = aliceInstallationID
-
-	aliceMultideviceConfig := &multidevice.Config{
-		MaxInstallations: 3,
-		InstallationID:   aliceInstallationID,
-		ProtocolVersion:  1,
-	}
-	aliceMultideviceService := multidevice.New(aliceDB, aliceMultideviceConfig)
-	aliceEncryptionService := NewEncryptionService(aliceDB, *baseConfig)
-	aliceSharedSecretService := sharedsecret.New(aliceDB)
-
-	s.alice = NewProtocolService(
-		aliceEncryptionService,
-		aliceSharedSecretService,
-		aliceMultideviceService,
+	s.alice = newWithEncryptorConfig(
+		aliceDB,
+		aliceInstallationID,
+		config,
 		func(s []*multidevice.Installation) {},
 		func(s []*sharedsecret.Secret) {},
 	)
 
-	bobMultideviceConfig := &multidevice.Config{
-		MaxInstallations: 3,
-		InstallationID:   bobInstallationID,
-		ProtocolVersion:  1,
-	}
-	bobMultideviceService := multidevice.New(bobDB, bobMultideviceConfig)
-	bobSharedSecretService := sharedsecret.New(bobDB)
-	baseConfig.InstallationID = bobInstallationID
-	bobEncryptionService := NewEncryptionService(bobDB, *baseConfig)
+	config.InstallationID = bobInstallationID
 
-	s.bob = NewProtocolService(
-		bobEncryptionService,
-		bobSharedSecretService,
-		bobMultideviceService,
+	s.bob = newWithEncryptorConfig(
+		bobDB,
+		bobInstallationID,
+		config,
 		func(s []*multidevice.Installation) {},
 		func(s []*sharedsecret.Secret) {},
 	)
 }
 
 func (s *EncryptionServiceTestSuite) SetupTest() {
-	s.initDatabases(nil)
+	s.initDatabases(defaultEncryptorConfig("none"))
 }
 
 func (s *EncryptionServiceTestSuite) TearDownTest() {
@@ -402,7 +375,7 @@ func (s *EncryptionServiceTestSuite) TestMaxSkipKeys() {
 
 	// Bob sends a message
 
-	for i := 0; i < s.alice.encryption.config.MaxSkip; i++ {
+	for i := 0; i < s.alice.encryptor.config.MaxSkip; i++ {
 		_, err = s.bob.BuildDirectMessage(bobKey, &aliceKey.PublicKey, bobText)
 		s.Require().NoError(err)
 	}
@@ -457,7 +430,7 @@ func (s *EncryptionServiceTestSuite) TestMaxSkipKeysError() {
 
 	// Bob sends a message
 
-	for i := 0; i < s.alice.encryption.config.MaxSkip+1; i++ {
+	for i := 0; i < s.alice.encryptor.config.MaxSkip+1; i++ {
 		_, err = s.bob.BuildDirectMessage(bobKey, &aliceKey.PublicKey, bobText)
 		s.Require().NoError(err)
 	}
@@ -472,12 +445,12 @@ func (s *EncryptionServiceTestSuite) TestMaxSkipKeysError() {
 }
 
 func (s *EncryptionServiceTestSuite) TestMaxMessageKeysPerSession() {
-	config := DefaultEncryptionServiceConfig("none")
+	config := defaultEncryptorConfig("none")
 	// Set MaxKeep and MaxSkip to an high value so it does not interfere
 	config.MaxKeep = 100000
 	config.MaxSkip = 100000
 
-	s.initDatabases(&config)
+	s.initDatabases(config)
 
 	bobText := []byte("text")
 
@@ -505,7 +478,7 @@ func (s *EncryptionServiceTestSuite) TestMaxMessageKeysPerSession() {
 
 	// We create just enough messages so that the first key should be deleted
 
-	nMessages := s.alice.encryption.config.MaxMessageKeysPerSession
+	nMessages := s.alice.encryptor.config.MaxMessageKeysPerSession
 	messages := make([]*ProtocolMessage, nMessages)
 	for i := 0; i < nMessages; i++ {
 		m, err := s.bob.BuildDirectMessage(bobKey, &aliceKey.PublicKey, bobText)
@@ -530,11 +503,11 @@ func (s *EncryptionServiceTestSuite) TestMaxMessageKeysPerSession() {
 }
 
 func (s *EncryptionServiceTestSuite) TestMaxKeep() {
-	config := DefaultEncryptionServiceConfig("none")
+	config := defaultEncryptorConfig("none")
 	// Set MaxMessageKeysPerSession to an high value so it does not interfere
 	config.MaxMessageKeysPerSession = 100000
 
-	s.initDatabases(&config)
+	s.initDatabases(config)
 
 	bobText := []byte("text")
 
@@ -561,8 +534,8 @@ func (s *EncryptionServiceTestSuite) TestMaxKeep() {
 	s.Require().NoError(err)
 
 	// We decrypt all messages but 1 & 2
-	messages := make([]*ProtocolMessage, s.alice.encryption.config.MaxKeep)
-	for i := 0; i < s.alice.encryption.config.MaxKeep; i++ {
+	messages := make([]*ProtocolMessage, s.alice.encryptor.config.MaxKeep)
+	for i := 0; i < s.alice.encryptor.config.MaxKeep; i++ {
 		m, err := s.bob.BuildDirectMessage(bobKey, &aliceKey.PublicKey, bobText)
 		messages[i] = m.Message
 		s.Require().NoError(err)
@@ -571,7 +544,7 @@ func (s *EncryptionServiceTestSuite) TestMaxKeep() {
 			messageID := []byte(fmt.Sprintf("%d", i))
 			_, err = s.alice.HandleMessage(aliceKey, &bobKey.PublicKey, m.Message, messageID)
 			s.Require().NoError(err)
-			err = s.alice.ConfirmMessagesProcessed([][]byte{messageID})
+			err = s.alice.ConfirmMessageProcessed(messageID)
 			s.Require().NoError(err)
 		}
 
@@ -655,8 +628,8 @@ func (s *EncryptionServiceTestSuite) TestConcurrentBundles() {
 	s.Require().NoError(err)
 }
 
-func publisher(
-	e *ProtocolService,
+func publish(
+	e *Protocol,
 	privateKey *ecdsa.PrivateKey,
 	publicKey *ecdsa.PublicKey,
 	errChan chan error,
@@ -689,7 +662,7 @@ func publisher(
 }
 
 func receiver(
-	s *ProtocolService,
+	s *Protocol,
 	privateKey *ecdsa.PrivateKey,
 	publicKey *ecdsa.PublicKey,
 	errChan chan error,
@@ -752,9 +725,9 @@ func (s *EncryptionServiceTestSuite) TestRandomised() {
 	bobReceiverErrChan := make(chan error, 1)
 
 	// Set up alice publishe
-	go publisher(s.alice, aliceKey, &bobKey.PublicKey, alicePublisherErrChan, bobChan)
+	go publish(s.alice, aliceKey, &bobKey.PublicKey, alicePublisherErrChan, bobChan)
 	// Set up bob publisher
-	go publisher(s.bob, bobKey, &aliceKey.PublicKey, bobPublisherErrChan, aliceChan)
+	go publish(s.bob, bobKey, &aliceKey.PublicKey, bobPublisherErrChan, aliceChan)
 
 	// Set up bob receiver
 	go receiver(s.bob, bobKey, &aliceKey.PublicKey, bobReceiverErrChan, bobChan)
@@ -807,7 +780,7 @@ func (s *EncryptionServiceTestSuite) TestBundleNotExisting() {
 	// Bob receives the message, and returns a bundlenotfound error
 	_, err = s.bob.HandleMessage(bobKey, &aliceKey.PublicKey, aliceMessage.Message, defaultMessageID)
 	s.Require().Error(err)
-	s.Equal(ErrSessionNotFound, err)
+	s.Equal(errSessionNotFound, err)
 }
 
 // Device is not included in the bundle
@@ -840,17 +813,16 @@ func (s *EncryptionServiceTestSuite) TestDeviceNotIncluded() {
 	// Bob receives the message, and returns a bundlenotfound error
 	_, err = s.bob.HandleMessage(bobKey, &aliceKey.PublicKey, aliceMessage.Message, defaultMessageID)
 	s.Require().Error(err)
-	s.Equal(ErrDeviceNotFound, err)
+	s.Equal(errDeviceNotFound, err)
 }
 
 // A new bundle has been received
 func (s *EncryptionServiceTestSuite) TestRefreshedBundle() {
-
-	config := DefaultEncryptionServiceConfig("none")
+	config := defaultEncryptorConfig("none")
 	// Set up refresh interval to "always"
 	config.BundleRefreshInterval = 1000
 
-	s.initDatabases(&config)
+	s.initDatabases(config)
 
 	bobKey, err := crypto.GenerateKey()
 	s.Require().NoError(err)
@@ -955,7 +927,7 @@ func (s *EncryptionServiceTestSuite) TestMessageConfirmation() {
 	s.Require().NoError(err)
 
 	// Alice confirms the message
-	err = s.alice.ConfirmMessagesProcessed([][]byte{bobMessage1ID})
+	err = s.alice.ConfirmMessageProcessed(bobMessage1ID)
 	s.Require().NoError(err)
 
 	// Alice decrypts it again, it should fail
@@ -989,7 +961,9 @@ func (s *EncryptionServiceTestSuite) TestMessageConfirmation() {
 	s.Require().NoError(err)
 
 	// Alice confirms the messages
-	err = s.alice.ConfirmMessagesProcessed([][]byte{bobMessage2ID, bobMessage3ID})
+	err = s.alice.ConfirmMessageProcessed(bobMessage2ID)
+	s.Require().NoError(err)
+	err = s.alice.ConfirmMessageProcessed(bobMessage3ID)
 	s.Require().NoError(err)
 
 	// Alice decrypts it again, it should fail

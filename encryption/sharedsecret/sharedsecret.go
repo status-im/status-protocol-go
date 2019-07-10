@@ -5,7 +5,6 @@ import (
 	"crypto/ecdsa"
 	"database/sql"
 	"errors"
-	"log"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/ecies"
@@ -48,13 +47,12 @@ func (s *SharedSecret) generate(myPrivateKey *ecdsa.PrivateKey, theirPublicKey *
 
 // Generate will generate a shared secret for a given identity, and return it.
 func (s *SharedSecret) Generate(myPrivateKey *ecdsa.PrivateKey, theirPublicKey *ecdsa.PublicKey, installationID string) (*Secret, error) {
-	log.Printf("[SharedSecret::Generate] generates a new shared secret")
 	return s.generate(myPrivateKey, theirPublicKey, installationID)
 }
 
 // Agreed returns true if a secret has been acknowledged by all the installationIDs.
 func (s *SharedSecret) Agreed(myPrivateKey *ecdsa.PrivateKey, myInstallationID string, theirPublicKey *ecdsa.PublicKey, theirInstallationIDs []string) (*Secret, bool, error) {
-	log.Printf("[SharedSecret::Agreed] checking against their installation: %s", theirInstallationIDs)
+	// log.Printf("[SharedSecret::Agreed] checking against their installation: %s", theirInstallationIDs)
 
 	secret, err := s.generate(myPrivateKey, theirPublicKey, myInstallationID)
 	if err != nil {

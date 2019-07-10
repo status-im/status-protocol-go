@@ -24,7 +24,7 @@ func TestEncryptionServiceMultiDeviceSuite(t *testing.T) {
 }
 
 type serviceAndKey struct {
-	services []*ProtocolService
+	services []*Protocol
 	key      *ecdsa.PrivateKey
 }
 
@@ -41,7 +41,7 @@ func setupUser(user string, s *EncryptionServiceMultiDeviceSuite, n int) error {
 
 	s.services[user] = &serviceAndKey{
 		key:      key,
-		services: make([]*ProtocolService, n),
+		services: make([]*Protocol, n),
 	}
 
 	for i := 0; i < n; i++ {
@@ -57,20 +57,9 @@ func setupUser(user string, s *EncryptionServiceMultiDeviceSuite, n int) error {
 			return err
 		}
 
-		// Initialize sharedsecret
-		multideviceConfig := &multidevice.Config{
-			MaxInstallations: n - 1,
-			InstallationID:   installationID,
-			ProtocolVersion:  1,
-		}
-		multideviceService := multidevice.New(db, multideviceConfig)
-		sharedSecretService := sharedsecret.New(db)
-		protocol := NewProtocolService(
-			NewEncryptionService(
-				db,
-				DefaultEncryptionServiceConfig(installationID)),
-			sharedSecretService,
-			multideviceService,
+		protocol := New(
+			db,
+			installationID,
 			func(s []*multidevice.Installation) {},
 			func(s []*sharedsecret.Secret) {},
 		)
@@ -205,7 +194,7 @@ func pairDevices(s *serviceAndKey, target int) error {
 			return err
 		}
 
-		err = device.EnableInstallation(&s.key.PublicKey, s.services[i].encryption.config.InstallationID)
+		err = device.EnableInstallation(&s.key.PublicKey, s.services[i].encryptor.config.InstallationID)
 		if err != nil {
 			return nil
 		}

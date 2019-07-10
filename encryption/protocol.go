@@ -63,7 +63,7 @@ func (p *ProtocolMessageSpec) PartitionedTopicMode() PartitionTopicMode {
 }
 
 type Protocol struct {
-	encryption  *encryptor
+	encryptor   *encryptor
 	secret      *sharedsecret.SharedSecret
 	multidevice *multidevice.Multidevice
 	publisher   *publisher.Publisher
@@ -86,10 +86,26 @@ func New(
 	addedBundlesHandler func([]*multidevice.Installation),
 	onNewSharedSecretHandler func([]*sharedsecret.Secret),
 ) *Protocol {
-	encryptionService := newEncryptor(db, defaultEncryptorConfig(installationID))
+	return newWithEncryptorConfig(
+		db,
+		installationID,
+		defaultEncryptorConfig(installationID),
+		addedBundlesHandler,
+		onNewSharedSecretHandler,
+	)
+}
+
+func newWithEncryptorConfig(
+	db *sql.DB,
+	installationID string,
+	encryptorConfig encryptorConfig,
+	addedBundlesHandler func([]*multidevice.Installation),
+	onNewSharedSecretHandler func([]*sharedsecret.Secret),
+) *Protocol {
+	encryptionService := newEncryptor(db, encryptorConfig)
 	return &Protocol{
-		encryption: encryptionService,
-		secret:     sharedsecret.New(db),
+		encryptor: encryptionService,
+		secret:    sharedsecret.New(db),
 		multidevice: multidevice.New(db, &multidevice.Config{
 			MaxInstallations: 3,
 			ProtocolVersion:  protocolVersion,
@@ -106,15 +122,12 @@ func (p *Protocol) Start(myIdentity *ecdsa.PrivateKey) {
 	publisherCh := p.publisher.Start()
 
 	go func() {
-		for {
-			select {
-			case <-publisherCh:
-				spec, err := p.buildContactCodeMessage(myIdentity)
-				if err != nil {
-					log.Printf("[Protocol::Start] failed to build a public messages for Publisher: %v", err)
-				} else {
-					p.systemMessages <- spec
-				}
+		for range publisherCh {
+			spec, err := p.buildContactCodeMessage(myIdentity)
+			if err != nil {
+				log.Printf("[Protocol::Start] failed to build a public messages for Publisher: %v", err)
+			} else {
+				p.systemMessages <- spec
 			}
 		}
 	}()
@@ -127,7 +140,7 @@ func (p *Protocol) addBundle(myIdentityKey *ecdsa.PrivateKey, msg *ProtocolMessa
 		return err
 	}
 
-	bundle, err := p.encryption.CreateBundle(myIdentityKey, installations)
+	bundle, err := p.encryptor.CreateBundle(myIdentityKey, installations)
 	if err != nil {
 		// // p.log.Error("encryption-service", "error creating bundle", err)
 		return err
@@ -148,7 +161,7 @@ func (p *Protocol) addBundle(myIdentityKey *ecdsa.PrivateKey, msg *ProtocolMessa
 func (p *Protocol) BuildPublicMessage(myIdentityKey *ecdsa.PrivateKey, payload []byte) (*ProtocolMessageSpec, error) {
 	// Build message not encrypted
 	message := &ProtocolMessage{
-		InstallationId: p.encryption.config.InstallationID,
+		InstallationId: p.encryptor.config.InstallationID,
 		PublicMessage:  payload,
 	}
 
@@ -174,7 +187,7 @@ func (p *Protocol) BuildDirectMessage(myIdentityKey *ecdsa.PrivateKey, publicKey
 	}
 
 	// Encrypt payload
-	encryptionResponse, installations, err := p.encryption.EncryptPayload(publicKey, myIdentityKey, activeInstallations, payload)
+	encryptionResponse, installations, err := p.encryptor.EncryptPayload(publicKey, myIdentityKey, activeInstallations, payload)
 	if err != nil {
 		// p.log.Error("encryption-service", "error encrypting payload", err)
 		return nil, err
@@ -182,7 +195,7 @@ func (p *Protocol) BuildDirectMessage(myIdentityKey *ecdsa.PrivateKey, publicKey
 
 	// Build message
 	message := &ProtocolMessage{
-		InstallationId: p.encryption.config.InstallationID,
+		InstallationId: p.encryptor.config.InstallationID,
 		DirectMessage:  encryptionResponse,
 	}
 
@@ -202,7 +215,7 @@ func (p *Protocol) BuildDirectMessage(myIdentityKey *ecdsa.PrivateKey, publicKey
 		}
 	}
 
-	sharedSecret, agreed, err = p.secret.Agreed(myIdentityKey, p.encryption.config.InstallationID, publicKey, installationIDs)
+	sharedSecret, agreed, err = p.secret.Agreed(myIdentityKey, p.encryptor.config.InstallationID, publicKey, installationIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -225,7 +238,7 @@ func (p *Protocol) BuildDirectMessage(myIdentityKey *ecdsa.PrivateKey, publicKey
 // BuildDHMessage builds a message with DH encryption so that it can be decrypted by any other device.
 func (p *Protocol) BuildDHMessage(myIdentityKey *ecdsa.PrivateKey, destination *ecdsa.PublicKey, payload []byte) (*ProtocolMessageSpec, error) {
 	// Encrypt payload
-	encryptionResponse, err := p.encryption.EncryptPayloadWithDH(destination, payload)
+	encryptionResponse, err := p.encryptor.EncryptPayloadWithDH(destination, payload)
 	if err != nil {
 		// // p.log.Error("encryption-service", "error encrypting payload", err)
 		return nil, err
@@ -233,7 +246,7 @@ func (p *Protocol) BuildDHMessage(myIdentityKey *ecdsa.PrivateKey, destination *
 
 	// Build message
 	message := &ProtocolMessage{
-		InstallationId: p.encryption.config.InstallationID,
+		InstallationId: p.encryptor.config.InstallationID,
 		DirectMessage:  encryptionResponse,
 	}
 
@@ -249,7 +262,7 @@ func (p *Protocol) BuildDHMessage(myIdentityKey *ecdsa.PrivateKey, destination *
 func (p *Protocol) ProcessPublicBundle(myIdentityKey *ecdsa.PrivateKey, bundle *Bundle) ([]*multidevice.Installation, error) {
 	// p.log.Debug("Processing bundle", "bundle", bundle)
 
-	if err := p.encryption.ProcessPublicBundle(myIdentityKey, bundle); err != nil {
+	if err := p.encryptor.ProcessPublicBundle(myIdentityKey, bundle); err != nil {
 		return nil, err
 	}
 
@@ -302,7 +315,7 @@ func (p *Protocol) GetBundle(myIdentityKey *ecdsa.PrivateKey) (*Bundle, error) {
 		return nil, err
 	}
 
-	return p.encryption.CreateBundle(myIdentityKey, installations)
+	return p.encryptor.CreateBundle(myIdentityKey, installations)
 }
 
 // EnableInstallation enables an installation for multi-device sync.
@@ -331,18 +344,18 @@ func (p *Protocol) GetPublicBundle(theirIdentityKey *ecdsa.PublicKey) (*Bundle, 
 	if err != nil {
 		return nil, err
 	}
-	return p.encryption.GetPublicBundle(theirIdentityKey, installations)
+	return p.encryptor.GetPublicBundle(theirIdentityKey, installations)
 }
 
-// ConfirmMessagesProcessed confirms and deletes message keys for the given messages
-func (p *Protocol) ConfirmMessagesProcessed(messageIDs [][]byte) error {
-	return p.encryption.ConfirmMessagesProcessed(messageIDs)
+// ConfirmMessageProcessed confirms and deletes message keys for the given messages
+func (p *Protocol) ConfirmMessageProcessed(messageID []byte) error {
+	return p.encryptor.ConfirmMessageProcessed(messageID)
 }
 
 // HandleMessage unmarshals a message and processes it, decrypting it if it is a 1:1 message.
 func (p *Protocol) HandleMessage(myIdentityKey *ecdsa.PrivateKey, theirPublicKey *ecdsa.PublicKey, protocolMessage *ProtocolMessage, messageID []byte) ([]byte, error) {
 	// p.log.Debug("Received message from", "public-key", theirPublicKey)
-	if p.encryption == nil {
+	if p.encryptor == nil {
 		return nil, errors.New("encryption service not initialized")
 	}
 
@@ -378,7 +391,7 @@ func (p *Protocol) HandleMessage(myIdentityKey *ecdsa.PrivateKey, theirPublicKey
 	// Decrypt message
 	if directMessage := protocolMessage.GetDirectMessage(); directMessage != nil {
 		// p.log.Debug("Processing direct message")
-		message, err := p.encryption.DecryptPayload(myIdentityKey, theirPublicKey, protocolMessage.GetInstallationId(), directMessage, messageID)
+		message, err := p.encryptor.DecryptPayload(myIdentityKey, theirPublicKey, protocolMessage.GetInstallationId(), directMessage, messageID)
 		if err != nil {
 			return nil, err
 		}

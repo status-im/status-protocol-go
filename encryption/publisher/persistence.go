@@ -2,20 +2,15 @@ package publisher
 
 import (
 	"database/sql"
-	"encoding/hex"
-	"sync"
 )
 
 type sqlitePersistence struct {
-	db            *sql.DB
-	lastAcksMutex sync.Mutex
-	lastAcks      map[string]int64
+	db *sql.DB
 }
 
 func newSQLitePersistence(db *sql.DB) *sqlitePersistence {
 	return &sqlitePersistence{
-		db:       db,
-		lastAcks: make(map[string]int64),
+		db: db,
 	}
 }
 
@@ -39,16 +34,4 @@ func (s *sqlitePersistence) setLastPublished(lastPublished int64) error {
 
 	_, err = stmt.Exec(lastPublished)
 	return err
-}
-
-func (s *sqlitePersistence) lastAck(identity []byte) (int64, error) {
-	s.lastAcksMutex.Lock()
-	defer s.lastAcksMutex.Unlock()
-	return s.lastAcks[hex.EncodeToString(identity)], nil
-}
-
-func (s *sqlitePersistence) setLastAck(identity []byte, lastAck int64) {
-	s.lastAcksMutex.Lock()
-	defer s.lastAcksMutex.Unlock()
-	s.lastAcks[hex.EncodeToString(identity)] = lastAck
 }

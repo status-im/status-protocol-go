@@ -12,6 +12,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/pkg/errors"
@@ -19,6 +20,7 @@ import (
 	whisper "github.com/status-im/whisper/whisperv6"
 
 	"github.com/status-im/status-protocol-go/subscription"
+	"github.com/status-im/status-protocol-go/transport/whisper/filter"
 )
 
 const (
@@ -78,7 +80,9 @@ func (m *WhisperServiceKeysManager) GetRawSymKey(id string) ([]byte, error) {
 type WhisperServiceTransport struct {
 	node        server
 	shh         *whisper.Whisper
+	shhAPI      *whisper.PublicWhisperAPI // only PublicWhisperAPI implements logic to send messages
 	keysManager *WhisperServiceKeysManager
+	chats       *filter.ChatsManager
 
 	mailservers             []string
 	selectedMailServerEnode string
@@ -101,6 +105,7 @@ func NewWhisperServiceTransport(
 	return &WhisperServiceTransport{
 		node:        node,
 		shh:         shh,
+		shhAPI:      whisper.NewPublicWhisperAPI(shh),
 		mailservers: mailservers,
 		keysManager: &WhisperServiceKeysManager{
 			shh:               shh,
@@ -115,16 +120,33 @@ func (a *WhisperServiceTransport) KeysManager() KeysManager {
 }
 
 // Subscribe subscribes to a public chat using the Whisper service.
-func (a *WhisperServiceTransport) Subscribe(
+func (a *WhisperServiceTransport) SubscribePublic(
 	ctx context.Context,
+	chatID string,
 	in chan<- *whisper.ReceivedMessage,
-	filter *whisper.Filter,
 ) (*subscription.Subscription, error) {
-	filterID, err := a.shh.Subscribe(filter)
+	chat, err := a.chats.LoadPublic(chatID)
 	if err != nil {
 		return nil, err
 	}
+	sub := a.subscribe(chat.FilterID, in)
+	return sub, nil
+}
 
+func (a *WhisperServiceTransport) SubscribePrivate(
+	ctx context.Context,
+	publicKey *ecdsa.PublicKey,
+	in chan<- *whisper.ReceivedMessage,
+) (*subscription.Subscription, error) {
+	chat, err := a.chats.LoadContactCode(publicKey)
+	if err != nil {
+		return nil, err
+	}
+	sub := a.subscribe(chat.FilterID, in)
+	return sub, nil
+}
+
+func (a *WhisperServiceTransport) subscribe(filterID string, in chan<- *whisper.ReceivedMessage) *subscription.Subscription {
 	subWhisper := newWhisperSubscription(a.shh, filterID)
 	sub := subscription.New()
 
@@ -152,14 +174,80 @@ func (a *WhisperServiceTransport) Subscribe(
 		}
 	}()
 
-	return sub, nil
+	return sub
 }
 
 // Send sends a new message using the Whisper service.
-func (a *WhisperServiceTransport) Send(ctx context.Context, newMessage whisper.NewMessage) ([]byte, error) {
-	// Only public Whisper API implements logic to send messages.
-	shhAPI := whisper.NewPublicWhisperAPI(a.shh)
-	return shhAPI.Post(ctx, newMessage)
+func (a *WhisperServiceTransport) SendPublic(ctx context.Context, newMessage whisper.NewMessage, chatID string) ([]byte, error) {
+	if err := a.addSig(&newMessage); err != nil {
+		return nil, err
+	}
+
+	newMessage.Topic = ToTopic(chatID)
+
+	return a.shhAPI.Post(ctx, newMessage)
+}
+
+func (a *WhisperServiceTransport) SendPrivateWithSharedSecret(ctx context.Context, newMessage whisper.NewMessage, publicKey *ecdsa.PublicKey, secret []byte) ([]byte, error) {
+	if err := a.addSig(&newMessage); err != nil {
+		return nil, err
+	}
+
+	chat, err := a.chats.LoadNegotiated(filter.NegodiatedSecret{
+		PublicKey: publicKey,
+		Key:       secret,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	newMessage.SymKeyID = chat.SymKeyID
+	newMessage.Topic = chat.Topic
+	newMessage.PublicKey = nil
+
+	return a.shhAPI.Post(ctx, newMessage)
+}
+
+func (a *WhisperServiceTransport) SendPrivateWithPartitioned(ctx context.Context, newMessage whisper.NewMessage, publicKey *ecdsa.PublicKey) ([]byte, error) {
+	if err := a.addSig(&newMessage); err != nil {
+		return nil, err
+	}
+
+	chat, err := a.chats.LoadPartitioned(publicKey)
+	if err != nil {
+		return nil, err
+	}
+
+	newMessage.Topic = chat.Topic
+	newMessage.PublicKey = crypto.FromECDSAPub(publicKey)
+
+	return a.shhAPI.Post(ctx, newMessage)
+}
+
+func (a *WhisperServiceTransport) SendPrivateOnDiscovery(ctx context.Context, newMessage whisper.NewMessage, publicKey *ecdsa.PublicKey) ([]byte, error) {
+	if err := a.addSig(&newMessage); err != nil {
+		return nil, err
+	}
+
+	// There is no need to load any chat
+	// because listening on the discovery topic
+	// is done automatically.
+	// TODO: change this anyway, it should be explicit
+	// and idempotent.
+
+	newMessage.Topic = ToTopic(filter.DiscoveryTopic)
+	newMessage.PublicKey = crypto.FromECDSAPub(publicKey)
+
+	return a.shhAPI.Post(ctx, newMessage)
+}
+
+func (a *WhisperServiceTransport) addSig(newMessage *whisper.NewMessage) error {
+	sigID, err := a.keysManager.AddOrGetKeyPair(a.keysManager.privateKey)
+	if err != nil {
+		return err
+	}
+	newMessage.Sig = sigID
+	return nil
 }
 
 // Request requests messages from mail servers.

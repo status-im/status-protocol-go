@@ -20,8 +20,12 @@ type KeysManager interface {
 // should conform to.
 type WhisperTransport interface {
 	KeysManager() KeysManager
-	Subscribe(context.Context, chan<- *whisper.ReceivedMessage, *whisper.Filter) (*subscription.Subscription, error)
-	Send(context.Context, whisper.NewMessage) ([]byte, error)
+	SubscribePublic(context.Context, string, chan<- *whisper.ReceivedMessage) (*subscription.Subscription, error)
+	SubscribePrivate(context.Context, *ecdsa.PublicKey, chan<- *whisper.ReceivedMessage) (*subscription.Subscription, error)
+	SendPublic(context.Context, whisper.NewMessage, string) ([]byte, error)
+	SendPrivateWithSharedSecret(context.Context, whisper.NewMessage, *ecdsa.PublicKey, []byte) ([]byte, error)
+	SendPrivateWithPartitioned(context.Context, whisper.NewMessage, *ecdsa.PublicKey) ([]byte, error)
+	SendPrivateOnDiscovery(context.Context, whisper.NewMessage, *ecdsa.PublicKey) ([]byte, error)
 	Request(context.Context, RequestOptions) error
 }
 

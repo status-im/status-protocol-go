@@ -18,8 +18,8 @@ func TestProtocolServiceTestSuite(t *testing.T) {
 
 type ProtocolServiceTestSuite struct {
 	suite.Suite
-	alice *ProtocolService
-	bob   *ProtocolService
+	alice *Protocol
+	bob   *Protocol
 }
 
 func (s *ProtocolServiceTestSuite) SetupTest() {
@@ -38,30 +38,16 @@ func (s *ProtocolServiceTestSuite) SetupTest() {
 	addedBundlesHandler := func(addedBundles []*multidevice.Installation) {}
 	onNewSharedSecretHandler := func(secret []*sharedsecret.Secret) {}
 
-	aliceMultideviceConfig := &multidevice.Config{
-		MaxInstallations: 3,
-		InstallationID:   "1",
-		ProtocolVersion:  protocolVersion,
-	}
-
-	s.alice = NewProtocolService(
-		NewEncryptionService(aliceDB, DefaultEncryptionServiceConfig("1")),
-		sharedsecret.New(aliceDB),
-		multidevice.New(aliceDB, aliceMultideviceConfig),
+	s.alice = New(
+		aliceDB,
+		"1",
 		addedBundlesHandler,
 		onNewSharedSecretHandler,
 	)
 
-	bobMultideviceConfig := &multidevice.Config{
-		MaxInstallations: 3,
-		InstallationID:   "2",
-		ProtocolVersion:  protocolVersion,
-	}
-
-	s.bob = NewProtocolService(
-		NewEncryptionService(bobDB, DefaultEncryptionServiceConfig("2")),
-		sharedsecret.New(bobDB),
-		multidevice.New(bobDB, bobMultideviceConfig),
+	s.bob = New(
+		bobDB,
+		"2",
 		addedBundlesHandler,
 		onNewSharedSecretHandler,
 	)
@@ -78,7 +64,7 @@ func (s *ProtocolServiceTestSuite) TestBuildPublicMessage() {
 	s.NoError(err)
 	s.NotNil(msg, "It creates a message")
 
-	s.NotNilf(msg.GetBundles(), "It adds a bundle to the message")
+	s.NotNilf(msg.Message.GetBundles(), "It adds a bundle to the message")
 }
 
 func (s *ProtocolServiceTestSuite) TestBuildDirectMessage() {

@@ -1,23 +1,15 @@
 package publisher
 
 import (
-	"crypto/ecdsa"
 	"database/sql"
 	"io/ioutil"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/stretchr/testify/suite"
 )
 
 func TestServiceTestSuite(t *testing.T) {
 	suite.Run(t, new(PublisherTestSuite))
-}
-
-type testKey struct {
-	privateKey     *ecdsa.PrivateKey
-	keyID          string
-	publicKeyBytes hexutil.Bytes
 }
 
 type PublisherTestSuite struct {
@@ -32,7 +24,7 @@ func (p *PublisherTestSuite) SetupTest(installationID string) {
 	db, err := sql.Open("sqlite3", dir)
 	p.Require().NoError(err)
 
-	p.publisher = New(db, nil)
+	p.publisher = New(db)
 }
 
 // TODO(adam): provide more tests

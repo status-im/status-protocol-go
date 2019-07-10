@@ -2,12 +2,12 @@ package filter
 
 import (
 	"crypto/ecdsa"
+	"database/sql"
 	"encoding/hex"
 	"log"
 	"math/big"
 	"strconv"
 	"sync"
-	"time"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/pkg/errors"
@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	discoveryTopic = "contact-discovery"
+	DiscoveryTopic = "contact-discovery"
 )
 
 var (
@@ -55,27 +55,18 @@ type Chat struct {
 	Negotiated bool `json:"negotiated"`
 }
 
-type Messages struct {
-	Chat     *Chat              `json:"chat"`
-	Messages []*whisper.Message `json:"messages"`
-	Error    error              `json:"error"`
-}
-
 type ChatsManager struct {
 	whisper     *whisper.Whisper
-	persistence Persistence
+	persistence *sqlitePersistence
 	privateKey  *ecdsa.PrivateKey
 	keys        map[string][]byte
 
 	mutex sync.Mutex
 	chats map[string]*Chat
-
-	onNewMessages func([]*Messages)
-	quit          chan struct{}
 }
 
 // New returns a new filter service
-func New(w *whisper.Whisper, p Persistence, onNewMessages func([]*Messages)) (*ChatsManager, error) {
+func New(db *sql.DB, w *whisper.Whisper) (*ChatsManager, error) {
 	// TODO: legacy private key selection
 	keyID := w.SelectedKeyPairID()
 	privateKey, err := w.GetPrivateKey(keyID)
@@ -84,11 +75,10 @@ func New(w *whisper.Whisper, p Persistence, onNewMessages func([]*Messages)) (*C
 	}
 
 	return &ChatsManager{
-		privateKey:    privateKey,
-		whisper:       w,
-		persistence:   p,
-		chats:         make(map[string]*Chat),
-		onNewMessages: onNewMessages,
+		privateKey:  privateKey,
+		whisper:     w,
+		persistence: newSQLitePersistence(db),
+		chats:       make(map[string]*Chat),
 	}, nil
 }
 
@@ -102,13 +92,16 @@ func (s *ChatsManager) Init(chatIDs []string, publicKeys []*ecdsa.PublicKey, neg
 	s.keys = keys
 
 	// Load our contact code.
-	_, err = s.loadContactCode(&s.privateKey.PublicKey)
+	_, err = s.LoadContactCode(&s.privateKey.PublicKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to load contact code")
 	}
 
 	// Load partitioned topic.
 	_, err = s.loadMyPartitioned()
+	if err != nil {
+		return nil, err
+	}
 
 	// Add discovery topic.
 	err = s.loadDiscovery()
@@ -118,14 +111,14 @@ func (s *ChatsManager) Init(chatIDs []string, publicKeys []*ecdsa.PublicKey, neg
 
 	// Add public, one-to-one and generic chats.
 	for _, chatID := range chatIDs {
-		_, err := s.loadPublic(chatID)
+		_, err := s.LoadPublic(chatID)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	for _, publicKey := range publicKeys {
-		_, err := s.loadContactCode(publicKey)
+		_, err := s.LoadContactCode(publicKey)
 		if err != nil {
 			return nil, err
 		}
@@ -159,37 +152,15 @@ func (s *ChatsManager) Uninitialize() error {
 	return s.Remove(chats...)
 }
 
-func (s *ChatsManager) Start(checkPeriod time.Duration) {
-	ticker := time.NewTicker(checkPeriod)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			messages := s.getMessages()
-
-			if len(messages) != 0 {
-				s.onNewMessages(messages)
-			}
-		case <-s.quit:
-			return
-		}
-	}
-}
-
-// Stop removes all the filters
-func (s *ChatsManager) Stop() error {
-	close(s.quit)
-
-	var chats []*Chat
-
+func (s *ChatsManager) Chats() (result []*Chat) {
 	s.mutex.Lock()
-	for _, chat := range s.chats {
-		chats = append(chats, chat)
-	}
-	s.mutex.Unlock()
+	defer s.mutex.Unlock()
 
-	return s.Remove(chats...)
+	for _, chat := range s.chats {
+		result = append(result, chat)
+	}
+
+	return
 }
 
 // ChatByID returns a chat by chatID.
@@ -294,7 +265,7 @@ func (s *ChatsManager) loadDiscovery() error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	if _, ok := s.chats[discoveryTopic]; ok {
+	if _, ok := s.chats[DiscoveryTopic]; ok {
 		return nil
 	}
 
@@ -302,8 +273,8 @@ func (s *ChatsManager) loadDiscovery() error {
 	identityStr := publicKeyToStr(&s.privateKey.PublicKey)
 
 	discoveryChat := &Chat{
-		ChatID:    discoveryTopic,
-		Identity:  identityStr,
+		ChatID:    DiscoveryTopic,
+		Identity:  identityStr, // TODO: remove?
 		Discovery: true,
 	}
 
@@ -338,7 +309,7 @@ func (s *ChatsManager) loadDiscovery() error {
 }
 
 // loadPublic adds a filter for a public chat.
-func (s *ChatsManager) loadPublic(chatID string) (*Chat, error) {
+func (s *ChatsManager) LoadPublic(chatID string) (*Chat, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -363,8 +334,8 @@ func (s *ChatsManager) loadPublic(chatID string) (*Chat, error) {
 	return chat, nil
 }
 
-// loadContactCode creates a filter for the advertise topic for a given public key.
-func (s *ChatsManager) loadContactCode(pubKey *ecdsa.PublicKey) (*Chat, error) {
+// LoadContactCode creates a filter for the advertise topic for a given public key.
+func (s *ChatsManager) LoadContactCode(pubKey *ecdsa.PublicKey) (*Chat, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -510,7 +481,7 @@ func (s *ChatsManager) InitDeprecated(chats []*Chat, secrets []NegodiatedSecret)
 // DEPRECATED
 func (s *ChatsManager) Load(chat *Chat) ([]*Chat, error) {
 	if chat.ChatID != "" {
-		chat, err := s.loadPublic(chat.ChatID)
+		chat, err := s.LoadPublic(chat.ChatID)
 		return []*Chat{chat}, err
 	} else if chat.Identity != "" {
 		publicKeyBytes, err := hex.DecodeString(chat.Identity)
@@ -523,51 +494,11 @@ func (s *ChatsManager) Load(chat *Chat) ([]*Chat, error) {
 			return nil, err
 		}
 
-		chat, err := s.loadContactCode(publicKey)
+		chat, err := s.LoadContactCode(publicKey)
 		return []*Chat{chat}, err
 	}
 
 	return nil, errors.New("invalid Chat to load")
-}
-
-func (s *ChatsManager) getMessages() []*Messages {
-	var response []*Messages
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
-	for chatID := range s.chats {
-		messages := s.getMessagesForChat(chatID)
-		if messages.Error != nil || len(messages.Messages) != 0 {
-			response = append(response, messages)
-		}
-	}
-
-	return response
-}
-
-func (s *ChatsManager) getMessagesForChat(chatID string) *Messages {
-	response := &Messages{}
-
-	response.Chat = s.chats[chatID]
-	if response.Chat == nil {
-		response.Error = errors.New("Chat not found")
-
-		return response
-	}
-
-	filter := s.whisper.GetFilter(response.Chat.FilterID)
-	if filter == nil {
-		response.Error = errors.New("Filter not found")
-		return response
-	}
-
-	receivedMessages := filter.Retrieve()
-	response.Messages = make([]*whisper.Message, 0, len(receivedMessages))
-	for _, msg := range receivedMessages {
-		response.Messages = append(response.Messages, whisper.ToWhisperMessage(msg))
-	}
-
-	return response
 }
 
 // toTopic converts a string to a whisper topic.
