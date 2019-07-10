@@ -84,7 +84,7 @@ func (a *whisperAdapter) SubscribePrivate(ctx context.Context, publicKey *ecdsa.
 				messageID := item.EnvelopeHash.Bytes()
 				whisperMessage := whisper.ToWhisperMessage(item)
 
-				err := a.processEncryptedMessage(ctx, whisperMessage)
+				err := a.decryptMessage(ctx, whisperMessage)
 				if err != nil {
 					log.Printf("failed to process encrypted message %#x: %v", messageID, err)
 					continue
@@ -108,6 +108,47 @@ func (a *whisperAdapter) SubscribePrivate(ctx context.Context, publicKey *ecdsa.
 	return sub, nil
 }
 
+func (a *whisperAdapter) RetrievePublicMessages(chatID string) ([]*protocol.Message, error) {
+	messages, err := a.transport.RetrievePublicMessages(chatID)
+	if err != nil {
+		return nil, err
+	}
+
+	decodedMessages := make([]*protocol.Message, 0, len(messages))
+	for _, item := range messages {
+		shhMessage := whisper.ToWhisperMessage(item)
+		message, err := a.decodeMessage(shhMessage)
+		if err != nil {
+			log.Printf("failed to decode message %#x", shhMessage.Hash)
+		}
+		decodedMessages = append(decodedMessages, message)
+	}
+	return decodedMessages, nil
+}
+
+func (a *whisperAdapter) RetrievePrivateMessages(publicKey *ecdsa.PublicKey) ([]*protocol.Message, error) {
+	messages, err := a.transport.RetrievePrivateMessages(publicKey)
+	if err != nil {
+		return nil, err
+	}
+
+	decodedMessages := make([]*protocol.Message, 0, len(messages))
+	for _, item := range messages {
+		shhMessage := whisper.ToWhisperMessage(item)
+		err := a.decryptMessage(context.Background(), shhMessage)
+		if err != nil {
+			log.Printf("failed to decrypt a message: %#x", shhMessage.Hash)
+		}
+
+		message, err := a.decodeMessage(shhMessage)
+		if err != nil {
+			log.Printf("failed to decode message %#x", shhMessage.Hash)
+		}
+		decodedMessages = append(decodedMessages, message)
+	}
+	return decodedMessages, nil
+}
+
 func (a *whisperAdapter) decodeMessage(message *whisper.Message) (*protocol.Message, error) {
 	publicKey, err := crypto.UnmarshalPubkey(message.Sig)
 	if err != nil {
@@ -124,7 +165,7 @@ func (a *whisperAdapter) decodeMessage(message *whisper.Message) (*protocol.Mess
 	return &decoded, nil
 }
 
-func (a *whisperAdapter) processEncryptedMessage(ctx context.Context, message *whisper.Message) error {
+func (a *whisperAdapter) decryptMessage(ctx context.Context, message *whisper.Message) error {
 	publicKey, err := crypto.UnmarshalPubkey(message.Sig)
 	if err != nil {
 		return errors.Wrap(err, "failed to get signature")

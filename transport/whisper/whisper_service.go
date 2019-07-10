@@ -43,10 +43,6 @@ type whisperServiceKeysManager struct {
 	passToSymKeyCache map[string]string
 }
 
-func (m *whisperServiceKeysManager) PrivateKey() *ecdsa.PrivateKey {
-	return m.privateKey
-}
-
 func (m *whisperServiceKeysManager) AddOrGetKeyPair(priv *ecdsa.PrivateKey) (string, error) {
 	// caching is handled in Whisper
 	return m.shh.AddKeyPair(priv)
@@ -170,6 +166,34 @@ func (a *WhisperServiceTransport) subscribe(filterID string, in chan<- *whisper.
 	}()
 
 	return sub
+}
+
+func (a *WhisperServiceTransport) RetrievePublicMessages(chatID string) ([]*whisper.ReceivedMessage, error) {
+	chat, err := a.chats.LoadPublic(chatID)
+	if err != nil {
+		return nil, err
+	}
+
+	f := a.shh.GetFilter(chat.FilterID)
+	if f == nil {
+		return nil, errors.New("failed to return a filter")
+	}
+
+	return f.Retrieve(), nil
+}
+
+func (a *WhisperServiceTransport) RetrievePrivateMessages(publicKey *ecdsa.PublicKey) ([]*whisper.ReceivedMessage, error) {
+	chat, err := a.chats.LoadContactCode(publicKey)
+	if err != nil {
+		return nil, err
+	}
+
+	f := a.shh.GetFilter(chat.FilterID)
+	if f == nil {
+		return nil, errors.New("failed to return a filter")
+	}
+
+	return f.Retrieve(), nil
 }
 
 // SendPublic sends a new message using the Whisper service.

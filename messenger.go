@@ -3,6 +3,9 @@ package statusproto
 import (
 	"context"
 	"crypto/ecdsa"
+	"log"
+	"path/filepath"
+	"time"
 
 	"github.com/pkg/errors"
 	whisper "github.com/status-im/whisper/whisperv6"
@@ -10,7 +13,9 @@ import (
 	"github.com/status-im/status-protocol-go/encryption"
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
 	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
+	"github.com/status-im/status-protocol-go/subscription"
 	transport "github.com/status-im/status-protocol-go/transport/whisper"
+	protocol "github.com/status-im/status-protocol-go/v1"
 )
 
 // Messenger is a entity managing chats and messages.
@@ -22,6 +27,7 @@ import (
 // mailservers because they can also be managed by the user.
 type Messenger struct {
 	identity  *ecdsa.PrivateKey
+	database  database
 	adapter   *whisperAdapter
 	encryptor *encryption.Protocol
 }
@@ -85,8 +91,14 @@ func NewMessenger(
 		return nil, errors.Wrap(err, "failed to create the encryption layer")
 	}
 
+	messagesDB, err := initializeDB(filepath.Join(dataDir, "messages.sql"), dbKey)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to initialize messages db")
+	}
+
 	return &Messenger{
 		identity:  identity,
+		database:  messagesDB,
 		adapter:   newWhisperAdapter(identity, t, p),
 		encryptor: p,
 	}, nil
@@ -158,4 +170,101 @@ func (m *Messenger) SendPublic(ctx context.Context, chatID string) ([]byte, erro
 // Asuumes a chat is already added.
 func (m *Messenger) SendPrivate(ctx context.Context, chatID string) ([]byte, error) {
 	return nil, nil
+}
+
+func (m *Messenger) RetrievePublicMessages(ctx context.Context, chatID string) ([]*protocol.Message, error) {
+	messages, err := m.adapter.RetrievePublicMessages(chatID)
+	if err != nil {
+		return nil, err
+	}
+
+	c := Contact{Name: chatID}
+	if err := m.storeMessages(c, messages...); err != nil {
+		return nil, err
+	}
+
+	return messages, nil
+}
+
+func (m *Messenger) RetrievePrivateMessages(ctx context.Context, publicKey *ecdsa.PublicKey) ([]*protocol.Message, error) {
+	messages, err := m.adapter.RetrievePrivateMessages(publicKey)
+	if err != nil {
+		return nil, err
+	}
+
+	c := Contact{PublicKey: publicKey}
+	if err := m.storeMessages(c, messages...); err != nil {
+		return nil, err
+	}
+
+	return messages, nil
+}
+
+func (m *Messenger) SubscribePublic(ctx context.Context, chatID string) (*subscription.Subscription, <-chan *protocol.Message, error) {
+	ch := make(chan *protocol.Message, 1024)
+	sub, err := m.adapter.SubscribePublic(ctx, chatID, ch)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	c := Contact{Name: chatID}
+	resultCh := make(chan *protocol.Message, 1014)
+
+	go func() {
+		err := m.processSubscription(c, sub, ch, resultCh)
+		if err != nil {
+			log.Printf("failed to process subscription: %v", err)
+		}
+	}()
+
+	return sub, resultCh, nil
+}
+
+func (m *Messenger) SubscribePrivate(ctx context.Context, publicKey *ecdsa.PublicKey) (*subscription.Subscription, <-chan *protocol.Message, error) {
+	ch := make(chan *protocol.Message, 1024)
+	sub, err := m.adapter.SubscribePrivate(ctx, publicKey, ch)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	c := Contact{PublicKey: publicKey}
+	resultCh := make(chan *protocol.Message, 1014)
+
+	go func() {
+		err := m.processSubscription(c, sub, ch, resultCh)
+		if err != nil {
+			log.Printf("failed to process subscription: %v", err)
+		}
+	}()
+
+	return sub, resultCh, nil
+}
+
+func (m *Messenger) processSubscription(c Contact, sub *subscription.Subscription, out <-chan *protocol.Message, in chan<- *protocol.Message) error {
+	var cachedMessages []*protocol.Message
+
+	for {
+		select {
+		case <-sub.Done():
+			return sub.Err()
+		case m := <-out:
+			cachedMessages = append(cachedMessages, m)
+			in <- m
+		case <-time.After(time.Second):
+			if len(cachedMessages) == 0 {
+				continue
+			}
+			err := m.storeMessages(c, cachedMessages...)
+			if err != nil {
+				log.Printf("failed to store messages: %v", err)
+				continue
+			}
+			cachedMessages = nil
+		}
+	}
+}
+
+func (m *Messenger) storeMessages(c Contact, messages ...*protocol.Message) error {
+	_, err := m.database.SaveMessages(c, messages)
+	return err
 }

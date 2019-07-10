@@ -14,6 +14,8 @@ import (
 type WhisperTransport interface {
 	SubscribePublic(context.Context, string, chan<- *whisper.ReceivedMessage) (*subscription.Subscription, error)
 	SubscribePrivate(context.Context, *ecdsa.PublicKey, chan<- *whisper.ReceivedMessage) (*subscription.Subscription, error)
+	RetrievePublicMessages(string) ([]*whisper.ReceivedMessage, error)
+	RetrievePrivateMessages(*ecdsa.PublicKey) ([]*whisper.ReceivedMessage, error)
 	SendPublic(context.Context, whisper.NewMessage, string) ([]byte, error)
 	SendPrivateWithSharedSecret(context.Context, whisper.NewMessage, *ecdsa.PublicKey, []byte) ([]byte, error)
 	SendPrivateWithPartitioned(context.Context, whisper.NewMessage, *ecdsa.PublicKey) ([]byte, error)
