@@ -12,7 +12,6 @@ import (
 	whisper "github.com/status-im/whisper/whisperv6"
 
 	"github.com/status-im/status-protocol-go/encryption"
-	"github.com/status-im/status-protocol-go/subscription"
 	transport "github.com/status-im/status-protocol-go/transport/whisper"
 	protocol "github.com/status-im/status-protocol-go/v1"
 )
@@ -38,74 +37,6 @@ func newWhisperAdapter(pk *ecdsa.PrivateKey, t transport.WhisperTransport, p *en
 		transport:  t,
 		protocol:   p,
 	}
-}
-
-func (a *whisperAdapter) SubscribePublic(ctx context.Context, chatID string, messages chan<- *protocol.Message) (*subscription.Subscription, error) {
-	in := make(chan *whisper.ReceivedMessage, 1024)
-	sub, err := a.transport.SubscribePublic(ctx, chatID, in)
-	if err != nil {
-		return nil, err
-	}
-
-	go func() {
-		for {
-			select {
-			case <-sub.Done():
-				return
-			case rcvMessage := <-in:
-				whisperMessage := whisper.ToWhisperMessage(rcvMessage)
-				messageID := rcvMessage.EnvelopeHash.Bytes()
-				message, err := a.decodeMessage(whisperMessage)
-				if err != nil {
-					log.Printf("failed to decode message %#x: %v", messageID, err)
-					continue
-				}
-				messages <- message
-			}
-		}
-	}()
-
-	return sub, nil
-}
-
-func (a *whisperAdapter) SubscribePrivate(ctx context.Context, publicKey *ecdsa.PublicKey, messages chan<- *protocol.Message) (*subscription.Subscription, error) {
-	in := make(chan *whisper.ReceivedMessage, 1024)
-	sub, err := a.transport.SubscribePrivate(ctx, publicKey, in)
-	if err != nil {
-		return nil, err
-	}
-
-	go func() {
-		for {
-			select {
-			case <-sub.Done():
-				return
-			case item := <-in:
-				messageID := item.EnvelopeHash.Bytes()
-				whisperMessage := whisper.ToWhisperMessage(item)
-
-				err := a.decryptMessage(ctx, whisperMessage)
-				if err != nil {
-					log.Printf("failed to process encrypted message %#x: %v", messageID, err)
-					continue
-				}
-
-				message, err := a.decodeMessage(whisperMessage)
-				if err != nil {
-					log.Printf("failed to decode message %#x: %v", messageID, err)
-					continue
-				}
-
-				if err := a.protocol.ConfirmMessageProcessed(messageID); err != nil {
-					log.Printf("failed to confirm a message: %v", err)
-				}
-
-				messages <- message
-			}
-		}
-	}()
-
-	return sub, nil
 }
 
 func (a *whisperAdapter) RetrievePublicMessages(chatID string) ([]*protocol.Message, error) {

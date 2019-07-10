@@ -5,15 +5,11 @@ import (
 	"crypto/ecdsa"
 
 	whisper "github.com/status-im/whisper/whisperv6"
-
-	"github.com/status-im/status-protocol-go/subscription"
 )
 
 // WhisperTransport defines an interface which each Whisper transport
 // should conform to.
 type WhisperTransport interface {
-	SubscribePublic(context.Context, string, chan<- *whisper.ReceivedMessage) (*subscription.Subscription, error)
-	SubscribePrivate(context.Context, *ecdsa.PublicKey, chan<- *whisper.ReceivedMessage) (*subscription.Subscription, error)
 	RetrievePublicMessages(string) ([]*whisper.ReceivedMessage, error)
 	RetrievePrivateMessages(*ecdsa.PublicKey) ([]*whisper.ReceivedMessage, error)
 	SendPublic(context.Context, whisper.NewMessage, string) ([]byte, error)

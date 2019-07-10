@@ -19,7 +19,6 @@ import (
 	"github.com/status-im/status-go/mailserver"
 	whisper "github.com/status-im/whisper/whisperv6"
 
-	"github.com/status-im/status-protocol-go/subscription"
 	"github.com/status-im/status-protocol-go/transport/whisper/filter"
 )
 
@@ -107,65 +106,6 @@ func NewWhisperServiceTransport(
 			passToSymKeyCache: make(map[string]string),
 		},
 	}, nil
-}
-
-// SubscribePublic subscribes to a public chat using the Whisper service.
-func (a *WhisperServiceTransport) SubscribePublic(
-	ctx context.Context,
-	chatID string,
-	in chan<- *whisper.ReceivedMessage,
-) (*subscription.Subscription, error) {
-	chat, err := a.chats.LoadPublic(chatID)
-	if err != nil {
-		return nil, err
-	}
-	sub := a.subscribe(chat.FilterID, in)
-	return sub, nil
-}
-
-// SubscribePrivate sibscribes to a 1-1 chat.
-func (a *WhisperServiceTransport) SubscribePrivate(
-	ctx context.Context,
-	publicKey *ecdsa.PublicKey,
-	in chan<- *whisper.ReceivedMessage,
-) (*subscription.Subscription, error) {
-	chat, err := a.chats.LoadContactCode(publicKey)
-	if err != nil {
-		return nil, err
-	}
-	sub := a.subscribe(chat.FilterID, in)
-	return sub, nil
-}
-
-func (a *WhisperServiceTransport) subscribe(filterID string, in chan<- *whisper.ReceivedMessage) *subscription.Subscription {
-	subWhisper := newWhisperSubscription(a.shh, filterID)
-	sub := subscription.New()
-
-	go func() {
-		defer subWhisper.Unsubscribe() // nolint: errcheck
-
-		t := time.NewTicker(time.Second)
-		defer t.Stop()
-
-		for {
-			select {
-			case <-t.C:
-				received, err := subWhisper.Messages()
-				if err != nil {
-					sub.Cancel(err)
-					return
-				}
-
-				for _, message := range received {
-					in <- message
-				}
-			case <-sub.Done():
-				return
-			}
-		}
-	}()
-
-	return sub
 }
 
 func (a *WhisperServiceTransport) RetrievePublicMessages(chatID string) ([]*whisper.ReceivedMessage, error) {

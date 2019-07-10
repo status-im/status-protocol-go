@@ -3,9 +3,7 @@ package statusproto
 import (
 	"context"
 	"crypto/ecdsa"
-	"log"
 	"path/filepath"
-	"time"
 
 	"github.com/pkg/errors"
 	whisper "github.com/status-im/whisper/whisperv6"
@@ -13,7 +11,6 @@ import (
 	"github.com/status-im/status-protocol-go/encryption"
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
 	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
-	"github.com/status-im/status-protocol-go/subscription"
 	transport "github.com/status-im/status-protocol-go/transport/whisper"
 	protocol "github.com/status-im/status-protocol-go/v1"
 )
@@ -198,70 +195,6 @@ func (m *Messenger) RetrievePrivateMessages(ctx context.Context, publicKey *ecds
 	}
 
 	return messages, nil
-}
-
-func (m *Messenger) SubscribePublic(ctx context.Context, chatID string) (*subscription.Subscription, <-chan *protocol.Message, error) {
-	ch := make(chan *protocol.Message, 1024)
-	sub, err := m.adapter.SubscribePublic(ctx, chatID, ch)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	c := Contact{Name: chatID}
-	resultCh := make(chan *protocol.Message, 1014)
-
-	go func() {
-		err := m.processSubscription(c, sub, ch, resultCh)
-		if err != nil {
-			log.Printf("failed to process subscription: %v", err)
-		}
-	}()
-
-	return sub, resultCh, nil
-}
-
-func (m *Messenger) SubscribePrivate(ctx context.Context, publicKey *ecdsa.PublicKey) (*subscription.Subscription, <-chan *protocol.Message, error) {
-	ch := make(chan *protocol.Message, 1024)
-	sub, err := m.adapter.SubscribePrivate(ctx, publicKey, ch)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	c := Contact{PublicKey: publicKey}
-	resultCh := make(chan *protocol.Message, 1014)
-
-	go func() {
-		err := m.processSubscription(c, sub, ch, resultCh)
-		if err != nil {
-			log.Printf("failed to process subscription: %v", err)
-		}
-	}()
-
-	return sub, resultCh, nil
-}
-
-func (m *Messenger) processSubscription(c Contact, sub *subscription.Subscription, out <-chan *protocol.Message, in chan<- *protocol.Message) error {
-	var cachedMessages []*protocol.Message
-
-	for {
-		select {
-		case <-sub.Done():
-			return sub.Err()
-		case m := <-out:
-			cachedMessages = append(cachedMessages, m)
-			in <- m
-		case <-time.After(time.Second):
-			if len(cachedMessages) == 0 {
-				continue
-			}
-			err := m.storeMessages(c, cachedMessages...)
-			if err != nil {
-				log.Printf("failed to store messages: %v", err)
-				continue
-			}
-			cachedMessages = nil
-		}
-	}
 }
 
 func (m *Messenger) storeMessages(c Contact, messages ...*protocol.Message) error {
