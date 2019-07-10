@@ -1,6 +1,7 @@
 package statusproto
 
 import (
+	"context"
 	"crypto/ecdsa"
 
 	"github.com/pkg/errors"
@@ -15,8 +16,14 @@ import (
 // Messenger is a entity managing chats and messages.
 // It acts as a bridge between the application and encryption
 // layers.
+// It needs to expose an interface to manage installations
+// because installations are managed by the user.
+// Similarly, it needs to expose an interface to manage
+// mailservers because they can also be managed by the user.
 type Messenger struct {
-	adapter *whisperAdapter
+	identity  *ecdsa.PrivateKey
+	adapter   *whisperAdapter
+	encryptor *encryption.Protocol
 }
 
 type config struct {
@@ -24,7 +31,7 @@ type config struct {
 	onNewSharedSecretHandler func([]*sharedsecret.Secret)
 }
 
-type Option func (*config) error
+type Option func(*config) error
 
 func WithOnAddedBundlesHandler(h func([]*multidevice.Installation)) func(c *config) error {
 	return func(c *config) error {
@@ -79,6 +86,76 @@ func NewMessenger(
 	}
 
 	return &Messenger{
-		adapter: newWhisperAdapter(identity, t, p),
+		identity:  identity,
+		adapter:   newWhisperAdapter(identity, t, p),
+		encryptor: p,
 	}, nil
+}
+
+func (m *Messenger) EnableInstallation(id string) error {
+	return m.encryptor.EnableInstallation(&m.identity.PublicKey, id)
+}
+
+func (m *Messenger) DisableInstallation(id string) error {
+	return m.encryptor.DisableInstallation(&m.identity.PublicKey, id)
+}
+
+func (m *Messenger) Installations() ([]*multidevice.Installation, error) {
+	return m.encryptor.GetOurInstallations(&m.identity.PublicKey)
+}
+
+func (m *Messenger) SetInstallationMetadata(id string, data *multidevice.InstallationMetadata) error {
+	return m.encryptor.SetInstallationMetadata(&m.identity.PublicKey, id, data)
+}
+
+// NOT_IMPLEMENTED
+func (m *Messenger) SelectMailserver(id string) error {
+	return nil
+}
+
+// NOT_IMPLEMENTED
+func (m *Messenger) AddMailserver(enode string) error {
+	return nil
+}
+
+// NOT_IMPLEMENTED
+func (m *Messenger) RemoveMailserver(id string) error {
+	return nil
+}
+
+// NOT_IMPLEMENTED
+func (m *Messenger) Mailservers() ([]string, error) {
+	return nil, nil
+}
+
+// NOT_IMPLEMENTED
+func (m *Messenger) AddChat() error {
+	return nil
+}
+
+// NOT_IMPLEMENTED
+func (m *Messenger) RemoveChat(id string) error {
+	return nil
+}
+
+// NOT_IMPLEMENTED
+func (m *Messenger) BlockChat(id string) error {
+	return nil
+}
+
+// NOT_IMPLEMENTED
+func (m *Messenger) Chats() ([]string, error) {
+	return nil, nil
+}
+
+// NOT_IMPLEMENTED
+// Asuumes a chat is already added.
+func (m *Messenger) SendPublic(ctx context.Context, chatID string) ([]byte, error) {
+	return nil, nil
+}
+
+// NOT_IMPLEMENTED
+// Asuumes a chat is already added.
+func (m *Messenger) SendPrivate(ctx context.Context, chatID string) ([]byte, error) {
+	return nil, nil
 }
