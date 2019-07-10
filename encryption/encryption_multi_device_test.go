@@ -52,12 +52,12 @@ func setupUser(user string, s *EncryptionServiceMultiDeviceSuite, n int) error {
 			return err
 		}
 
-		db, err := storage.Open(tmpFile.Name(), "", storage.KdfIterationsNumber)
+		db, err := storage.OpenWithConfig(tmpFile.Name(), "", 0)
 		if err != nil {
 			return err
 		}
 
-		protocol := New(
+		protocol := newWithDB(
 			db,
 			installationID,
 			func(s []*multidevice.Installation) {},

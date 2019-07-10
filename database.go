@@ -18,8 +18,8 @@ import (
 	"github.com/status-im/migrate/v4/database/sqlcipher"
 	bindata "github.com/status-im/migrate/v4/source/go_bindata"
 
-	"github.com/status-im/status-protocol-go/internal/sqlite/migrations"
 	"github.com/status-im/status-protocol-go/internal/sqlite"
+	"github.com/status-im/status-protocol-go/internal/sqlite/migrations"
 	protocol "github.com/status-im/status-protocol-go/v1"
 )
 
@@ -76,8 +76,6 @@ type database interface {
 	DeleteContact(Contact) error
 	ContactExist(Contact) (bool, error)
 	PublicContactExist(Contact) (bool, error)
-	Histories() ([]History, error)
-	UpdateHistories([]History) error
 }
 
 // applyMigrations applies all migration.
@@ -134,7 +132,7 @@ func initializeTmpDB() (tmpDB tmpDatabase, err error) {
 	}
 	return tmpDatabase{
 		sqliteDatabase: db,
-		file:            tmpfile,
+		file:           tmpfile,
 	}, nil
 }
 
@@ -249,61 +247,6 @@ func (db sqliteDatabase) Contacts() ([]Contact, error) {
 		rst = append(rst, contact)
 	}
 	return rst, nil
-}
-
-func (db sqliteDatabase) Histories() ([]History, error) {
-	rows, err := db.db.Query("SELECT synced, u.name, u.type, u.state, u.topic, u.public_key FROM history_user_contact_topic JOIN user_contacts u ON contact_id = u.id")
-	if err != nil {
-		return nil, err
-	}
-	rst := []History{}
-	for rows.Next() {
-		h := History{
-			Contact: Contact{},
-		}
-		pkey := []byte{}
-		err = rows.Scan(&h.Synced, &h.Contact.Name, &h.Contact.Type, &h.Contact.State, &h.Contact.Topic, &pkey)
-		if err != nil {
-			return nil, err
-		}
-		if len(pkey) != 0 {
-			h.Contact.PublicKey, err = unmarshalEcdsaPub(pkey)
-			if err != nil {
-				return nil, err
-			}
-		}
-		rst = append(rst, h)
-	}
-	return rst, nil
-}
-
-func (db sqliteDatabase) UpdateHistories(histories []History) (err error) {
-	var (
-		tx   *sql.Tx
-		stmt *sql.Stmt
-	)
-	tx, err = db.db.BeginTx(context.Background(), &sql.TxOptions{})
-	if err != nil {
-		return err
-	}
-	stmt, err = tx.Prepare("UPDATE history_user_contact_topic SET synced = ? WHERE contact_Id = ?")
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err == nil {
-			err = tx.Commit()
-		} else {
-			_ = tx.Rollback()
-		}
-	}()
-	for i := range histories {
-		_, err = stmt.Exec(histories[i].Synced, contactID(histories[i].Contact))
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func (db sqliteDatabase) DeleteContact(c Contact) error {

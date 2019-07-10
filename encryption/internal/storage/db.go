@@ -16,13 +16,21 @@ const exportDB = "SELECT sqlcipher_export('newdb')"
 // The default number of kdf iterations in sqlcipher (from version 3.0.0)
 // https://github.com/sqlcipher/sqlcipher/blob/fda4c68bb474da7e955be07a2b807bda1bb19bd2/CHANGELOG.md#300---2013-11-05
 // https://www.zetetic.net/sqlcipher/sqlcipher-api/#kdf_iter
-const defaultKdfIterationsNumber = 64000
+const DefaultKdfIterationsNumber = 64000
 
 // The reduced number of kdf iterations (for performance reasons) which is
 // currently used for derivation of the database key
 // https://github.com/status-im/status-go/pull/1343
 // https://notes.status.im/i8Y_l7ccTiOYq09HVgoFwA
-const KdfIterationsNumber = 3200
+const ReducedKdfIterationsNumber = 3200
+
+func Open(path, key string) (*sql.DB, error) {
+	return open(path, key, ReducedKdfIterationsNumber)
+}
+
+func OpenWithConfig(path, key string, kdfIter int) (*sql.DB, error) {
+	return open(path, key, kdfIter)
+}
 
 func MigrateDBFile(oldPath string, newPath string, oldKey string, newKey string) error {
 	_, err := os.Stat(oldPath)
@@ -41,7 +49,7 @@ func MigrateDBFile(oldPath string, newPath string, oldKey string, newKey string)
 		return err
 	}
 
-	db, err := Open(newPath, oldKey, defaultKdfIterationsNumber)
+	db, err := open(newPath, oldKey, DefaultKdfIterationsNumber)
 	if err != nil {
 		return err
 	}
@@ -85,7 +93,7 @@ func MigrateDBKeyKdfIterations(oldPath string, newPath string, key string) error
 		return os.Rename(oldPath, newPath)
 	}
 
-	db, err := Open(oldPath, key, defaultKdfIterationsNumber)
+	db, err := open(oldPath, key, DefaultKdfIterationsNumber)
 	if err != nil {
 		return err
 	}
@@ -101,7 +109,7 @@ func MigrateDBKeyKdfIterations(oldPath string, newPath string, key string) error
 
 	changeKdfIter := fmt.Sprintf(
 		"PRAGMA newdb.kdf_iter = %d",
-		KdfIterationsNumber)
+		ReducedKdfIterationsNumber)
 
 	if _, err = db.Exec(changeKdfIter); err != nil {
 		return err
@@ -142,7 +150,7 @@ func EncryptDatabase(oldPath string, newPath string, key string) error {
 		return os.Rename(oldPath, newPath)
 	}
 
-	db, err := Open(oldPath, "", defaultKdfIterationsNumber)
+	db, err := open(oldPath, "", DefaultKdfIterationsNumber)
 	if err != nil {
 		return err
 	}
@@ -158,7 +166,7 @@ func EncryptDatabase(oldPath string, newPath string, key string) error {
 
 	changeKdfIter := fmt.Sprintf(
 		"PRAGMA newdb.kdf_iter = %d",
-		KdfIterationsNumber)
+		ReducedKdfIterationsNumber)
 
 	if _, err = db.Exec(changeKdfIter); err != nil {
 		return err
@@ -209,7 +217,7 @@ func migrateDB(db *sql.DB) error {
 	return nil
 }
 
-func Open(path string, key string, kdfIter int) (*sql.DB, error) {
+func open(path string, key string, kdfIter int) (*sql.DB, error) {
 	db, err := sql.Open("sqlite3", path)
 	if err != nil {
 		return nil, err

@@ -26,26 +26,26 @@ func (s *ProtocolServiceTestSuite) SetupTest() {
 	aliceDBPath, err := ioutil.TempFile("", "alice.db")
 	s.Require().NoError(err)
 	aliceDBKey := "alice"
-	aliceDB, err := storage.Open(aliceDBPath.Name(), aliceDBKey, storage.KdfIterationsNumber)
+	aliceDB, err := storage.Open(aliceDBPath.Name(), aliceDBKey)
 	s.Require().NoError(err)
 
 	bobDBPath, err := ioutil.TempFile("", "bob.db")
 	s.Require().NoError(err)
 	bobDBKey := "bob"
-	bobDB, err := storage.Open(bobDBPath.Name(), bobDBKey, storage.KdfIterationsNumber)
+	bobDB, err := storage.Open(bobDBPath.Name(), bobDBKey)
 	s.Require().NoError(err)
 
 	addedBundlesHandler := func(addedBundles []*multidevice.Installation) {}
 	onNewSharedSecretHandler := func(secret []*sharedsecret.Secret) {}
 
-	s.alice = New(
+	s.alice = newWithDB(
 		aliceDB,
 		"1",
 		addedBundlesHandler,
 		onNewSharedSecretHandler,
 	)
 
-	s.bob = New(
+	s.bob = newWithDB(
 		bobDB,
 		"2",
 		addedBundlesHandler,

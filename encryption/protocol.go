@@ -9,6 +9,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/crypto"
 
+	"github.com/status-im/status-protocol-go/encryption/internal/storage"
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
 	"github.com/status-im/status-protocol-go/encryption/publisher"
 	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
@@ -81,6 +82,27 @@ var (
 
 // New creates a new ProtocolService instance
 func New(
+	dataDir string,
+	dbKey string,
+	installationID string,
+	addedBundlesHandler func([]*multidevice.Installation),
+	onNewSharedSecretHandler func([]*sharedsecret.Secret),
+) (*Protocol, error) {
+	db, err := storage.Open(dataDir, dbKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return newWithEncryptorConfig(
+		db,
+		installationID,
+		defaultEncryptorConfig(installationID),
+		addedBundlesHandler,
+		onNewSharedSecretHandler,
+	), nil
+}
+
+func newWithDB(
 	db *sql.DB,
 	installationID string,
 	addedBundlesHandler func([]*multidevice.Installation),
@@ -415,6 +437,18 @@ func (p *Protocol) HandleMessage(myIdentityKey *ecdsa.PrivateKey, theirPublicKey
 
 	// Return error
 	return nil, ErrNoPayload
+}
+
+func (p *Protocol) ShouldAdvertiseBundle(publicKey *ecdsa.PublicKey, time int64) (bool, error) {
+	return p.publisher.ShouldAdvertiseBundle(publicKey, time)
+}
+
+func (p *Protocol) ConfirmBundleAdvertisement(publicKey *ecdsa.PublicKey, time int64) {
+	p.publisher.SetLastAck(publicKey, time)
+}
+
+func (p *Protocol) BuildBundleAdvertiseMessage(myIdentityKey *ecdsa.PrivateKey, publicKey *ecdsa.PublicKey) (*ProtocolMessageSpec, error) {
+	return p.BuildDHMessage(myIdentityKey, publicKey, nil)
 }
 
 func getProtocolVersion(bundles []*Bundle, installationID string) uint32 {

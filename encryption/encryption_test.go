@@ -40,12 +40,12 @@ type EncryptionServiceTestSuite struct {
 func (s *EncryptionServiceTestSuite) initDatabases(config encryptorConfig) {
 	aliceDBFile, err := ioutil.TempFile(os.TempDir(), "alice")
 	s.Require().NoError(err)
-	aliceDB, err := storage.Open(aliceDBFile.Name(), "", storage.KdfIterationsNumber)
+	aliceDB, err := storage.OpenWithConfig(aliceDBFile.Name(), "", 0)
 	s.Require().NoError(err)
 
 	bobDBFile, err := ioutil.TempFile(os.TempDir(), "bob")
 	s.Require().NoError(err)
-	bobDB, err := storage.Open(bobDBFile.Name(), "", storage.KdfIterationsNumber)
+	bobDB, err := storage.OpenWithConfig(bobDBFile.Name(), "", 0)
 	s.Require().NoError(err)
 
 	config.InstallationID = aliceInstallationID
@@ -813,7 +813,7 @@ func (s *EncryptionServiceTestSuite) TestDeviceNotIncluded() {
 	// Bob receives the message, and returns a bundlenotfound error
 	_, err = s.bob.HandleMessage(bobKey, &aliceKey.PublicKey, aliceMessage.Message, defaultMessageID)
 	s.Require().Error(err)
-	s.Equal(errDeviceNotFound, err)
+	s.Equal(ErrDeviceNotFound, err)
 }
 
 // A new bundle has been received

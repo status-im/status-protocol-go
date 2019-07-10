@@ -9,7 +9,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-type server interface {
+type Server interface {
 	Connected(enode.ID) (bool, error)
 	AddPeer(string) error
 	NodeID() *ecdsa.PrivateKey
@@ -22,7 +22,7 @@ type dialOpts struct {
 }
 
 // dial selected peer and wait until it is connected.
-func dial(ctx context.Context, srv server, peer string, opts dialOpts) error {
+func dial(ctx context.Context, srv Server, peer string, opts dialOpts) error {
 	if opts.PollInterval == 0 {
 		return errors.New("poll interval cannot be zero")
 	}

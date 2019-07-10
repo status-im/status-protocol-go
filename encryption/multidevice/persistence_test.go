@@ -27,7 +27,7 @@ type SQLLitePersistenceTestSuite struct {
 func (s *SQLLitePersistenceTestSuite) SetupTest() {
 	os.Remove(dbPath)
 
-	db, err := storage.Open(dbPath, "", 0)
+	db, err := storage.Open(dbPath, "")
 	s.Require().NoError(err)
 
 	s.service = newSQLitePersistence(db)

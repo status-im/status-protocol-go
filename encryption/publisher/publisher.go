@@ -1,10 +1,13 @@
 package publisher
 
 import (
+	"crypto/ecdsa"
 	"database/sql"
 	"errors"
 	"log"
 	"time"
+
+	"github.com/ethereum/go-ethereum/crypto"
 )
 
 const (
@@ -12,6 +15,8 @@ const (
 	tickerInterval = 120
 	// How often we should publish a contact code in seconds.
 	publishInterval = 21600
+	// Cooldown period on acking messages when not targeting our device.
+	deviceNotFoundAckInterval = 7200
 )
 
 var (
@@ -88,4 +93,18 @@ func (p *Publisher) notify() error {
 	p.notifyCh <- struct{}{}
 
 	return p.persistence.setLastPublished(now)
+}
+
+func (p *Publisher) ShouldAdvertiseBundle(publicKey *ecdsa.PublicKey, now int64) (bool, error) {
+	identity := crypto.CompressPubkey(publicKey)
+	lastAcked, err := p.persistence.lastAck(identity)
+	if err != nil {
+		return false, err
+	}
+	return now-lastAcked < deviceNotFoundAckInterval, nil
+}
+
+func (p *Publisher) SetLastAck(publicKey *ecdsa.PublicKey, now int64) {
+	identity := crypto.CompressPubkey(publicKey)
+	p.persistence.setLastAck(identity, now)
 }

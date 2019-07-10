@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -20,12 +19,12 @@ import (
 
 var (
 	errSessionNotFound = errors.New("session not found")
-	errDeviceNotFound  = errors.New("device not found")
+	ErrDeviceNotFound  = errors.New("device not found")
 	// ErrNotPairedDevice means that we received a message signed with our public key
 	// but from a device that has not been paired.
 	// This should not happen because the protocol forbids sending a message to
 	// non-paired devices, however, in theory it is possible to receive such a message.
-	errNotPairedDevice = errors.New("received a message from not paired device")
+	ErrNotPairedDevice = errors.New("received a message from not paired device")
 )
 
 // If we have no bundles, we use a constant so that the message can reach any device.
@@ -142,10 +141,6 @@ func (s *encryptor) CreateBundle(privateKey *ecdsa.PrivateKey, installations []*
 
 	expired := bundleContainer != nil && bundleContainer.GetBundle().Timestamp < time.Now().Add(-1*time.Duration(s.config.BundleRefreshInterval)*time.Millisecond).UnixNano()
 
-	if bundleContainer != nil {
-		log.Printf("================ expired: %t (%d vs %d)", expired, bundleContainer.GetBundle().Timestamp, time.Now().Add(-1*time.Duration(s.config.BundleRefreshInterval)*time.Millisecond).UnixNano())
-	}
-
 	// If the bundle has expired we create a new one
 	if expired {
 		// Mark sessions has expired
@@ -237,9 +232,9 @@ func (s *encryptor) DecryptPayload(myIdentityKey *ecdsa.PrivateKey, theirIdentit
 
 	// We should not be sending a signal if it's coming from us, as we receive our own messages
 	if msg == nil && !samePublicKeys(*theirIdentityKey, myIdentityKey.PublicKey) {
-		return nil, errDeviceNotFound
+		return nil, ErrDeviceNotFound
 	} else if msg == nil {
-		return nil, errNotPairedDevice
+		return nil, ErrNotPairedDevice
 	}
 
 	payload := msg.GetPayload()

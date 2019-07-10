@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"log"
+	"time"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/golang/protobuf/proto"
@@ -23,6 +24,8 @@ const (
 	whisperPoWTime = 5
 )
 
+// whisperAdapter is a bridge between encryption and transport
+// layers.
 type whisperAdapter struct {
 	privateKey *ecdsa.PrivateKey
 	transport  transport.WhisperTransport
@@ -45,14 +48,20 @@ func (a *whisperAdapter) SubscribePublic(ctx context.Context, chatID string, mes
 	}
 
 	go func() {
-		for item := range in {
-			whisperMessage := whisper.ToWhisperMessage(item)
-			message, err := a.decodeMessage(whisperMessage)
-			if err != nil {
-				log.Printf("failed to decode message %#x: %v", item.EnvelopeHash.Bytes(), err)
-				continue
+		for {
+			select {
+			case <-sub.Done():
+				return
+			case rcvMessage := <-in:
+				whisperMessage := whisper.ToWhisperMessage(rcvMessage)
+				messageID := rcvMessage.EnvelopeHash.Bytes()
+				message, err := a.decodeMessage(whisperMessage)
+				if err != nil {
+					log.Printf("failed to decode message %#x: %v", messageID, err)
+					continue
+				}
+				messages <- message
 			}
-			messages <- message
 		}
 	}()
 
@@ -67,40 +76,32 @@ func (a *whisperAdapter) SubscribePrivate(ctx context.Context, publicKey *ecdsa.
 	}
 
 	go func() {
-		for item := range in {
-			whisperMessage := whisper.ToWhisperMessage(item)
+		for {
+			select {
+			case <-sub.Done():
+				return
+			case item := <-in:
+				messageID := item.EnvelopeHash.Bytes()
+				whisperMessage := whisper.ToWhisperMessage(item)
 
-			publicKey, err := crypto.UnmarshalPubkey(whisperMessage.Sig)
-			if err != nil {
-				log.Printf("failed to get a public key from message sig: %v", err)
-				continue
+				err := a.processEncryptedMessage(ctx, whisperMessage)
+				if err != nil {
+					log.Printf("failed to process encrypted message %#x: %v", messageID, err)
+					continue
+				}
+
+				message, err := a.decodeMessage(whisperMessage)
+				if err != nil {
+					log.Printf("failed to decode message %#x: %v", messageID, err)
+					continue
+				}
+
+				if err := a.protocol.ConfirmMessageProcessed(messageID); err != nil {
+					log.Printf("failed to confirm a message: %v", err)
+				}
+
+				messages <- message
 			}
-
-			var protocolMessage encryption.ProtocolMessage
-
-			err = proto.Unmarshal(whisperMessage.Payload, &protocolMessage)
-			if err != nil {
-				log.Printf("failed to unmarshal payload: %v", err)
-			}
-
-			payload, err := a.protocol.HandleMessage(a.privateKey, publicKey, &protocolMessage, whisperMessage.Hash)
-			if err != nil {
-				log.Printf("failed to handle a message by encryption protocol: %v", err)
-			}
-
-			whisperMessage.Payload = payload
-
-			message, err := a.decodeMessage(whisperMessage)
-			if err != nil {
-				log.Printf("failed to decode message %#x: %v", item.EnvelopeHash.Bytes(), err)
-				continue
-			}
-
-			if err := a.protocol.ConfirmMessageProcessed(item.EnvelopeHash.Bytes()); err != nil {
-				log.Printf("failed to confirm a message: %v", err)
-			}
-
-			messages <- message
 		}
 	}()
 
@@ -121,6 +122,67 @@ func (a *whisperAdapter) decodeMessage(message *whisper.Message) (*protocol.Mess
 	decoded.SigPubKey = publicKey
 
 	return &decoded, nil
+}
+
+func (a *whisperAdapter) processEncryptedMessage(ctx context.Context, message *whisper.Message) error {
+	publicKey, err := crypto.UnmarshalPubkey(message.Sig)
+	if err != nil {
+		return errors.Wrap(err, "failed to get signature")
+	}
+
+	var protocolMessage encryption.ProtocolMessage
+
+	err = proto.Unmarshal(message.Payload, &protocolMessage)
+	if err != nil {
+		return errors.Wrap(err, "failed to unmarshal ProtocolMessage")
+	}
+
+	payload, err := a.protocol.HandleMessage(
+		a.privateKey,
+		publicKey,
+		&protocolMessage,
+		message.Hash,
+	)
+	if err == encryption.ErrDeviceNotFound {
+		err := a.handleErrDeviceNotFound(ctx, publicKey)
+		if err != nil {
+			log.Printf("failed to handle ErrDeviceNotFound: %v", err)
+		}
+	}
+	if err != nil {
+		return errors.Wrap(err, "failed to process an encrypted message")
+	}
+
+	message.Payload = payload
+	return nil
+
+}
+
+func (a *whisperAdapter) handleErrDeviceNotFound(ctx context.Context, publicKey *ecdsa.PublicKey) error {
+	now := time.Now().Unix()
+	advertise, err := a.protocol.ShouldAdvertiseBundle(publicKey, now)
+	if err != nil {
+		return err
+	}
+	if !advertise {
+		return nil
+	}
+
+	messageSpec, err := a.protocol.BuildBundleAdvertiseMessage(a.privateKey, publicKey)
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	_, err = a.sendMessageSpec(ctx, publicKey, messageSpec)
+	if err != nil {
+		return err
+	}
+
+	a.protocol.ConfirmBundleAdvertisement(publicKey, now)
+
+	return nil
 }
 
 func (a *whisperAdapter) SendPublic(ctx context.Context, chatID string, data []byte, clock int64) ([]byte, error) {
@@ -155,6 +217,10 @@ func (a *whisperAdapter) SendPrivate(ctx context.Context, publicKey *ecdsa.Publi
 		return nil, errors.Wrap(err, "failed to encrypt message")
 	}
 
+	return a.sendMessageSpec(ctx, publicKey, messageSpec)
+}
+
+func (a *whisperAdapter) sendMessageSpec(ctx context.Context, publicKey *ecdsa.PublicKey, messageSpec *encryption.ProtocolMessageSpec) ([]byte, error) {
 	newMessage, err := a.messageSpecToWhisper(messageSpec)
 	if err != nil {
 		return nil, err

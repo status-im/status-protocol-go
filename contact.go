@@ -2,13 +2,7 @@ package statusproto
 
 import (
 	"crypto/ecdsa"
-	"encoding/json"
 	"fmt"
-
-	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/crypto"
-
-	protocol "github.com/status-im/status-protocol-go/v1"
 )
 
 //go:generate stringer -type=ContactType
@@ -17,7 +11,7 @@ import (
 type ContactType int
 
 func (c ContactType) MarshalJSON() ([]byte, error) {
-	return []byte(fmt.Sprintf(`"%s"`, c)), nil
+	return []byte(fmt.Sprintf(`"%d"`, c)), nil
 }
 
 func (c *ContactType) UnmarshalJSON(data []byte) error {
@@ -58,92 +52,4 @@ type Contact struct {
 	State     ContactState     `json:"state"`
 	Topic     string           `json:"topic"`
 	PublicKey *ecdsa.PublicKey `json:"-"`
-}
-
-// CreateContactPrivate creates a new private contact.
-func CreateContactPrivate(name, pubKeyHex string, state ContactState) (c Contact, err error) {
-	pubKeyBytes, err := hexutil.Decode(pubKeyHex)
-	if err != nil {
-		return
-	}
-
-	c.Name = name
-	c.Type = ContactPrivate
-	c.State = state
-	c.Topic = protocol.DefaultPrivateTopic()
-	c.PublicKey, err = crypto.UnmarshalPubkey(pubKeyBytes)
-
-	return
-}
-
-// CreateContactPublicRoom creates a public room contact.
-func CreateContactPublicRoom(name string, state ContactState) Contact {
-	return Contact{
-		Name:  name,
-		Type:  ContactPublicRoom,
-		State: state,
-		Topic: name,
-	}
-}
-
-// String returns a string representation of Contact.
-func (c Contact) String() string {
-	return c.Name
-}
-
-// Equal returns true if contacts have same name and same type.
-func (c Contact) Equal(other Contact) bool {
-	return c.Name == other.Name && c.Type == other.Type
-}
-
-func (c Contact) MarshalJSON() ([]byte, error) {
-	type ContactAlias Contact
-
-	item := struct {
-		ContactAlias
-		PublicKey string `json:"public_key,omitempty"`
-	}{
-		ContactAlias: ContactAlias(c),
-	}
-
-	if c.PublicKey != nil {
-		item.PublicKey = EncodePublicKeyAsString(c.PublicKey)
-	}
-
-	return json.Marshal(&item)
-}
-
-func (c *Contact) UnmarshalJSON(data []byte) error {
-	type ContactAlias Contact
-
-	var item struct {
-		*ContactAlias
-		PublicKey string `json:"public_key,omitempty"`
-	}
-
-	if err := json.Unmarshal(data, &item); err != nil {
-		return err
-	}
-
-	if len(item.PublicKey) > 2 {
-		pubKey, err := hexutil.Decode(item.PublicKey)
-		if err != nil {
-			return err
-		}
-
-		item.ContactAlias.PublicKey, err = crypto.UnmarshalPubkey(pubKey)
-		if err != nil {
-			return err
-		}
-	}
-
-	*c = *(*Contact)(item.ContactAlias)
-
-	return nil
-}
-
-// EncodePublicKeyAsString encodes a public key as a string.
-// It starts with 0x to indicate it's hex encoding.
-func EncodePublicKeyAsString(pubKey *ecdsa.PublicKey) string {
-	return hexutil.Encode(crypto.FromECDSAPub(pubKey))
 }

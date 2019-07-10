@@ -25,7 +25,7 @@ func (s *SharedSecretTestSuite) SetupTest() {
 	s.Require().NoError(err)
 	s.path = dbFile.Name()
 
-	db, err := storage.Open(s.path, "", 0)
+	db, err := storage.OpenWithConfig(s.path, "", 0)
 
 	s.Require().NoError(err)
 

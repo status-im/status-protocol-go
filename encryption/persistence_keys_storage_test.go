@@ -36,7 +36,7 @@ func (s *SQLLitePersistenceKeysStorageTestSuite) SetupTest() {
 
 	key := "blahblahblah"
 
-	db, err := storage.Open(filepath.Join(dir, "db.sql"), key, storage.KdfIterationsNumber)
+	db, err := storage.Open(filepath.Join(dir, "db.sql"), key)
 	s.Require().NoError(err)
 
 	p := newSQLitePersistence(db)
