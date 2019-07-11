@@ -163,11 +163,18 @@ func (s *ChatsManager) Chats() (result []*Chat) {
 	return
 }
 
-// ChatByID returns a chat by chatID.
+// ChatByID returns a chat by id.
 func (s *ChatsManager) ChatByID(chatID string) *Chat {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+	return s.chats[chatID]
+}
 
+func (s *ChatsManager) ChatByPublicKey(publicKey *ecdsa.PublicKey) *Chat {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	chatID := contactCodeTopic(publicKey)
 	return s.chats[chatID]
 }
 

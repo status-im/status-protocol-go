@@ -108,6 +108,32 @@ func NewWhisperServiceTransport(
 	}, nil
 }
 
+func (a *WhisperServiceTransport) JoinPublic(chatID string) error {
+	_, err := a.chats.LoadPublic(chatID)
+	return err
+}
+
+func (a *WhisperServiceTransport) LeavePublic(chatID string) error {
+	chat := a.chats.ChatByID(chatID)
+	if chat != nil {
+		return nil
+	}
+	return a.chats.Remove(chat)
+}
+
+func (a *WhisperServiceTransport) JoinPrivate(publicKey *ecdsa.PublicKey) error {
+	_, err := a.chats.LoadContactCode(publicKey)
+	return err
+}
+
+func (a *WhisperServiceTransport) LeavePrivate(publicKey *ecdsa.PublicKey) error {
+	chat := a.chats.ChatByPublicKey(publicKey)
+	if chat != nil {
+		return nil
+	}
+	return a.chats.Remove(chat)
+}
+
 func (a *WhisperServiceTransport) RetrievePublicMessages(chatID string) ([]*whisper.ReceivedMessage, error) {
 	chat, err := a.chats.LoadPublic(chatID)
 	if err != nil {

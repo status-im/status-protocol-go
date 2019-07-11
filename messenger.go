@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"path/filepath"
+	"time"
 
 	"github.com/pkg/errors"
 	whisper "github.com/status-im/whisper/whisperv6"
@@ -137,67 +138,87 @@ func (m *Messenger) Mailservers() ([]string, error) {
 	return nil, nil
 }
 
-// NOT_IMPLEMENTED
-func (m *Messenger) AddChat() error {
-	return nil
-}
-
-// NOT_IMPLEMENTED
-func (m *Messenger) RemoveChat(id string) error {
-	return nil
-}
-
-// NOT_IMPLEMENTED
-func (m *Messenger) BlockChat(id string) error {
-	return nil
-}
-
-// NOT_IMPLEMENTED
-func (m *Messenger) Chats() ([]string, error) {
-	return nil, nil
-}
-
-// NOT_IMPLEMENTED
-// Asuumes a chat is already added.
-func (m *Messenger) SendPublic(ctx context.Context, chatID string) ([]byte, error) {
-	return nil, nil
-}
-
-// NOT_IMPLEMENTED
-// Asuumes a chat is already added.
-func (m *Messenger) SendPrivate(ctx context.Context, chatID string) ([]byte, error) {
-	return nil, nil
-}
-
-func (m *Messenger) RetrievePublicMessages(ctx context.Context, chatID string) ([]*protocol.Message, error) {
-	messages, err := m.adapter.RetrievePublicMessages(chatID)
+func (m *Messenger) SendPublic(ctx context.Context, chat Chat, data []byte) ([]byte, error) {
+	clock, err := m.database.LastMessageClock(chat.ID())
 	if err != nil {
 		return nil, err
 	}
+	return m.adapter.SendPublic(ctx, chat.ID(), data, clock)
+}
 
-	c := Contact{Name: chatID}
-	if err := m.storeMessages(c, messages...); err != nil {
+func (m *Messenger) SendPrivate(ctx context.Context, chat Chat, data []byte) ([]byte, error) {
+	clock, err := m.database.LastMessageClock(chat.ID())
+	if err != nil {
+		return nil, err
+	}
+	return m.adapter.SendPrivate(ctx, chat.PublicKey(), chat.ID(), data, clock)
+}
+
+type RetrieveConfig struct {
+	From        time.Time
+	To          time.Time
+	latest      bool
+	last24Hours bool
+}
+
+var (
+	RetrieveLatest  = RetrieveConfig{latest: true}
+	RetrieveLastDay = RetrieveConfig{latest: true, last24Hours: true}
+)
+
+func (m *Messenger) RetrievePublicMessages(ctx context.Context, chat Chat, c RetrieveConfig) (messages []*protocol.Message, err error) {
+	if !c.latest {
+		return m.retrieveMessages(ctx, chat, c, nil)
+	}
+
+	latest, err := m.adapter.RetrievePublicMessages(chat.ID())
+	if err != nil {
+		return nil, err
+	}
+	return m.retrieveMessages(ctx, chat, c, latest)
+}
+
+func (m *Messenger) RetrievePrivateMessages(ctx context.Context, chat Chat, c RetrieveConfig) (messages []*protocol.Message, err error) {
+	if !c.latest {
+		return m.retrieveMessages(ctx, chat, c, nil)
+	}
+
+	latest, err := m.adapter.RetrievePrivateMessages(chat.PublicKey())
+	if err != nil {
+		return nil, err
+	}
+	return m.retrieveMessages(ctx, chat, c, latest)
+}
+
+func (m *Messenger) LeavePublic(chat Chat) error {
+	return m.adapter.LeavePublic(chat.ID())
+}
+
+func (m *Messenger) LeavePrivate(chat Chat) error {
+	return m.adapter.LeavePrivate(chat.PublicKey())
+}
+
+func (m *Messenger) retrieveMessages(ctx context.Context, chat Chat, c RetrieveConfig, latest []*protocol.Message) (messages []*protocol.Message, err error) {
+	if !c.latest {
+		return m.database.Messages(chat.ID(), c.From, c.To)
+	}
+
+	if c.last24Hours {
+		to := time.Now()
+		from := to.Add(-time.Hour * 24)
+		messages, err = m.database.Messages(chat.ID(), from, to)
+	}
+
+	messages = append(messages, latest...)
+
+	if err := m.storeMessages(chat.ID(), latest...); err != nil {
 		return nil, err
 	}
 
 	return messages, nil
 }
 
-func (m *Messenger) RetrievePrivateMessages(ctx context.Context, publicKey *ecdsa.PublicKey) ([]*protocol.Message, error) {
-	messages, err := m.adapter.RetrievePrivateMessages(publicKey)
-	if err != nil {
-		return nil, err
-	}
-
-	c := Contact{PublicKey: publicKey}
-	if err := m.storeMessages(c, messages...); err != nil {
-		return nil, err
-	}
-
-	return messages, nil
-}
-
-func (m *Messenger) storeMessages(c Contact, messages ...*protocol.Message) error {
-	_, err := m.database.SaveMessages(c, messages)
+func (m *Messenger) storeMessages(chatID string, messages ...*protocol.Message) error {
+	_, err := m.database.SaveMessages(chatID, messages)
 	return err
 }

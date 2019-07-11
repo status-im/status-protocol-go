@@ -12,6 +12,7 @@ import (
 	whisper "github.com/status-im/whisper/whisperv6"
 
 	"github.com/status-im/status-protocol-go/encryption"
+	"github.com/status-im/status-protocol-go/encryption/multidevice"
 	transport "github.com/status-im/status-protocol-go/transport/whisper"
 	protocol "github.com/status-im/status-protocol-go/v1"
 )
@@ -39,6 +40,24 @@ func newWhisperAdapter(pk *ecdsa.PrivateKey, t transport.WhisperTransport, p *en
 	}
 }
 
+func (a *whisperAdapter) JoinPublic(chatID string) error {
+	return a.transport.JoinPublic(chatID)
+}
+
+func (a *whisperAdapter) LeavePublic(chatID string) error {
+	return a.transport.LeavePublic(chatID)
+}
+
+func (a *whisperAdapter) JoinPrivate(publicKey *ecdsa.PublicKey) error {
+	return a.transport.JoinPrivate(publicKey)
+}
+
+func (a *whisperAdapter) LeavePrivate(publicKey *ecdsa.PublicKey) error {
+	return a.transport.LeavePrivate(publicKey)
+}
+
+// RetrievePublicMessages retrieves the collected public messages.
+// It implies joining a chat if it has not been joined yet.
 func (a *whisperAdapter) RetrievePublicMessages(chatID string) ([]*protocol.Message, error) {
 	messages, err := a.transport.RetrievePublicMessages(chatID)
 	if err != nil {
@@ -48,15 +67,23 @@ func (a *whisperAdapter) RetrievePublicMessages(chatID string) ([]*protocol.Mess
 	decodedMessages := make([]*protocol.Message, 0, len(messages))
 	for _, item := range messages {
 		shhMessage := whisper.ToWhisperMessage(item)
-		message, err := a.decodeMessage(shhMessage)
+		statusMessage, err := a.decodeMessage(shhMessage)
 		if err != nil {
 			log.Printf("failed to decode message %#x", shhMessage.Hash)
 		}
-		decodedMessages = append(decodedMessages, message)
+
+		switch m := statusMessage.Message.(type) {
+		case protocol.Message:
+			decodedMessages = append(decodedMessages, &m)
+		default:
+			log.Printf("skipped a public message of unsupported type")
+		}
 	}
 	return decodedMessages, nil
 }
 
+// RetrievePrivateMessages retrieves the collected private messages.
+// It implies joining a chat if it has not been joined yet.
 func (a *whisperAdapter) RetrievePrivateMessages(publicKey *ecdsa.PublicKey) ([]*protocol.Message, error) {
 	messages, err := a.transport.RetrievePrivateMessages(publicKey)
 	if err != nil {
@@ -71,16 +98,38 @@ func (a *whisperAdapter) RetrievePrivateMessages(publicKey *ecdsa.PublicKey) ([]
 			log.Printf("failed to decrypt a message: %#x", shhMessage.Hash)
 		}
 
-		message, err := a.decodeMessage(shhMessage)
+		statusMessage, err := a.decodeMessage(shhMessage)
 		if err != nil {
 			log.Printf("failed to decode message %#x", shhMessage.Hash)
 		}
-		decodedMessages = append(decodedMessages, message)
+
+		switch m := statusMessage.Message.(type) {
+		case protocol.Message:
+			m.ID = statusMessage.ID
+			m.SigPubKey = statusMessage.SigPubKey
+			decodedMessages = append(decodedMessages, &m)
+		case protocol.PairMessage:
+			fromOurDevice := isPubKeyEqual(statusMessage.SigPubKey, &a.privateKey.PublicKey)
+			if !fromOurDevice {
+				log.Printf("received PairMessage from not our device, skipping")
+				break
+			}
+
+			metadata := &multidevice.InstallationMetadata{
+				Name:       m.Name,
+				FCMToken:   m.FCMToken,
+				DeviceType: m.DeviceType,
+			}
+			err := a.protocol.SetInstallationMetadata(&a.privateKey.PublicKey, m.InstallationID, metadata)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 	return decodedMessages, nil
 }
 
-func (a *whisperAdapter) decodeMessage(message *whisper.Message) (*protocol.Message, error) {
+func (a *whisperAdapter) decodeMessage(message *whisper.Message) (*protocol.StatusMessage, error) {
 	publicKey, err := crypto.UnmarshalPubkey(message.Sig)
 	if err != nil {
 		return nil, err
@@ -175,9 +224,8 @@ func (a *whisperAdapter) SendPublic(ctx context.Context, chatID string, data []b
 	return a.transport.SendPublic(ctx, newMessage, chatID)
 }
 
-func (a *whisperAdapter) SendPrivate(ctx context.Context, publicKey *ecdsa.PublicKey, data []byte, clock int64) ([]byte, error) {
-	// TODO: calculate chatID
-	message := protocol.CreatePrivateTextMessage(data, clock, "")
+func (a *whisperAdapter) SendPrivate(ctx context.Context, publicKey *ecdsa.PublicKey, chatID string, data []byte, clock int64) ([]byte, error) {
+	message := protocol.CreatePrivateTextMessage(data, clock, chatID)
 
 	encodedMessage, err := protocol.EncodeMessage(message)
 	if err != nil {
@@ -221,4 +269,10 @@ func (a *whisperAdapter) messageSpecToWhisper(spec *encryption.ProtocolMessageSp
 	}
 
 	return &newMessage, nil
+}
+
+// isPubKeyEqual checks that two public keys are equal
+func isPubKeyEqual(a, b *ecdsa.PublicKey) bool {
+	// the curve is always the same, just compare the points
+	return a.X.Cmp(b.X) == 0 && a.Y.Cmp(b.Y) == 0
 }

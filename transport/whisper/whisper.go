@@ -10,6 +10,10 @@ import (
 // WhisperTransport defines an interface which each Whisper transport
 // should conform to.
 type WhisperTransport interface {
+	JoinPublic(string) error
+	LeavePublic(string) error
+	JoinPrivate(*ecdsa.PublicKey) error
+	LeavePrivate(*ecdsa.PublicKey) error
 	RetrievePublicMessages(string) ([]*whisper.ReceivedMessage, error)
 	RetrievePrivateMessages(*ecdsa.PublicKey) ([]*whisper.ReceivedMessage, error)
 	SendPublic(context.Context, whisper.NewMessage, string) ([]byte, error)

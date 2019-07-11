@@ -3,9 +3,9 @@ package statusproto
 import (
 	"bytes"
 	"crypto/ecdsa"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 )
@@ -62,7 +62,27 @@ const (
 	MessageRead Flags = 1 << iota
 )
 
-// Message contains all message details.
+// StatusMessage is any Status Protocol message.
+type StatusMessage struct {
+	Message   interface{}
+	ID        []byte           `json:"-"`
+	SigPubKey *ecdsa.PublicKey `json:"-"`
+}
+
+func (m *StatusMessage) MarshalJSON() ([]byte, error) {
+	type MessageAlias StatusMessage
+	item := struct {
+		*MessageAlias
+		ID string `json:"id"`
+	}{
+		MessageAlias: (*MessageAlias)(m),
+		ID:           "0x" + hex.EncodeToString(m.ID),
+	}
+
+	return json.Marshal(item)
+}
+
+// Message is a chat message sent by an user.
 type Message struct {
 	Text      string        `json:"text"` // TODO: why is this duplicated?
 	ContentT  string        `json:"content_type"`
@@ -71,10 +91,9 @@ type Message struct {
 	Timestamp TimestampInMs `json:"timestamp"`
 	Content   Content       `json:"content"`
 
-	// not protocol defined fields
+	Flags     Flags            `json:"-"`
 	ID        []byte           `json:"-"`
 	SigPubKey *ecdsa.PublicKey `json:"-"`
-	Flags     Flags            `json:"-"`
 }
 
 func (m *Message) MarshalJSON() ([]byte, error) {
@@ -84,7 +103,7 @@ func (m *Message) MarshalJSON() ([]byte, error) {
 		ID string `json:"id"`
 	}{
 		MessageAlias: (*MessageAlias)(m),
-		ID:           fmt.Sprintf("%#x", m.ID),
+		ID:           "0x" + hex.EncodeToString(m.ID),
 	}
 
 	return json.Marshal(item)
@@ -121,19 +140,14 @@ func CreatePrivateTextMessage(data []byte, lastClock int64, chatID string) Messa
 }
 
 // DecodeMessage decodes a raw payload to Message struct.
-func DecodeMessage(data []byte) (message Message, err error) {
+func DecodeMessage(data []byte) (message StatusMessage, err error) {
 	buf := bytes.NewBuffer(data)
 	decoder := NewMessageDecoder(buf)
 	value, err := decoder.Decode()
 	if err != nil {
 		return
 	}
-
-	message, ok := value.(Message)
-	if !ok {
-		return message, ErrInvalidDecodedValue
-	}
-	return
+	return StatusMessage{Message: value}, nil
 }
 
 // EncodeMessage encodes a Message using Transit serialization.
