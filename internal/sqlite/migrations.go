@@ -4,9 +4,9 @@
 // 000001_add_messages_contacts.up.db.sql (685B)
 // 000002_add_unread_to_user_messages.down.sql (210B)
 // 000002_add_unread_to_user_messages.up.sql (113B)
-// doc.go (74B)
+// doc.go (377B)
 
-package migrations
+package sqlite
 
 import (
 	"bytes"
@@ -88,7 +88,7 @@ func _000001_add_messages_contactsDownDbSql() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "000001_add_messages_contacts.down.db.sql", size: 91, mode: os.FileMode(0644), modTime: time.Unix(1562432610, 0)}
+	info := bindataFileInfo{name: "000001_add_messages_contacts.down.db.sql", size: 91, mode: os.FileMode(0644), modTime: time.Unix(1562955202, 0)}
 	a := &asset{bytes: bytes, info: info, digest: [32]uint8{0xee, 0x89, 0x87, 0xa3, 0x2, 0x4f, 0xb4, 0x8c, 0x2c, 0x15, 0x41, 0x85, 0x3c, 0xbe, 0x71, 0x55, 0xa1, 0x6a, 0xa1, 0x5e, 0x8e, 0xd8, 0xcf, 0x84, 0xed, 0xb0, 0x60, 0x3, 0xcb, 0xb5, 0x33, 0x7c}}
 	return a, nil
 }
@@ -108,7 +108,7 @@ func _000001_add_messages_contactsUpDbSql() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "000001_add_messages_contacts.up.db.sql", size: 685, mode: os.FileMode(0644), modTime: time.Unix(1562432610, 0)}
+	info := bindataFileInfo{name: "000001_add_messages_contacts.up.db.sql", size: 685, mode: os.FileMode(0644), modTime: time.Unix(1562955202, 0)}
 	a := &asset{bytes: bytes, info: info, digest: [32]uint8{0x1d, 0xd, 0x9, 0xd8, 0x7d, 0xba, 0x90, 0x3c, 0x7c, 0x6, 0xf2, 0x12, 0xb2, 0xbc, 0xd8, 0xbd, 0xc0, 0xea, 0xde, 0xa7, 0xae, 0x6a, 0x4b, 0xe5, 0x3d, 0xc3, 0xa4, 0x4a, 0x6d, 0x62, 0x2b, 0x91}}
 	return a, nil
 }
@@ -128,7 +128,7 @@ func _000002_add_unread_to_user_messagesDownSql() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "000002_add_unread_to_user_messages.down.sql", size: 210, mode: os.FileMode(0644), modTime: time.Unix(1562432610, 0)}
+	info := bindataFileInfo{name: "000002_add_unread_to_user_messages.down.sql", size: 210, mode: os.FileMode(0644), modTime: time.Unix(1562955202, 0)}
 	a := &asset{bytes: bytes, info: info, digest: [32]uint8{0xdc, 0x47, 0x8e, 0x4b, 0x54, 0x6a, 0xfc, 0x61, 0xa5, 0x37, 0xc6, 0xd6, 0xd3, 0x22, 0xcd, 0xbe, 0xb3, 0x60, 0xd8, 0xa0, 0xe2, 0x67, 0x27, 0x5, 0xf3, 0x6d, 0xca, 0x84, 0xd5, 0xfc, 0x94, 0x1a}}
 	return a, nil
 }
@@ -148,12 +148,12 @@ func _000002_add_unread_to_user_messagesUpSql() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "000002_add_unread_to_user_messages.up.sql", size: 113, mode: os.FileMode(0644), modTime: time.Unix(1562432610, 0)}
+	info := bindataFileInfo{name: "000002_add_unread_to_user_messages.up.sql", size: 113, mode: os.FileMode(0644), modTime: time.Unix(1562955202, 0)}
 	a := &asset{bytes: bytes, info: info, digest: [32]uint8{0x8a, 0x92, 0x67, 0x90, 0x5, 0xb4, 0x82, 0x13, 0x78, 0x83, 0xae, 0x5e, 0x13, 0x67, 0x2f, 0xdd, 0xe1, 0xcb, 0x11, 0x70, 0xdb, 0x5, 0xb6, 0xb0, 0x1c, 0x29, 0x99, 0xae, 0x1a, 0x32, 0xb0, 0x41}}
 	return a, nil
 }
 
-var _docGo = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\x2c\xc9\xb1\x0d\xc4\x20\x0c\x05\xd0\x9e\x29\xfe\x02\xd8\xfd\x6d\xe3\x4b\xac\x2f\x44\x82\x09\x78\x7f\xa5\x49\xfd\xa6\x1d\xdd\xe8\xd8\xcf\x55\x8a\x2a\xe3\x47\x1f\xbe\x2c\x1d\x8c\xfa\x6f\xe3\xb4\x34\xd4\xd9\x89\xbb\x71\x59\xb6\x18\x1b\x35\x20\xa2\x9f\x0a\x03\xa2\xe5\x0d\x00\x00\xff\xff\x60\xcd\x06\xbe\x4a\x00\x00\x00")
+var _docGo = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\x84\x8f\x3b\x72\xc3\x30\x0c\x44\x7b\x9d\x62\xc7\x8d\x9b\x88\x6c\x52\xa5\x4b\x99\x3e\x17\x80\x49\x88\xc4\x98\x1f\x85\x80\xfc\xb9\x7d\x46\x4e\x66\xe2\x2e\xed\x0e\xde\xe2\xad\xf7\xf8\xcc\xa2\x58\xa4\x30\x44\xd1\x38\xb0\x2a\x8d\x3b\x4e\x1c\x68\x53\xc6\x21\x89\xe5\xed\xe4\x42\xaf\x5e\x8d\x6c\xd3\x59\xaa\xaf\x92\x06\x19\xfb\xcb\xeb\x61\xf2\x1e\x81\xda\xd1\x90\xa9\xc5\xc2\x8f\x2e\x85\x1a\x0d\x93\x96\x70\x15\xcb\x20\xac\x83\x17\xb9\x39\xbc\x1b\x0a\x93\x1a\x2c\x93\x1d\x15\x96\x19\x81\x94\xf7\x9a\xa5\x0f\xa4\x3e\x9f\xa4\x45\x32\x72\x7b\xf4\xb1\x3c\x25\xbb\x61\xa0\x52\x38\x62\x19\xbd\x3e\x58\xa5\xca\x88\x32\x38\x58\x1f\xf7\x17\x90\x2a\x1b\x1a\x55\xd6\x9d\xcf\x74\x61\xb4\xfe\xfb\x1e\xd4\xe2\xff\x8b\x70\xed\xe3\xac\x20\x05\xdf\x56\x0e\xc6\xd1\x4d\xd3\x4a\xe1\x4c\x89\xf1\x73\x27\xbd\xe9\x34\x79\x9f\xfa\x5b\xe2\xc6\x3b\xf9\xec\x39\xaf\xe7\x04\xfd\x2a\x62\x8c\xb9\xc3\x39\xff\x87\xb9\xd4\xe1\xa6\xef\x00\x00\x00\xff\xff\xcd\x86\x58\x5c\x79\x01\x00\x00")
 
 func docGoBytes() ([]byte, error) {
 	return bindataRead(
@@ -168,8 +168,8 @@ func docGo() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "doc.go", size: 74, mode: os.FileMode(0644), modTime: time.Unix(1562432610, 0)}
-	a := &asset{bytes: bytes, info: info, digest: [32]uint8{0xde, 0x7c, 0x28, 0xcd, 0x47, 0xf2, 0xfa, 0x7c, 0x51, 0x2d, 0xd8, 0x38, 0xb, 0xb0, 0x34, 0x9d, 0x4c, 0x62, 0xa, 0x9e, 0x28, 0xc3, 0x31, 0x23, 0xd9, 0xbb, 0x89, 0x9f, 0xa0, 0x89, 0x1f, 0xe8}}
+	info := bindataFileInfo{name: "doc.go", size: 377, mode: os.FileMode(0644), modTime: time.Unix(1562955202, 0)}
+	a := &asset{bytes: bytes, info: info, digest: [32]uint8{0x94, 0xd1, 0x5c, 0x73, 0x47, 0x65, 0xf9, 0x6e, 0xa0, 0xee, 0xb, 0x3d, 0xbe, 0xff, 0xef, 0xae, 0xc9, 0x46, 0x21, 0x85, 0x12, 0x46, 0xa1, 0x73, 0x74, 0xca, 0x71, 0xb1, 0xe1, 0x69, 0xe1, 0x82}}
 	return a, nil
 }
 

@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/status-im/status-protocol-go/encryption/internal/storage"
+	"github.com/status-im/status-protocol-go/encryption/internal/sqlite"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -25,8 +25,7 @@ func (s *SharedSecretTestSuite) SetupTest() {
 	s.Require().NoError(err)
 	s.path = dbFile.Name()
 
-	db, err := storage.OpenWithConfig(s.path, "", 0)
-
+	db, err := sqlite.Open(s.path, "")
 	s.Require().NoError(err)
 
 	s.service = New(db)

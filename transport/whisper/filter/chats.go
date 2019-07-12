@@ -12,6 +12,8 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/pkg/errors"
 	whisper "github.com/status-im/whisper/whisperv6"
+
+	"github.com/status-im/status-protocol-go/transport/whisper/internal/sqlite"
 )
 
 const (
@@ -53,6 +55,8 @@ type Chat struct {
 	Discovery bool `json:"discovery"`
 	// Negotiated tells us whether is a negotiated topic
 	Negotiated bool `json:"negotiated"`
+	// Listen is whether we are actually listening for messages on this chat, or the filter is only created in order to be able to post on the topic
+	Listen bool `json:"listen"`
 }
 
 type ChatsManager struct {
@@ -71,6 +75,10 @@ func New(db *sql.DB, w *whisper.Whisper) (*ChatsManager, error) {
 	keyID := w.SelectedKeyPairID()
 	privateKey, err := w.GetPrivateKey(keyID)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := sqlite.ApplyMigrations(db); err != nil {
 		return nil, err
 	}
 
@@ -228,6 +236,7 @@ func (s *ChatsManager) loadPartitioned(publicKey *ecdsa.PublicKey, listen bool) 
 		FilterID: filter.FilterID,
 		Topic:    filter.Topic,
 		Identity: identityStr,
+		Listen:   listen,
 	}
 
 	s.chats[chatID] = chat
@@ -259,6 +268,7 @@ func (s *ChatsManager) LoadNegotiated(secret NegodiatedSecret) (*Chat, error) {
 		FilterID:   filter.FilterID,
 		Identity:   publicKeyToStr(secret.PublicKey),
 		Negotiated: true,
+		Listen:     true,
 	}
 
 	s.chats[chat.ChatID] = chat
@@ -283,6 +293,7 @@ func (s *ChatsManager) loadDiscovery() error {
 		ChatID:    DiscoveryTopic,
 		Identity:  identityStr, // TODO: remove?
 		Discovery: true,
+		Listen:    true,
 	}
 
 	discoveryResponse, err := s.addAsymmetric(discoveryChat.ChatID, true)
@@ -298,8 +309,10 @@ func (s *ChatsManager) loadDiscovery() error {
 	// Load personal discovery
 	personalDiscoveryTopic := personalDiscoveryTopic(&s.privateKey.PublicKey)
 	personalDiscoveryChat := &Chat{
-		ChatID:   personalDiscoveryTopic,
-		Identity: identityStr,
+		ChatID:    personalDiscoveryTopic,
+		Identity:  identityStr,
+		Discovery: true,
+		Listen:    true,
 	}
 
 	discoveryResponse, err = s.addAsymmetric(personalDiscoveryChat.ChatID, true)
@@ -334,6 +347,7 @@ func (s *ChatsManager) LoadPublic(chatID string) (*Chat, error) {
 		FilterID: filterAndTopic.FilterID,
 		SymKeyID: filterAndTopic.SymKeyID,
 		Topic:    filterAndTopic.Topic,
+		Listen:   true,
 	}
 
 	s.chats[chatID] = chat
@@ -363,6 +377,7 @@ func (s *ChatsManager) LoadContactCode(pubKey *ecdsa.PublicKey) (*Chat, error) {
 		Topic:    contactCodeFilter.Topic,
 		SymKeyID: contactCodeFilter.SymKeyID,
 		Identity: publicKeyToStr(pubKey),
+		Listen:   true,
 	}
 
 	s.chats[chatID] = chat

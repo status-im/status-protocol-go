@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/status-im/status-protocol-go/encryption/internal/storage"
+	"github.com/status-im/status-protocol-go/encryption/internal/sqlite"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -27,7 +27,7 @@ type SQLLitePersistenceTestSuite struct {
 func (s *SQLLitePersistenceTestSuite) SetupTest() {
 	os.Remove(dbPath)
 
-	db, err := storage.Open(dbPath, "")
+	db, err := sqlite.Open(dbPath, "test-key")
 	s.Require().NoError(err)
 
 	s.service = newSQLitePersistence(db)

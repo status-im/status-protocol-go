@@ -9,7 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/status-im/status-protocol-go/encryption/internal/storage"
+	"github.com/status-im/status-protocol-go/encryption/internal/sqlite"
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
 )
 
@@ -28,7 +28,7 @@ func (s *SQLLitePersistenceTestSuite) SetupTest() {
 	dir, err := ioutil.TempDir("", "sqlite-persistence")
 	s.Require().NoError(err)
 
-	db, err := storage.Open(filepath.Join(dir, "db.sql"), "")
+	db, err := sqlite.Open(filepath.Join(dir, "db.sql"), "test-key")
 	s.Require().NoError(err)
 
 	s.service = newSQLitePersistence(db)

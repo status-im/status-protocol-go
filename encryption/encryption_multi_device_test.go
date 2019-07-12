@@ -9,7 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/status-im/status-protocol-go/encryption/internal/storage"
+	"github.com/status-im/status-protocol-go/encryption/internal/sqlite"
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
 	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
 )
@@ -52,17 +52,20 @@ func setupUser(user string, s *EncryptionServiceMultiDeviceSuite, n int) error {
 			return err
 		}
 
-		db, err := storage.OpenWithConfig(tmpFile.Name(), "", 0)
+		db, err := sqlite.Open(tmpFile.Name(), "")
 		if err != nil {
 			return err
 		}
 
-		protocol := newWithDB(
+		protocol, err := newWithDB(
 			db,
 			installationID,
 			func(s []*multidevice.Installation) {},
 			func(s []*sharedsecret.Secret) {},
 		)
+		if err != nil {
+			return err
+		}
 
 		s.services[user].services[i] = protocol
 	}

@@ -8,7 +8,7 @@ import (
 	dr "github.com/status-im/doubleratchet"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/status-im/status-protocol-go/encryption/internal/storage"
+	"github.com/status-im/status-protocol-go/encryption/internal/sqlite"
 )
 
 var (
@@ -36,7 +36,7 @@ func (s *SQLLitePersistenceKeysStorageTestSuite) SetupTest() {
 
 	key := "blahblahblah"
 
-	db, err := storage.Open(filepath.Join(dir, "db.sql"), key)
+	db, err := sqlite.Open(filepath.Join(dir, "db.sql"), key)
 	s.Require().NoError(err)
 
 	p := newSQLitePersistence(db)

@@ -3,6 +3,7 @@ package statusproto
 import (
 	"context"
 	"crypto/ecdsa"
+	"database/sql"
 	"path/filepath"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
 	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
 	transport "github.com/status-im/status-protocol-go/transport/whisper"
+	"github.com/status-im/status-protocol-go/internal/sqlite"
 	protocol "github.com/status-im/status-protocol-go/v1"
 )
 
@@ -25,21 +27,29 @@ import (
 // mailservers because they can also be managed by the user.
 type Messenger struct {
 	identity  *ecdsa.PrivateKey
-	database  database
+	persistence  persistence
 	adapter   *whisperAdapter
 	encryptor *encryption.Protocol
 }
 
 type config struct {
-	onAddedBundlesHandler    func([]*multidevice.Installation)
-	onNewSharedSecretHandler func([]*sharedsecret.Secret)
+	encryptionDB              *sql.DB
+	onNewInstallationsHandler func([]*multidevice.Installation)
+	onNewSharedSecretHandler  func([]*sharedsecret.Secret)
 }
 
 type Option func(*config) error
 
-func WithOnAddedBundlesHandler(h func([]*multidevice.Installation)) func(c *config) error {
+func WithEncryptionDB(db *sql.DB) func(c *config) error {
 	return func(c *config) error {
-		c.onAddedBundlesHandler = h
+		c.encryptionDB = db
+		return nil
+	}
+}
+
+func WithOnNewInstallationsHandler(h func([]*multidevice.Installation)) func(c *config) error {
+	return func(c *config) error {
+		c.onNewInstallationsHandler = h
 		return nil
 	}
 }
@@ -78,27 +88,38 @@ func NewMessenger(
 		return nil, errors.Wrap(err, "failed to create a WhisperServiceTransport")
 	}
 
-	p, err := encryption.New(
-		dataDir,
-		dbKey,
-		installationID,
-		c.onAddedBundlesHandler,
-		c.onNewSharedSecretHandler,
-	)
+	var encryptionProtocol *encryption.Protocol
+
+	if c.encryptionDB != nil {
+		encryptionProtocol, err = encryption.NewWithDB(
+			c.encryptionDB,
+			installationID,
+			c.onNewInstallationsHandler,
+			c.onNewSharedSecretHandler,
+		)
+	} else {
+		encryptionProtocol, err = encryption.New(
+			dataDir,
+			dbKey,
+			installationID,
+			c.onNewInstallationsHandler,
+			c.onNewSharedSecretHandler,
+		)
+	}
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create the encryption layer")
 	}
 
-	messagesDB, err := initializeDB(filepath.Join(dataDir, "messages.sql"), dbKey)
+	messagesDB, err := sqlite.Open(filepath.Join(dataDir, "messages.sql"), dbKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to initialize messages db")
 	}
 
 	return &Messenger{
 		identity:  identity,
-		database:  messagesDB,
-		adapter:   newWhisperAdapter(identity, t, p),
-		encryptor: p,
+		persistence:  &sqlitePersistence{db: messagesDB},
+		adapter:   newWhisperAdapter(identity, t, encryptionProtocol),
+		encryptor: encryptionProtocol,
 	}, nil
 }
 
@@ -139,7 +160,7 @@ func (m *Messenger) Mailservers() ([]string, error) {
 }
 
 func (m *Messenger) SendPublic(ctx context.Context, chat Chat, data []byte) ([]byte, error) {
-	clock, err := m.database.LastMessageClock(chat.ID())
+	clock, err := m.persistence.LastMessageClock(chat.ID())
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +168,7 @@ func (m *Messenger) SendPublic(ctx context.Context, chat Chat, data []byte) ([]b
 }
 
 func (m *Messenger) SendPrivate(ctx context.Context, chat Chat, data []byte) ([]byte, error) {
-	clock, err := m.database.LastMessageClock(chat.ID())
+	clock, err := m.persistence.LastMessageClock(chat.ID())
 	if err != nil {
 		return nil, err
 	}
@@ -200,13 +221,13 @@ func (m *Messenger) LeavePrivate(chat Chat) error {
 
 func (m *Messenger) retrieveMessages(ctx context.Context, chat Chat, c RetrieveConfig, latest []*protocol.Message) (messages []*protocol.Message, err error) {
 	if !c.latest {
-		return m.database.Messages(chat.ID(), c.From, c.To)
+		return m.persistence.Messages(chat.ID(), c.From, c.To)
 	}
 
 	if c.last24Hours {
 		to := time.Now()
 		from := to.Add(-time.Hour * 24)
-		messages, err = m.database.Messages(chat.ID(), from, to)
+		messages, err = m.persistence.Messages(chat.ID(), from, to)
 	}
 
 	messages = append(messages, latest...)
@@ -219,6 +240,6 @@ func (m *Messenger) retrieveMessages(ctx context.Context, chat Chat, c RetrieveC
 }
 
 func (m *Messenger) storeMessages(chatID string, messages ...*protocol.Message) error {
-	_, err := m.database.SaveMessages(chatID, messages)
+	_, err := m.persistence.SaveMessages(chatID, messages)
 	return err
 }

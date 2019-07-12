@@ -6,4 +6,4 @@
 
 package migrations
 
-//go:generate go-bindata -pkg storage -o ../migrations.go .
+//go:generate go-bindata -pkg sqlite -o ../migrations.go .

@@ -9,7 +9,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/crypto"
 
-	"github.com/status-im/status-protocol-go/encryption/internal/storage"
+	"github.com/status-im/status-protocol-go/encryption/internal/sqlite"
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
 	"github.com/status-im/status-protocol-go/encryption/publisher"
 	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
@@ -88,7 +88,7 @@ func New(
 	addedBundlesHandler func([]*multidevice.Installation),
 	onNewSharedSecretHandler func([]*sharedsecret.Secret),
 ) (*Protocol, error) {
-	db, err := storage.Open(dataDir, dbKey)
+	db, err := sqlite.Open(dataDir, dbKey)
 	if err != nil {
 		return nil, err
 	}
@@ -102,19 +102,32 @@ func New(
 	), nil
 }
 
+func NewWithDB(
+	db *sql.DB,
+	installationID string,
+	addedBundlesHandler func([]*multidevice.Installation),
+	onNewSharedSecretHandler func([]*sharedsecret.Secret),
+) (*Protocol, error) {
+	return newWithDB(db, installationID, addedBundlesHandler, onNewSharedSecretHandler)
+}
+
 func newWithDB(
 	db *sql.DB,
 	installationID string,
 	addedBundlesHandler func([]*multidevice.Installation),
 	onNewSharedSecretHandler func([]*sharedsecret.Secret),
-) *Protocol {
+) (*Protocol, error) {
+	if err := sqlite.ApplyMigrations(db); err != nil {
+		return nil, err
+	}
+
 	return newWithEncryptorConfig(
 		db,
 		installationID,
 		defaultEncryptorConfig(installationID),
 		addedBundlesHandler,
 		onNewSharedSecretHandler,
-	)
+	), nil
 }
 
 func newWithEncryptorConfig(

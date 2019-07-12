@@ -15,7 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/status-im/status-protocol-go/encryption/internal/storage"
+	"github.com/status-im/status-protocol-go/encryption/internal/sqlite"
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
 	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
 )
@@ -40,12 +40,12 @@ type EncryptionServiceTestSuite struct {
 func (s *EncryptionServiceTestSuite) initDatabases(config encryptorConfig) {
 	aliceDBFile, err := ioutil.TempFile(os.TempDir(), "alice")
 	s.Require().NoError(err)
-	aliceDB, err := storage.OpenWithConfig(aliceDBFile.Name(), "", 0)
+	aliceDB, err := sqlite.Open(aliceDBFile.Name(), "alice-key")
 	s.Require().NoError(err)
 
 	bobDBFile, err := ioutil.TempFile(os.TempDir(), "bob")
 	s.Require().NoError(err)
-	bobDB, err := storage.OpenWithConfig(bobDBFile.Name(), "", 0)
+	bobDB, err := sqlite.Open(bobDBFile.Name(), "bob-key")
 	s.Require().NoError(err)
 
 	config.InstallationID = aliceInstallationID
