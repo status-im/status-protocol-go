@@ -3,6 +3,7 @@ package whisper
 import (
 	"context"
 	"crypto/ecdsa"
+	"database/sql"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -87,6 +88,7 @@ var _ WhisperTransport = (*WhisperServiceTransport)(nil)
 func NewWhisperServiceTransport(
 	node Server,
 	shh *whisper.Whisper,
+	db *sql.DB,
 	privateKey *ecdsa.PrivateKey,
 	mailservers []string,
 ) (*WhisperServiceTransport, error) {
@@ -95,16 +97,22 @@ func NewWhisperServiceTransport(
 		return nil, err
 	}
 
+	chats, err := filter.New(db, shh)
+	if err != nil {
+		return nil, err
+	}
+
 	return &WhisperServiceTransport{
-		node:        node,
-		shh:         shh,
-		shhAPI:      whisper.NewPublicWhisperAPI(shh),
-		mailservers: mailservers,
+		node:   node,
+		shh:    shh,
+		shhAPI: whisper.NewPublicWhisperAPI(shh),
 		keysManager: &whisperServiceKeysManager{
 			shh:               shh,
 			privateKey:        privateKey,
 			passToSymKeyCache: make(map[string]string),
 		},
+		chats:       chats,
+		mailservers: mailservers,
 	}, nil
 }
 
