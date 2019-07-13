@@ -3,7 +3,6 @@ package whisper
 import (
 	"context"
 	"crypto/ecdsa"
-	"database/sql"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -21,6 +20,7 @@ import (
 	whisper "github.com/status-im/whisper/whisperv6"
 
 	"github.com/status-im/status-protocol-go/transport/whisper/filter"
+	"github.com/status-im/status-protocol-go/transport/whisper/internal/sqlite"
 )
 
 const (
@@ -88,16 +88,17 @@ var _ WhisperTransport = (*WhisperServiceTransport)(nil)
 func NewWhisperServiceTransport(
 	node Server,
 	shh *whisper.Whisper,
-	db *sql.DB,
 	privateKey *ecdsa.PrivateKey,
+	dataDir string,
+	dbKey string,
 	mailservers []string,
 ) (*WhisperServiceTransport, error) {
-	// TODO: this should not be necessary after refactoring.
-	if err := shh.SelectKeyPair(privateKey); err != nil {
+	db, err := sqlite.Open(dataDir, dbKey)
+	if err != nil {
 		return nil, err
 	}
 
-	chats, err := filter.New(db, shh)
+	chats, err := filter.New(db, shh, privateKey)
 	if err != nil {
 		return nil, err
 	}

@@ -70,14 +70,7 @@ type ChatsManager struct {
 }
 
 // New returns a new filter service
-func New(db *sql.DB, w *whisper.Whisper) (*ChatsManager, error) {
-	// TODO: legacy private key selection
-	keyID := w.SelectedKeyPairID()
-	privateKey, err := w.GetPrivateKey(keyID)
-	if err != nil {
-		return nil, err
-	}
-
+func New(db *sql.DB, w *whisper.Whisper, privateKey *ecdsa.PrivateKey) (*ChatsManager, error) {
 	if err := sqlite.ApplyMigrations(db); err != nil {
 		return nil, err
 	}

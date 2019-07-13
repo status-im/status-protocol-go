@@ -78,16 +78,12 @@ func NewMessenger(
 		}
 	}
 
-	transportDB, err := sqlite.Open(filepath.Join(dataDir, "transport.sql"), dbKey)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to initialize transport db")
-	}
-
 	t, err := transport.NewWhisperServiceTransport(
 		server,
 		shh,
-		transportDB,
 		identity,
+		dataDir,
+		dbKey,
 		nil,
 	)
 	if err != nil {
