@@ -159,12 +159,12 @@ func (m *Messenger) Mailservers() ([]string, error) {
 	return nil, nil
 }
 
-func (m *Messenger) JoinPublic(chatID string) error {
-	return m.adapter.JoinPublic(chatID)
+func (m *Messenger) JoinPublic(chat Chat) error {
+	return m.adapter.JoinPublic(chat.ID())
 }
 
-func (m *Messenger) JoinPrivate(publicKey *ecdsa.PublicKey) error {
-	return m.adapter.JoinPrivate(publicKey)
+func (m *Messenger) JoinPrivate(chat Chat) error {
+	return m.adapter.JoinPrivate(chat.PublicKey())
 }
 
 func (m *Messenger) LeavePublic(chat Chat) error {
