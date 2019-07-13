@@ -13,8 +13,8 @@ import (
 	"github.com/status-im/status-protocol-go/encryption"
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
 	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
-	transport "github.com/status-im/status-protocol-go/transport/whisper"
 	"github.com/status-im/status-protocol-go/internal/sqlite"
+	transport "github.com/status-im/status-protocol-go/transport/whisper"
 	protocol "github.com/status-im/status-protocol-go/v1"
 )
 
@@ -26,10 +26,10 @@ import (
 // Similarly, it needs to expose an interface to manage
 // mailservers because they can also be managed by the user.
 type Messenger struct {
-	identity  *ecdsa.PrivateKey
-	persistence  persistence
-	adapter   *whisperAdapter
-	encryptor *encryption.Protocol
+	identity    *ecdsa.PrivateKey
+	persistence persistence
+	adapter     *whisperAdapter
+	encryptor   *encryption.Protocol
 }
 
 type config struct {
@@ -116,10 +116,10 @@ func NewMessenger(
 	}
 
 	return &Messenger{
-		identity:  identity,
-		persistence:  &sqlitePersistence{db: messagesDB},
-		adapter:   newWhisperAdapter(identity, t, encryptionProtocol),
-		encryptor: encryptionProtocol,
+		identity:    identity,
+		persistence: &sqlitePersistence{db: messagesDB},
+		adapter:     newWhisperAdapter(identity, t, encryptionProtocol),
+		encryptor:   encryptionProtocol,
 	}, nil
 }
 
@@ -208,10 +208,7 @@ func (m *Messenger) Retrieve(ctx context.Context, chat Chat, c RetrieveConfig) (
 		return m.retrieveMessages(ctx, chat, c, nil)
 	}
 
-	var (
-		latest []*protocol.Message
-		err error
-	)
+	var latest []*protocol.Message
 
 	if chat.PublicKey() != nil {
 		latest, err = m.adapter.RetrievePrivateMessages(chat.PublicKey())
@@ -237,7 +234,7 @@ func (m *Messenger) retrieveMessages(ctx context.Context, chat Chat, c RetrieveC
 
 	messages = append(messages, latest...)
 
-	if err := m.persistence.SaveMessages(chat.ID(), messages); err != nil {
+	if _, err := m.persistence.SaveMessages(chat.ID(), messages); err != nil {
 		return nil, err
 	}
 	return messages, nil

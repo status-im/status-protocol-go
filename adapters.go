@@ -206,8 +206,8 @@ func (a *whisperAdapter) handleErrDeviceNotFound(ctx context.Context, publicKey 
 	return nil
 }
 
-func (a *whisperAdapter) SendPublic(ctx context.Context, chatID string, data []byte, clock int64) ([]byte, error) {
-	message := protocol.CreatePublicTextMessage(data, clock, chatID)
+func (a *whisperAdapter) SendPublic(ctx context.Context, chatName, chatID string, data []byte, clock int64) ([]byte, error) {
+	message := protocol.CreatePublicTextMessage(data, clock, chatName)
 
 	encodedMessage, err := protocol.EncodeMessage(message)
 	if err != nil {

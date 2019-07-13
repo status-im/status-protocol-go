@@ -3,7 +3,7 @@ package statusproto
 import "crypto/ecdsa"
 
 type Chat interface {
-	ID() []byte
+	ID() string
 	PublicName() string
 	PublicKey() *ecdsa.PublicKey
 }
