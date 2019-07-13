@@ -159,6 +159,22 @@ func (m *Messenger) Mailservers() ([]string, error) {
 	return nil, nil
 }
 
+func (m *Messenger) JoinPublic(chatID string) error {
+	return m.adapter.JoinPublic(chatID)
+}
+
+func (m *Messenger) JoinPrivate(publicKey *ecdsa.PublicKey) error {
+	return m.adapter.JoinPrivate(publicKey)
+}
+
+func (m *Messenger) LeavePublic(chat Chat) error {
+	return m.adapter.LeavePublic(chat.ID())
+}
+
+func (m *Messenger) LeavePrivate(chat Chat) error {
+	return m.adapter.LeavePrivate(chat.PublicKey())
+}
+
 func (m *Messenger) SendPublic(ctx context.Context, chat Chat, data []byte) ([]byte, error) {
 	clock, err := m.persistence.LastMessageClock(chat.ID())
 	if err != nil {
@@ -209,14 +225,6 @@ func (m *Messenger) RetrievePrivateMessages(ctx context.Context, chat Chat, c Re
 		return nil, err
 	}
 	return m.retrieveMessages(ctx, chat, c, latest)
-}
-
-func (m *Messenger) LeavePublic(chat Chat) error {
-	return m.adapter.LeavePublic(chat.ID())
-}
-
-func (m *Messenger) LeavePrivate(chat Chat) error {
-	return m.adapter.LeavePrivate(chat.PublicKey())
 }
 
 func (m *Messenger) retrieveMessages(ctx context.Context, chat Chat, c RetrieveConfig, latest []*protocol.Message) (messages []*protocol.Message, err error) {
