@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"path/filepath"
 
 	"github.com/ethereum/go-ethereum/crypto"
 
@@ -88,7 +89,8 @@ func New(
 	addedBundlesHandler func([]*multidevice.Installation),
 	onNewSharedSecretHandler func([]*sharedsecret.Secret),
 ) (*Protocol, error) {
-	db, err := sqlite.Open(dataDir, dbKey)
+	path := filepath.Join(dataDir, "sessions.sql")
+	db, err := sqlite.Open(path, dbKey)
 	if err != nil {
 		return nil, err
 	}
