@@ -159,36 +159,36 @@ func (m *Messenger) Mailservers() ([]string, error) {
 	return nil, nil
 }
 
-func (m *Messenger) JoinPublic(chat Chat) error {
-	return m.adapter.JoinPublic(chat.ID())
+func (m *Messenger) Join(chat Chat) error {
+	if chat.PublicKey() != nil {
+		return m.adapter.JoinPrivate(chat.PublicKey())
+	} else if chat.PublicName() != "" {
+		return m.adapter.JoinPublic(chat.PublicName())
+	}
+	return errors.New("chat is neither public nor private")
 }
 
-func (m *Messenger) JoinPrivate(chat Chat) error {
-	return m.adapter.JoinPrivate(chat.PublicKey())
+func (m *Messenger) Leave(chat Chat) error {
+	if chat.PublicKey() != nil {
+		return m.adapter.LeavePrivate(chat.PublicKey())
+	} else if chat.PublicName() != "" {
+		return m.adapter.LeavePublic(chat.PublicName())
+	}
+	return errors.New("chat is neither public nor private")
 }
 
-func (m *Messenger) LeavePublic(chat Chat) error {
-	return m.adapter.LeavePublic(chat.ID())
-}
-
-func (m *Messenger) LeavePrivate(chat Chat) error {
-	return m.adapter.LeavePrivate(chat.PublicKey())
-}
-
-func (m *Messenger) SendPublic(ctx context.Context, chat Chat, data []byte) ([]byte, error) {
+func (m *Messenger) Send(ctx context.Context, chat Chat, data []byte) ([]byte, error) {
 	clock, err := m.persistence.LastMessageClock(chat.ID())
 	if err != nil {
 		return nil, err
 	}
-	return m.adapter.SendPublic(ctx, chat.ID(), data, clock)
-}
 
-func (m *Messenger) SendPrivate(ctx context.Context, chat Chat, data []byte) ([]byte, error) {
-	clock, err := m.persistence.LastMessageClock(chat.ID())
-	if err != nil {
-		return nil, err
+	if chat.PublicKey() != nil {
+		return m.adapter.SendPrivate(ctx, chat.PublicKey(), chat.ID(), data, clock)
+	} else if chat.PublicName() != "" {
+		return m.adapter.SendPublic(ctx, chat.PublicName(), chat.ID(), data, clock)
 	}
-	return m.adapter.SendPrivate(ctx, chat.PublicKey(), chat.ID(), data, clock)
+	return nil, errors.New("chat is neither public nor private")
 }
 
 type RetrieveConfig struct {
@@ -203,27 +203,24 @@ var (
 	RetrieveLastDay = RetrieveConfig{latest: true, last24Hours: true}
 )
 
-func (m *Messenger) RetrievePublicMessages(ctx context.Context, chat Chat, c RetrieveConfig) (messages []*protocol.Message, err error) {
+func (m *Messenger) Retrieve(ctx context.Context, chat Chat, c RetrieveConfig) (messages []*protocol.Message, err error) {
 	if !c.latest {
 		return m.retrieveMessages(ctx, chat, c, nil)
 	}
 
-	latest, err := m.adapter.RetrievePublicMessages(chat.ID())
-	if err != nil {
-		return nil, err
-	}
-	return m.retrieveMessages(ctx, chat, c, latest)
-}
+	var (
+		latest []*protocol.Message
+		err error
+	)
 
-func (m *Messenger) RetrievePrivateMessages(ctx context.Context, chat Chat, c RetrieveConfig) (messages []*protocol.Message, err error) {
-	if !c.latest {
-		return m.retrieveMessages(ctx, chat, c, nil)
+	if chat.PublicKey() != nil {
+		latest, err = m.adapter.RetrievePrivateMessages(chat.PublicKey())
+	} else if chat.PublicName() != "" {
+		latest, err = m.adapter.RetrievePublicMessages(chat.PublicName())
+	} else {
+		return nil, errors.New("chat is neither public nor private")
 	}
 
-	latest, err := m.adapter.RetrievePrivateMessages(chat.PublicKey())
-	if err != nil {
-		return nil, err
-	}
 	return m.retrieveMessages(ctx, chat, c, latest)
 }
 
@@ -240,14 +237,8 @@ func (m *Messenger) retrieveMessages(ctx context.Context, chat Chat, c RetrieveC
 
 	messages = append(messages, latest...)
 
-	if err := m.storeMessages(chat.ID(), latest...); err != nil {
+	if err := m.persistence.SaveMessages(chat.ID(), messages); err != nil {
 		return nil, err
 	}
-
 	return messages, nil
-}
-
-func (m *Messenger) storeMessages(chatID string, messages ...*protocol.Message) error {
-	_, err := m.persistence.SaveMessages(chatID, messages)
-	return err
 }
