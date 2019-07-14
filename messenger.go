@@ -227,10 +227,6 @@ var (
 )
 
 func (m *Messenger) Retrieve(ctx context.Context, chat Chat, c RetrieveConfig) (messages []*protocol.Message, err error) {
-	if !c.latest {
-		return m.persistence.Messages(chat.ID(), c.From, c.To)
-	}
-
 	var latest []*protocol.Message
 
 	if chat.PublicKey() != nil {
@@ -241,23 +237,24 @@ func (m *Messenger) Retrieve(ctx context.Context, chat Chat, c RetrieveConfig) (
 		return nil, errors.New("chat is neither public nor private")
 	}
 
+	_, err = m.persistence.SaveMessages(chat.ID(), latest)
+	if err != nil {
+		return nil, err
+	}
+
 	return m.retrieveMessages(ctx, chat, c, latest)
 }
 
 func (m *Messenger) retrieveMessages(ctx context.Context, chat Chat, c RetrieveConfig, latest []*protocol.Message) (messages []*protocol.Message, err error) {
+	if !c.latest {
+		return m.persistence.Messages(chat.ID(), c.From, c.To)
+	}
+
 	if c.last24Hours {
 		to := time.Now()
 		from := to.Add(-time.Hour * 24)
-		messages, err = m.persistence.Messages(chat.ID(), from, to)
+		return m.persistence.Messages(chat.ID(), from, to)
 	}
 
-	messages = append(messages, latest...)
-
-	_, err = m.persistence.SaveMessages(chat.ID(), messages)
-	switch err {
-	case ErrMsgAlreadyExist, nil:
-		return messages, nil
-	default:
-		return nil, err
-	}
+	return latest, nil
 }

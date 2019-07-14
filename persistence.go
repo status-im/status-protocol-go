@@ -90,10 +90,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 			msg.ID, chatID, msg.ContentT, msg.MessageT, msg.Text,
 			msg.Clock, msg.Timestamp, msg.Content.ChatID, msg.Content.Text,
 			pkey, msg.Flags)
-		if err != nil {
-			if err.Error() == uniqueIDContstraint {
-				err = ErrMsgAlreadyExist
-			}
+		if err != nil && err.Error() != uniqueIDContstraint {
 			return
 		}
 		last, err = rst.LastInsertId()
