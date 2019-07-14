@@ -125,6 +125,13 @@ func NewWhisperServiceTransport(
 		mailservers: mailservers,
 	}, nil
 }
+func (a *WhisperServiceTransport) Init(
+	chatIDs []string,
+	publicKeys []*ecdsa.PublicKey,
+	negotiated []filter.NegotiatedSecret,
+) ([]*filter.Chat, error) {
+	return a.chats.Init(chatIDs, publicKeys, negotiated)
+}
 
 func (a *WhisperServiceTransport) JoinPublic(chatID string) error {
 	_, err := a.chats.LoadPublic(chatID)
@@ -198,7 +205,7 @@ func (a *WhisperServiceTransport) SendPrivateWithSharedSecret(ctx context.Contex
 		return nil, err
 	}
 
-	chat, err := a.chats.LoadNegotiated(filter.NegodiatedSecret{
+	chat, err := a.chats.LoadNegotiated(filter.NegotiatedSecret{
 		PublicKey: publicKey,
 		Key:       secret,
 	})

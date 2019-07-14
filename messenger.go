@@ -15,6 +15,7 @@ import (
 	migrations "github.com/status-im/status-protocol-go/internal/sqlite"
 	"github.com/status-im/status-protocol-go/sqlite"
 	transport "github.com/status-im/status-protocol-go/transport/whisper"
+	"github.com/status-im/status-protocol-go/transport/whisper/filter"
 	protocol "github.com/status-im/status-protocol-go/v1"
 )
 
@@ -35,6 +36,10 @@ type Messenger struct {
 type config struct {
 	onNewInstallationsHandler func([]*multidevice.Installation)
 	onNewSharedSecretHandler  func([]*sharedsecret.Secret)
+
+	publicChatNames []string
+	publicKeys      []*ecdsa.PublicKey
+	secrets         []filter.NegotiatedSecret
 }
 
 type Option func(*config) error
@@ -49,6 +54,19 @@ func WithOnNewInstallationsHandler(h func([]*multidevice.Installation)) func(c *
 func WithOnNewSharedSecret(h func([]*sharedsecret.Secret)) func(c *config) error {
 	return func(c *config) error {
 		c.onNewSharedSecretHandler = h
+		return nil
+	}
+}
+
+func WithChats(
+	publicChatNames []string,
+	publicKeys []*ecdsa.PublicKey,
+	secrets []filter.NegotiatedSecret,
+) func(c *config) error {
+	return func(c *config) error {
+		c.publicChatNames = publicChatNames
+		c.publicKeys = publicKeys
+		c.secrets = secrets
 		return nil
 	}
 }
@@ -80,6 +98,10 @@ func NewMessenger(
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create a WhisperServiceTransport")
+	}
+
+	if _, err := t.Init(c.publicChatNames, c.publicKeys, c.secrets); err != nil {
+		return nil, errors.Wrap(err, "failed to initialize WhisperServiceTransport")
 	}
 
 	encryptionProtocol, err := encryption.New(

@@ -30,7 +30,7 @@ type Filter struct {
 	SymKeyID string
 }
 
-type NegodiatedSecret struct {
+type NegotiatedSecret struct {
 	PublicKey *ecdsa.PublicKey
 	Key       []byte
 }
@@ -82,7 +82,7 @@ func New(db *sql.DB, w *whisper.Whisper, privateKey *ecdsa.PrivateKey) (*ChatsMa
 	}, nil
 }
 
-func (s *ChatsManager) Init(chatIDs []string, publicKeys []*ecdsa.PublicKey, negotiated []NegodiatedSecret) ([]*Chat, error) {
+func (s *ChatsManager) Init(chatIDs []string, publicKeys []*ecdsa.PublicKey, negotiated []NegotiatedSecret) ([]*Chat, error) {
 	log.Printf("[FiltersManager::Init] initializing")
 
 	keys, err := s.persistence.All()
@@ -237,7 +237,7 @@ func (s *ChatsManager) loadPartitioned(publicKey *ecdsa.PublicKey, listen bool) 
 }
 
 // LoadNegotiated loads a negotiated secret as a filter.
-func (s *ChatsManager) LoadNegotiated(secret NegodiatedSecret) (*Chat, error) {
+func (s *ChatsManager) LoadNegotiated(secret NegotiatedSecret) (*Chat, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -465,7 +465,7 @@ func (s *ChatsManager) GetNegotiated(identity *ecdsa.PublicKey) *Chat {
 }
 
 // DEPRECATED
-func (s *ChatsManager) InitDeprecated(chats []*Chat, secrets []NegodiatedSecret) ([]*Chat, error) {
+func (s *ChatsManager) InitDeprecated(chats []*Chat, secrets []NegotiatedSecret) ([]*Chat, error) {
 	var (
 		chatIDs    []string
 		publicKeys []*ecdsa.PublicKey
