@@ -80,7 +80,11 @@ func NewMessenger(
 	installationID string,
 	opts ...Option,
 ) (*Messenger, error) {
-	var c config
+	// Set default config fields.
+	c := config{
+		onNewInstallationsHandler: func([]*multidevice.Installation) {},
+		onNewSharedSecretHandler:  func([]*sharedsecret.Secret) {},
+	}
 
 	for _, opt := range opts {
 		if err := opt(&c); err != nil {

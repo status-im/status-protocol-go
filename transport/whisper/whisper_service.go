@@ -193,6 +193,12 @@ func (a *WhisperServiceTransport) SendPublic(ctx context.Context, newMessage whi
 		return nil, err
 	}
 
+	chat, err := a.chats.LoadPublic(chatID)
+	if err != nil {
+		return nil, err
+	}
+
+	newMessage.SymKeyID = chat.SymKeyID
 	newMessage.Topic = whisper.BytesToTopic(
 		filter.ToTopic(chatID),
 	)
