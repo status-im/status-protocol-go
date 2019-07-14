@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"math/big"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -19,9 +20,9 @@ import (
 	"github.com/status-im/status-go/mailserver"
 	whisper "github.com/status-im/whisper/whisperv6"
 
+	"github.com/status-im/status-protocol-go/sqlite"
 	"github.com/status-im/status-protocol-go/transport/whisper/filter"
 	migrations "github.com/status-im/status-protocol-go/transport/whisper/internal/sqlite"
-	"github.com/status-im/status-protocol-go/sqlite"
 )
 
 const (
@@ -95,9 +96,10 @@ func NewWhisperServiceTransport(
 	mailservers []string,
 ) (*WhisperServiceTransport, error) {
 	// DB is shared between this package and all sub-packages.
-	db, err := sqlite.Open(dataDir, dbKey, sqlite.MigrationConfig{
+	dbPath := filepath.Join(dataDir, "transport.sql")
+	db, err := sqlite.Open(dbPath, dbKey, sqlite.MigrationConfig{
 		AssetNames: migrations.AssetNames(),
-		AssetGetter: func(name string) ( []byte, error) {
+		AssetGetter: func(name string) ([]byte, error) {
 			return migrations.Asset(name)
 		},
 	})

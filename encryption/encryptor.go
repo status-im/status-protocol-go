@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -13,9 +14,9 @@ import (
 	dr "github.com/status-im/doubleratchet"
 
 	"github.com/status-im/status-protocol-go/crypto"
+	migrations "github.com/status-im/status-protocol-go/encryption/internal/sqlite"
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
 	"github.com/status-im/status-protocol-go/sqlite"
-	migrations "github.com/status-im/status-protocol-go/encryption/internal/sqlite"
 )
 
 var (
@@ -71,8 +72,8 @@ func defaultEncryptorConfig(installationID string) encryptorConfig {
 }
 
 // newEncryptor creates a new EncryptionService instance.
-func newEncryptor(dbPath, dbKey string, config encryptorConfig) (*encryptor, error) {
-	// logger.Info("Initialized encryption service", "installationID", config.InstallationID)
+func newEncryptor(dbDir, dbKey string, config encryptorConfig) (*encryptor, error) {
+	dbPath := filepath.Join(dbDir, "sessions.sql")
 	db, err := sqlite.Open(dbPath, dbKey, sqlite.MigrationConfig{
 		AssetNames: migrations.AssetNames(),
 		AssetGetter: func(name string) ([]byte, error) {
