@@ -30,23 +30,24 @@ func TestEncryptionServiceTestSuite(t *testing.T) {
 
 type EncryptionServiceTestSuite struct {
 	suite.Suite
-	alice       *Protocol
-	bob         *Protocol
-	aliceDBPath string
-	bobDBPath   string
+	alice    *Protocol
+	bob      *Protocol
+	aliceDir string
+	bobDir   string
 }
 
 func (s *EncryptionServiceTestSuite) initDatabases(config encryptorConfig) {
-	aliceDBFile, err := ioutil.TempFile(os.TempDir(), "alice")
+	var err error
+
+	s.aliceDir, err = ioutil.TempDir("", "alice-dir")
 	s.Require().NoError(err)
 
-	bobDBFile, err := ioutil.TempFile(os.TempDir(), "bob")
+	s.bobDir, err = ioutil.TempDir("", "bob-dir")
 	s.Require().NoError(err)
 
 	config.InstallationID = aliceInstallationID
-
 	s.alice, err = NewWithEncryptorConfig(
-		aliceDBFile.Name(),
+		s.aliceDir,
 		"alice-key",
 		aliceInstallationID,
 		config,
@@ -56,9 +57,8 @@ func (s *EncryptionServiceTestSuite) initDatabases(config encryptorConfig) {
 	s.Require().NoError(err)
 
 	config.InstallationID = bobInstallationID
-
 	s.bob, err = NewWithEncryptorConfig(
-		bobDBFile.Name(),
+		s.bobDir,
 		"bob-key",
 		bobInstallationID,
 		config,
@@ -73,8 +73,8 @@ func (s *EncryptionServiceTestSuite) SetupTest() {
 }
 
 func (s *EncryptionServiceTestSuite) TearDownTest() {
-	os.Remove(s.aliceDBPath)
-	os.Remove(s.bobDBPath)
+	os.Remove(s.aliceDir)
+	os.Remove(s.bobDir)
 }
 
 func (s *EncryptionServiceTestSuite) TestGetBundle() {

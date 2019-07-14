@@ -16,10 +16,10 @@ func TestSelectAndAddNoMailservers(t *testing.T) {
 }
 
 func TestNewWhisperServiceTransport(t *testing.T) {
-	dbPath, err := ioutil.TempFile("", "transport.sql")
+	dbDir, err := ioutil.TempDir("", "transport")
 	require.NoError(t, err)
-	defer os.Remove(dbPath.Name())
+	defer os.Remove(dbDir)
 
-	_, err = NewWhisperServiceTransport(nil, nil, nil, dbPath.Name(), "some-key", nil)
+	_, err = NewWhisperServiceTransport(nil, nil, nil, dbDir, "some-key", nil)
 	require.NoError(t, err)
 }

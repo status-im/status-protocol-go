@@ -45,14 +45,14 @@ func setupUser(user string, s *EncryptionServiceMultiDeviceSuite, n int) error {
 
 	for i := 0; i < n; i++ {
 		installationID := fmt.Sprintf("%s%d", user, i+1)
-		dbFilename := fmt.Sprintf("sqlite-persistence-test-%s.sql", installationID)
-		tmpFile, err := ioutil.TempFile("", dbFilename)
+		installationDir := fmt.Sprintf("sqlite-persistence-test-%s", installationID)
+		dir, err := ioutil.TempDir("", installationDir)
 		if err != nil {
 			return err
 		}
 
 		protocol, err := New(
-			tmpFile.Name(),
+			dir,
 			"some-key",
 			installationID,
 			func(s []*multidevice.Installation) {},

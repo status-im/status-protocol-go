@@ -2,6 +2,7 @@ package encryption
 
 import (
 	"io/ioutil"
+	"os"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/crypto"
@@ -17,16 +18,20 @@ func TestProtocolServiceTestSuite(t *testing.T) {
 
 type ProtocolServiceTestSuite struct {
 	suite.Suite
-	alice *Protocol
-	bob   *Protocol
+	aliceDir string
+	bobDir   string
+	alice    *Protocol
+	bob      *Protocol
 }
 
 func (s *ProtocolServiceTestSuite) SetupTest() {
-	aliceDBPath, err := ioutil.TempFile("", "alice.db")
+	var err error
+
+	s.aliceDir, err = ioutil.TempDir("", "alice.db")
 	s.Require().NoError(err)
 	aliceDBKey := "alice"
 
-	bobDBPath, err := ioutil.TempFile("", "bob.db")
+	s.bobDir, err = ioutil.TempDir("", "bob.db")
 	s.Require().NoError(err)
 	bobDBKey := "bob"
 
@@ -34,7 +39,7 @@ func (s *ProtocolServiceTestSuite) SetupTest() {
 	onNewSharedSecretHandler := func(secret []*sharedsecret.Secret) {}
 
 	s.alice, err = New(
-		aliceDBPath.Name(),
+		s.aliceDir,
 		aliceDBKey,
 		"1",
 		addedBundlesHandler,
@@ -43,13 +48,18 @@ func (s *ProtocolServiceTestSuite) SetupTest() {
 	s.Require().NoError(err)
 
 	s.bob, err = New(
-		bobDBPath.Name(),
+		s.bobDir,
 		bobDBKey,
 		"2",
 		addedBundlesHandler,
 		onNewSharedSecretHandler,
 	)
 	s.Require().NoError(err)
+}
+
+func (s *ProtocolServiceTestSuite) TearDown() {
+	os.Remove(s.aliceDir)
+	os.Remove(s.bobDir)
 }
 
 func (s *ProtocolServiceTestSuite) TestBuildPublicMessage() {

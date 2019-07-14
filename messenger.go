@@ -3,6 +3,7 @@ package statusproto
 import (
 	"context"
 	"crypto/ecdsa"
+	"log"
 	"path/filepath"
 	"time"
 
@@ -88,8 +89,19 @@ func NewMessenger(
 ) (*Messenger, error) {
 	// Set default config fields.
 	c := config{
-		onNewInstallationsHandler: func([]*multidevice.Installation) {},
-		onNewSharedSecretHandler:  func([]*sharedsecret.Secret) {},
+		onNewInstallationsHandler: func(installations []*multidevice.Installation) {
+			for _, installation := range installations {
+				log.Printf(
+					"[onNewInstallationsHandler] received a new installation %s from %s",
+					installation.Identity, installation.ID,
+				)
+			}
+		},
+		onNewSharedSecretHandler: func(secrets []*sharedsecret.Secret) {
+			for _, secret := range secrets {
+				log.Printf("[onNewSharedSecretHandler] received a new shared secret from %#x", secret.Identity)
+			}
+		},
 	}
 
 	for _, opt := range opts {
