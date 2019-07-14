@@ -3,8 +3,9 @@ package sqlite
 import (
 	"database/sql"
 	"fmt"
+	"os"
 
-	// We require go sqlcipher that overrides default implementation
+	_ "github.com/mutecomm/go-sqlcipher" // We require go sqlcipher that overrides default implementation
 	"github.com/status-im/migrate/v4"
 	"github.com/status-im/migrate/v4/database/sqlcipher"
 	bindata "github.com/status-im/migrate/v4/source/go_bindata"
@@ -13,23 +14,33 @@ import (
 // The default number of kdf iterations in sqlcipher (from version 3.0.0)
 // https://github.com/sqlcipher/sqlcipher/blob/fda4c68bb474da7e955be07a2b807bda1bb19bd2/CHANGELOG.md#300---2013-11-05
 // https://www.zetetic.net/sqlcipher/sqlcipher-api/#kdf_iter
-const DefaultKdfIterationsNumber = 64000
+const defaultKdfIterationsNumber = 64000
 
 // The reduced number of kdf iterations (for performance reasons) which is
 // currently used for derivation of the database key
 // https://github.com/status-im/status-go/pull/1343
 // https://notes.status.im/i8Y_l7ccTiOYq09HVgoFwA
-const ReducedKdfIterationsNumber = 3200
+const reducedKdfIterationsNumber = 3200
 
-func Open(path, key string) (*sql.DB, error) {
-	return open(path, key, ReducedKdfIterationsNumber)
+type MigrationConfig struct {
+	AssetNames []string
+	AssetGetter func(name string) ([]byte, error)
 }
 
-func OpenWithIter(path, key string, kdfIter int) (*sql.DB, error) {
-	return open(path, key, kdfIter)
+func Open(path, key string, mc MigrationConfig) (*sql.DB, error) {
+	return open(path, key, reducedKdfIterationsNumber, mc)
 }
 
-func open(path string, key string, kdfIter int) (*sql.DB, error) {
+func OpenWithIter(path, key string, kdfIter int, mc MigrationConfig) (*sql.DB, error) {
+	return open(path, key, kdfIter, mc)
+}
+
+func open(path string, key string, kdfIter int, mc MigrationConfig) (*sql.DB, error) {
+	_, err := os.OpenFile(path, os.O_CREATE, 0644)
+	if err != nil {
+		return nil, err
+	}
+
 	db, err := sql.Open("sqlite3", path)
 	if err != nil {
 		return nil, err
@@ -55,19 +66,23 @@ func open(path string, key string, kdfIter int) (*sql.DB, error) {
 	}
 
 	// Migrate db
-	if err := ApplyMigrations(db); err != nil {
-		return nil, err
+	if len(mc.AssetNames) == 0 {
+		if err := db.Ping(); err != nil {
+			return nil, err
+		}
+		return db, nil
 	}
 
+	if err = ApplyMigrations(db, mc.AssetNames, mc.AssetGetter); err != nil {
+		return nil, err
+	}
 	return db, nil
 }
 
-func ApplyMigrations(db *sql.DB) error {
+func ApplyMigrations(db *sql.DB, assetNames []string, assetGetter func(name string) ([]byte, error)) error {
 	resources := bindata.Resource(
-		AssetNames(),
-		func(name string) ([]byte, error) {
-			return Asset(name)
-		},
+		assetNames,
+		assetGetter,
 	)
 
 	source, err := bindata.WithInstance(resources)

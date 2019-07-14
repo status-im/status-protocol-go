@@ -7,7 +7,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/status-im/status-protocol-go/encryption/internal/sqlite"
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
 	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
 )
@@ -26,28 +25,26 @@ func (s *ProtocolServiceTestSuite) SetupTest() {
 	aliceDBPath, err := ioutil.TempFile("", "alice.db")
 	s.Require().NoError(err)
 	aliceDBKey := "alice"
-	aliceDB, err := sqlite.Open(aliceDBPath.Name(), aliceDBKey)
-	s.Require().NoError(err)
 
 	bobDBPath, err := ioutil.TempFile("", "bob.db")
 	s.Require().NoError(err)
 	bobDBKey := "bob"
-	bobDB, err := sqlite.Open(bobDBPath.Name(), bobDBKey)
-	s.Require().NoError(err)
 
 	addedBundlesHandler := func(addedBundles []*multidevice.Installation) {}
 	onNewSharedSecretHandler := func(secret []*sharedsecret.Secret) {}
 
-	s.alice, err = newWithDB(
-		aliceDB,
+	s.alice, err = New(
+		aliceDBPath.Name(),
+		aliceDBKey,
 		"1",
 		addedBundlesHandler,
 		onNewSharedSecretHandler,
 	)
 	s.Require().NoError(err)
 
-	s.bob, err = newWithDB(
-		bobDB,
+	s.bob, err = New(
+		bobDBPath.Name(),
+		bobDBKey,
 		"2",
 		addedBundlesHandler,
 		onNewSharedSecretHandler,

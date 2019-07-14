@@ -8,7 +8,8 @@ import (
 	dr "github.com/status-im/doubleratchet"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/status-im/status-protocol-go/encryption/internal/sqlite"
+	migrations "github.com/status-im/status-protocol-go/encryption/internal/sqlite"
+	"github.com/status-im/status-protocol-go/sqlite"
 )
 
 var (
@@ -36,7 +37,12 @@ func (s *SQLLitePersistenceKeysStorageTestSuite) SetupTest() {
 
 	key := "blahblahblah"
 
-	db, err := sqlite.Open(filepath.Join(dir, "db.sql"), key)
+	db, err := sqlite.Open(filepath.Join(dir, "db.sql"), key,sqlite.MigrationConfig{
+		AssetNames:  migrations.AssetNames(),
+		AssetGetter: func(name string) ([]byte, error) {
+			return migrations.Asset(name)
+		},
+	})
 	s.Require().NoError(err)
 
 	p := newSQLitePersistence(db)

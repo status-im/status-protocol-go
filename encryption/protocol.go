@@ -2,15 +2,12 @@ package encryption
 
 import (
 	"crypto/ecdsa"
-	"database/sql"
 	"errors"
 	"fmt"
 	"log"
-	"path/filepath"
 
 	"github.com/ethereum/go-ethereum/crypto"
 
-	"github.com/status-im/status-protocol-go/encryption/internal/sqlite"
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
 	"github.com/status-im/status-protocol-go/encryption/publisher"
 	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
@@ -89,59 +86,35 @@ func New(
 	addedBundlesHandler func([]*multidevice.Installation),
 	onNewSharedSecretHandler func([]*sharedsecret.Secret),
 ) (*Protocol, error) {
-	path := filepath.Join(dataDir, "sessions.sql")
-	db, err := sqlite.Open(path, dbKey)
-	if err != nil {
-		return nil, err
-	}
-
-	return newWithEncryptorConfig(
-		db,
+	return NewWithEncryptorConfig(
+		dataDir,
+		dbKey,
 		installationID,
 		defaultEncryptorConfig(installationID),
 		addedBundlesHandler,
 		onNewSharedSecretHandler,
-	), nil
+	)
 }
 
-func NewWithDB(
-	db *sql.DB,
-	installationID string,
-	addedBundlesHandler func([]*multidevice.Installation),
-	onNewSharedSecretHandler func([]*sharedsecret.Secret),
-) (*Protocol, error) {
-	return newWithDB(db, installationID, addedBundlesHandler, onNewSharedSecretHandler)
-}
-
-func newWithDB(
-	db *sql.DB,
-	installationID string,
-	addedBundlesHandler func([]*multidevice.Installation),
-	onNewSharedSecretHandler func([]*sharedsecret.Secret),
-) (*Protocol, error) {
-	if err := sqlite.ApplyMigrations(db); err != nil {
-		return nil, err
-	}
-
-	return newWithEncryptorConfig(
-		db,
-		installationID,
-		defaultEncryptorConfig(installationID),
-		addedBundlesHandler,
-		onNewSharedSecretHandler,
-	), nil
-}
-
-func newWithEncryptorConfig(
-	db *sql.DB,
+func NewWithEncryptorConfig(
+	dataDir string,
+	dbKey string,
 	installationID string,
 	encryptorConfig encryptorConfig,
 	addedBundlesHandler func([]*multidevice.Installation),
 	onNewSharedSecretHandler func([]*sharedsecret.Secret),
-) *Protocol {
-	encryptionService := newEncryptor(db, encryptorConfig)
+) (*Protocol, error) {
+	encryptor, err := newEncryptor(dataDir, dbKey, encryptorConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	// DB and migrations are shared between encryption package
+	// and its sub-packages.
+	db := encryptor.persistence.DB
+
 	return &Protocol{
-		encryptor: encryptionService,
+		encryptor: encryptor,
 		secret:    sharedsecret.New(db),
 		multidevice: multidevice.New(db, &multidevice.Config{
 			MaxInstallations: 3,
@@ -152,7 +125,7 @@ func newWithEncryptorConfig(
 		onAddedBundlesHandler:    addedBundlesHandler,
 		onNewSharedSecretHandler: onNewSharedSecretHandler,
 		systemMessages:           make(chan *ProtocolMessageSpec),
-	}
+	}, nil
 }
 
 func (p *Protocol) Start(myIdentity *ecdsa.PrivateKey) {

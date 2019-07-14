@@ -12,8 +12,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/pkg/errors"
 	whisper "github.com/status-im/whisper/whisperv6"
-
-	"github.com/status-im/status-protocol-go/transport/whisper/internal/sqlite"
 )
 
 const (
@@ -71,14 +69,15 @@ type ChatsManager struct {
 
 // New returns a new filter service
 func New(db *sql.DB, w *whisper.Whisper, privateKey *ecdsa.PrivateKey) (*ChatsManager, error) {
-	if err := sqlite.ApplyMigrations(db); err != nil {
+	persistence, err := newSQLitePersistence(db)
+	if err != nil {
 		return nil, err
 	}
 
 	return &ChatsManager{
 		privateKey:  privateKey,
 		whisper:     w,
-		persistence: newSQLitePersistence(db),
+		persistence: persistence,
 		chats:       make(map[string]*Chat),
 	}, nil
 }

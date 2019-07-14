@@ -13,7 +13,8 @@ import (
 	whisper "github.com/status-im/whisper/whisperv6"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/status-im/status-protocol-go/transport/whisper/internal/sqlite"
+	"github.com/status-im/status-protocol-go/sqlite"
+	migrations "github.com/status-im/status-protocol-go/transport/whisper/internal/sqlite"
 )
 
 func TestServiceTestSuite(t *testing.T) {
@@ -65,14 +66,17 @@ func (s *ChatsTestSuite) SetupTest() {
 		s.keys = append(s.keys, testKey)
 	}
 
-	db, err := sqlite.Open(s.dbPath, "filter-key")
+	db, err := sqlite.Open(s.dbPath, "filter-key", sqlite.MigrationConfig{
+		AssetNames:migrations.AssetNames(),
+		AssetGetter: func(name string) ([]byte, error) {
+			return migrations.Asset(name)
+		},
+	})
 	s.Require().NoError(err)
 
 	whisper := whisper.New(nil)
-	_, err = whisper.AddKeyPair(s.keys[0].privateKey)
-	s.Require().NoError(err)
 
-	s.chats, err = New(db, whisper)
+	s.chats, err = New(db, whisper, s.keys[0].privateKey)
 	s.Require().NoError(err)
 }
 

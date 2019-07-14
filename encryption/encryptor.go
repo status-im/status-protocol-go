@@ -2,7 +2,6 @@ package encryption
 
 import (
 	"crypto/ecdsa"
-	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -15,6 +14,8 @@ import (
 
 	"github.com/status-im/status-protocol-go/crypto"
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
+	"github.com/status-im/status-protocol-go/sqlite"
+	migrations "github.com/status-im/status-protocol-go/encryption/internal/sqlite"
 )
 
 var (
@@ -70,13 +71,23 @@ func defaultEncryptorConfig(installationID string) encryptorConfig {
 }
 
 // newEncryptor creates a new EncryptionService instance.
-func newEncryptor(db *sql.DB, config encryptorConfig) *encryptor {
+func newEncryptor(dbPath, dbKey string, config encryptorConfig) (*encryptor, error) {
 	// logger.Info("Initialized encryption service", "installationID", config.InstallationID)
+	db, err := sqlite.Open(dbPath, dbKey, sqlite.MigrationConfig{
+		AssetNames: migrations.AssetNames(),
+		AssetGetter: func(name string) ([]byte, error) {
+			return migrations.Asset(name)
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	return &encryptor{
 		persistence: newSQLitePersistence(db),
 		config:      config,
 		messageIDs:  make(map[string]*confirmationData),
-	}
+	}, nil
 }
 
 func (s *encryptor) keyFromActiveX3DH(theirIdentityKey []byte, theirSignedPreKey []byte, myIdentityKey *ecdsa.PrivateKey) ([]byte, *ecdsa.PublicKey, error) {

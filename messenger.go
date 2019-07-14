@@ -3,7 +3,6 @@ package statusproto
 import (
 	"context"
 	"crypto/ecdsa"
-	"database/sql"
 	"path/filepath"
 	"time"
 
@@ -13,7 +12,8 @@ import (
 	"github.com/status-im/status-protocol-go/encryption"
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
 	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
-	"github.com/status-im/status-protocol-go/internal/sqlite"
+	migrations "github.com/status-im/status-protocol-go/internal/sqlite"
+	"github.com/status-im/status-protocol-go/sqlite"
 	transport "github.com/status-im/status-protocol-go/transport/whisper"
 	protocol "github.com/status-im/status-protocol-go/v1"
 )
@@ -33,19 +33,11 @@ type Messenger struct {
 }
 
 type config struct {
-	encryptionDB              *sql.DB
 	onNewInstallationsHandler func([]*multidevice.Installation)
 	onNewSharedSecretHandler  func([]*sharedsecret.Secret)
 }
 
 type Option func(*config) error
-
-func WithEncryptionDB(db *sql.DB) func(c *config) error {
-	return func(c *config) error {
-		c.encryptionDB = db
-		return nil
-	}
-}
 
 func WithOnNewInstallationsHandler(h func([]*multidevice.Installation)) func(c *config) error {
 	return func(c *config) error {
@@ -90,29 +82,23 @@ func NewMessenger(
 		return nil, errors.Wrap(err, "failed to create a WhisperServiceTransport")
 	}
 
-	var encryptionProtocol *encryption.Protocol
-
-	if c.encryptionDB != nil {
-		encryptionProtocol, err = encryption.NewWithDB(
-			c.encryptionDB,
-			installationID,
-			c.onNewInstallationsHandler,
-			c.onNewSharedSecretHandler,
-		)
-	} else {
-		encryptionProtocol, err = encryption.New(
-			dataDir,
-			dbKey,
-			installationID,
-			c.onNewInstallationsHandler,
-			c.onNewSharedSecretHandler,
-		)
-	}
+	encryptionProtocol, err := encryption.New(
+		dataDir,
+		dbKey,
+		installationID,
+		c.onNewInstallationsHandler,
+		c.onNewSharedSecretHandler,
+	)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create the encryption layer")
 	}
 
-	messagesDB, err := sqlite.Open(filepath.Join(dataDir, "messages.sql"), dbKey)
+	messagesDB, err := sqlite.Open(filepath.Join(dataDir, "messages.sql"), dbKey, sqlite.MigrationConfig{
+		AssetNames: migrations.AssetNames(),
+		AssetGetter: func(name string) ([]byte, error) {
+			return migrations.Asset(name)
+		},
+	})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to initialize messages db")
 	}

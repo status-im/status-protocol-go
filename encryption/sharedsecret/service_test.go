@@ -6,7 +6,8 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/status-im/status-protocol-go/encryption/internal/sqlite"
+	migrations "github.com/status-im/status-protocol-go/encryption/internal/sqlite"
+	"github.com/status-im/status-protocol-go/sqlite"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -25,7 +26,12 @@ func (s *SharedSecretTestSuite) SetupTest() {
 	s.Require().NoError(err)
 	s.path = dbFile.Name()
 
-	db, err := sqlite.Open(s.path, "")
+	db, err := sqlite.Open(s.path, "", sqlite.MigrationConfig{
+		AssetNames:migrations.AssetNames(),
+		AssetGetter: func(name string) ([]byte, error) {
+			return migrations.Asset(name)
+		},
+	})
 	s.Require().NoError(err)
 
 	s.service = New(db)
