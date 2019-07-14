@@ -35,6 +35,8 @@ type Messenger struct {
 	persistence persistence
 	adapter     *whisperAdapter
 	encryptor   *encryption.Protocol
+
+	lastRetrieveCall time.Time
 }
 
 type config struct {
@@ -207,7 +209,19 @@ func (m *Messenger) Send(ctx context.Context, chat Chat, data []byte) ([]byte, e
 	}
 
 	if chat.PublicKey() != nil {
-		return m.adapter.SendPrivate(ctx, chat.PublicKey(), chat.ID(), data, clock)
+		hash, message, err := m.adapter.SendPrivate(ctx, chat.PublicKey(), chat.ID(), data, clock)
+		if err != nil {
+			return nil, err
+		}
+
+		// Save our message because it won't be received from the transport layer.
+		message.ID = hash // a Message need ID to be stored in the db
+		_, err = m.persistence.SaveMessages(chat.ID(), []*protocol.Message{message})
+		if err != nil {
+			return nil, err
+		}
+
+		return hash, nil
 	} else if chat.PublicName() != "" {
 		return m.adapter.SendPublic(ctx, chat.PublicName(), chat.ID(), data, clock)
 	}
@@ -231,6 +245,16 @@ func (m *Messenger) Retrieve(ctx context.Context, chat Chat, c RetrieveConfig) (
 
 	if chat.PublicKey() != nil {
 		latest, err = m.adapter.RetrievePrivateMessages(chat.PublicKey())
+		// Own messages are not retrievable from a Whisper filter.
+		// TODO: alternatively, save sent messages in a map until retrieve
+		// for the same private chat is called and then flush these cached messages.
+		if err == nil {
+			now := time.Now().UTC()
+			latest, err = m.persistence.Messages(chat.ID(), m.lastRetrieveCall, now)
+			if err != nil {
+				m.lastRetrieveCall = now
+			}
+		}
 	} else if chat.PublicName() != "" {
 		latest, err = m.adapter.RetrievePublicMessages(chat.PublicName())
 	} else {
@@ -239,7 +263,7 @@ func (m *Messenger) Retrieve(ctx context.Context, chat Chat, c RetrieveConfig) (
 
 	_, err = m.persistence.SaveMessages(chat.ID(), latest)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to save latest messages")
 	}
 
 	return m.retrieveMessages(ctx, chat, c, latest)

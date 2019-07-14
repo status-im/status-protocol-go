@@ -107,26 +107,47 @@ func TestMessengerRetrieve(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	chat := testChat{publicName: "status"}
-
-	// Join chat
-	err = m.Join(chat)
+	publicContact, err := crypto.GenerateKey()
 	require.NoError(t, err)
 
-	// Send public
-	_, err = m.Send(context.Background(), chat, []byte("test"))
-	require.NoError(t, err)
+	testCases := []struct {
+		Name string
+		Chat Chat
+	}{
+		{
+			Name: "Public Chat",
+			Chat: testChat{publicName: "status"},
+		},
+		{
+			Name: "Private Chat",
+			Chat: testChat{publicKey: &publicContact.PublicKey},
+		},
+	}
 
-	// Give Whisper some time to propagate message to filters.
-	time.Sleep(time.Millisecond * 500)
+	for _, tc := range testCases {
+		t.Run(tc.Name, func(t *testing.T) {
+			chat := tc.Chat
 
-	// Retrieve chat
-	messages, err := m.Retrieve(context.Background(), chat, RetrieveLatest)
-	require.NoError(t, err)
-	require.Len(t, messages, 1)
+			// Join chat
+			err = m.Join(chat)
+			require.NoError(t, err)
 
-	// Retrieve again to test skipping already existing err.
-	messages, err = m.Retrieve(context.Background(), chat, RetrieveLastDay)
-	require.NoError(t, err)
-	require.Len(t, messages, 1)
+			// Send public
+			_, err = m.Send(context.Background(), chat, []byte("test"))
+			require.NoError(t, err)
+
+			// Give Whisper some time to propagate message to filters.
+			time.Sleep(time.Millisecond * 500)
+
+			// Retrieve chat
+			messages, err := m.Retrieve(context.Background(), chat, RetrieveLatest)
+			require.NoError(t, err)
+			require.Len(t, messages, 1)
+
+			// Retrieve again to test skipping already existing err.
+			messages, err = m.Retrieve(context.Background(), chat, RetrieveLastDay)
+			require.NoError(t, err)
+			require.Len(t, messages, 1)
+		})
+	}
 }

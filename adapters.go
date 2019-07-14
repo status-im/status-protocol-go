@@ -226,20 +226,32 @@ func (a *whisperAdapter) SendPublic(ctx context.Context, chatName, chatID string
 	return a.transport.SendPublic(ctx, newMessage, chatName)
 }
 
-func (a *whisperAdapter) SendPrivate(ctx context.Context, publicKey *ecdsa.PublicKey, chatID string, data []byte, clock int64) ([]byte, error) {
+// SendPrivate sends a one-to-one message. It needs to return it
+// because the registered Whisper filter handles only incoming messages.
+func (a *whisperAdapter) SendPrivate(
+	ctx context.Context,
+	publicKey *ecdsa.PublicKey,
+	chatID string,
+	data []byte,
+	clock int64,
+) ([]byte, *protocol.Message, error) {
 	message := protocol.CreatePrivateTextMessage(data, clock, chatID)
 
 	encodedMessage, err := protocol.EncodeMessage(message)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to encode message")
+		return nil, nil, errors.Wrap(err, "failed to encode message")
 	}
 
 	messageSpec, err := a.protocol.BuildDirectMessage(a.privateKey, publicKey, encodedMessage)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to encrypt message")
+		return nil, nil, errors.Wrap(err, "failed to encrypt message")
 	}
 
-	return a.sendMessageSpec(ctx, publicKey, messageSpec)
+	hash, err := a.sendMessageSpec(ctx, publicKey, messageSpec)
+	if err != nil {
+		return nil, nil, err
+	}
+	return hash, &message, nil
 }
 
 func (a *whisperAdapter) sendMessageSpec(ctx context.Context, publicKey *ecdsa.PublicKey, messageSpec *encryption.ProtocolMessageSpec) ([]byte, error) {
