@@ -36,7 +36,7 @@ type Messenger struct {
 	adapter     *whisperAdapter
 	encryptor   *encryption.Protocol
 
-	lastRetrieveCall time.Time
+	ownMessages map[string][]*protocol.Message
 }
 
 type config struct {
@@ -140,6 +140,7 @@ func NewMessenger(
 		persistence: &sqlitePersistence{db: messagesDB},
 		adapter:     newWhisperAdapter(identity, t, encryptionProtocol),
 		encryptor:   encryptionProtocol,
+		ownMessages: make(map[string][]*protocol.Message),
 	}, nil
 }
 
@@ -222,6 +223,9 @@ func (m *Messenger) Send(ctx context.Context, chat Chat, data []byte) ([]byte, e
 			return nil, err
 		}
 
+		// Cache it to be returned in Retrieve().
+		m.ownMessages[chatID] = append(m.ownMessages[chatID], message)
+
 		return hash, nil
 	} else if chat.PublicName() != "" {
 		return m.adapter.SendPublic(ctx, chat.PublicName(), chat.ID(), data, clock)
@@ -246,15 +250,10 @@ func (m *Messenger) Retrieve(ctx context.Context, chat Chat, c RetrieveConfig) (
 
 	if chat.PublicKey() != nil {
 		latest, err = m.adapter.RetrievePrivateMessages(chat.PublicKey())
-		// Own messages are not retrievable from a Whisper filter.
-		// TODO: alternatively, save sent messages in a map until retrieve
-		// for the same private chat is called and then flush these cached messages.
-		if err == nil {
-			now := time.Now().UTC()
-			latest, err = m.persistence.Messages(chat.ID(), m.lastRetrieveCall, now)
-			if err != nil {
-				m.lastRetrieveCall = now
-			}
+		// Return any own messages for this chat as well.
+		if ownMessages, ok := m.ownMessages[chat.ID()]; ok {
+			latest = append(latest, ownMessages...)
+			delete(m.ownMessages, chat.ID())
 		}
 	} else if chat.PublicName() != "" {
 		latest, err = m.adapter.RetrievePublicMessages(chat.PublicName())
