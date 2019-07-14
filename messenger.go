@@ -215,7 +215,8 @@ func (m *Messenger) Send(ctx context.Context, chat Chat, data []byte) ([]byte, e
 		}
 
 		// Save our message because it won't be received from the transport layer.
-		message.ID = hash // a Message need ID to be stored in the db
+		message.ID = hash // a Message need ID to be properly stored in the db
+		message.SigPubKey = &m.identity.PublicKey
 		_, err = m.persistence.SaveMessages(chat.ID(), []*protocol.Message{message})
 		if err != nil {
 			return nil, err

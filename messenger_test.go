@@ -148,6 +148,11 @@ func TestMessengerRetrieve(t *testing.T) {
 			messages, err = m.Retrieve(context.Background(), chat, RetrieveLastDay)
 			require.NoError(t, err)
 			require.Len(t, messages, 1)
+
+			// Verify message fields.
+			message := messages[0]
+			require.NotEmpty(t, message.ID)
+			require.Equal(t, &privateKey.PublicKey, message.SigPubKey) // this is OUR message
 		})
 	}
 }
