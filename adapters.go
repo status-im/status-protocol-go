@@ -74,6 +74,8 @@ func (a *whisperAdapter) RetrievePublicMessages(chatID string) ([]*protocol.Mess
 
 		switch m := statusMessage.Message.(type) {
 		case protocol.Message:
+			m.ID = statusMessage.ID
+			m.SigPubKey = statusMessage.SigPubKey
 			decodedMessages = append(decodedMessages, &m)
 		default:
 			log.Printf("skipped a public message of unsupported type")

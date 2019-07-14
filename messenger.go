@@ -219,7 +219,7 @@ var (
 
 func (m *Messenger) Retrieve(ctx context.Context, chat Chat, c RetrieveConfig) (messages []*protocol.Message, err error) {
 	if !c.latest {
-		return m.retrieveMessages(ctx, chat, c, nil)
+		return m.persistence.Messages(chat.ID(), c.From, c.To)
 	}
 
 	var latest []*protocol.Message
@@ -236,10 +236,6 @@ func (m *Messenger) Retrieve(ctx context.Context, chat Chat, c RetrieveConfig) (
 }
 
 func (m *Messenger) retrieveMessages(ctx context.Context, chat Chat, c RetrieveConfig, latest []*protocol.Message) (messages []*protocol.Message, err error) {
-	if !c.latest {
-		return m.persistence.Messages(chat.ID(), c.From, c.To)
-	}
-
 	if c.last24Hours {
 		to := time.Now()
 		from := to.Add(-time.Hour * 24)
@@ -249,7 +245,7 @@ func (m *Messenger) retrieveMessages(ctx context.Context, chat Chat, c RetrieveC
 	messages = append(messages, latest...)
 
 	if _, err := m.persistence.SaveMessages(chat.ID(), messages); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to save messages")
 	}
 	return messages, nil
 }
