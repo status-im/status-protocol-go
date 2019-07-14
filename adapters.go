@@ -223,7 +223,7 @@ func (a *whisperAdapter) SendPublic(ctx context.Context, chatName, chatID string
 		PowTime:   whisperPoWTime,
 	}
 
-	return a.transport.SendPublic(ctx, newMessage, chatID)
+	return a.transport.SendPublic(ctx, newMessage, chatName)
 }
 
 func (a *whisperAdapter) SendPrivate(ctx context.Context, publicKey *ecdsa.PublicKey, chatID string, data []byte, clock int64) ([]byte, error) {

@@ -42,7 +42,8 @@ func (c testChat) ID() string {
 	if c.publicKey != nil {
 		return hex.EncodeToString(crypto.FromECDSAPub(c.publicKey))
 	}
-	return c.publicName
+	// Deliberately use a different ID than public name.
+	return hex.EncodeToString([]byte(c.publicName))
 }
 
 func (c testChat) PublicKey() *ecdsa.PublicKey {

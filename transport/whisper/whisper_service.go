@@ -188,19 +188,21 @@ func (a *WhisperServiceTransport) RetrievePrivateMessages(publicKey *ecdsa.Publi
 }
 
 // SendPublic sends a new message using the Whisper service.
-func (a *WhisperServiceTransport) SendPublic(ctx context.Context, newMessage whisper.NewMessage, chatID string) ([]byte, error) {
+// For public chats, chat name is used as an ID as well as
+// a topic.
+func (a *WhisperServiceTransport) SendPublic(ctx context.Context, newMessage whisper.NewMessage, chatName string) ([]byte, error) {
 	if err := a.addSig(&newMessage); err != nil {
 		return nil, err
 	}
 
-	chat, err := a.chats.LoadPublic(chatID)
+	chat, err := a.chats.LoadPublic(chatName)
 	if err != nil {
 		return nil, err
 	}
 
 	newMessage.SymKeyID = chat.SymKeyID
 	newMessage.Topic = whisper.BytesToTopic(
-		filter.ToTopic(chatID),
+		filter.ToTopic(chatName),
 	)
 
 	return a.shhAPI.Post(ctx, newMessage)

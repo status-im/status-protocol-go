@@ -19,6 +19,10 @@ import (
 	protocol "github.com/status-im/status-protocol-go/v1"
 )
 
+var (
+	ErrChatIDEmpty = errors.New("chat ID is empty")
+)
+
 // Messenger is a entity managing chats and messages.
 // It acts as a bridge between the application and encryption
 // layers.
@@ -192,6 +196,11 @@ func (m *Messenger) Leave(chat Chat) error {
 }
 
 func (m *Messenger) Send(ctx context.Context, chat Chat, data []byte) ([]byte, error) {
+	chatID := chat.ID()
+	if chatID == "" {
+		return nil, ErrChatIDEmpty
+	}
+
 	clock, err := m.persistence.LastMessageClock(chat.ID())
 	if err != nil {
 		return nil, err

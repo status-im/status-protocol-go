@@ -42,6 +42,10 @@ func (db sqlitePersistence) Close() error {
 }
 
 func (db sqlitePersistence) LastMessageClock(chatID string) (int64, error) {
+	if chatID == "" {
+		return 0, errors.New("chat ID is empty")
+	}
+
 	var last sql.NullInt64
 	err := db.db.QueryRow("SELECT max(clock) FROM user_messages WHERE contact_id = ?", chatID).Scan(&last)
 	if err != nil {
