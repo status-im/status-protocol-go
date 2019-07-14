@@ -363,8 +363,14 @@ func (p *Protocol) ConfirmMessageProcessed(messageID []byte) error {
 }
 
 // HandleMessage unmarshals a message and processes it, decrypting it if it is a 1:1 message.
-func (p *Protocol) HandleMessage(myIdentityKey *ecdsa.PrivateKey, theirPublicKey *ecdsa.PublicKey, protocolMessage *ProtocolMessage, messageID []byte) ([]byte, error) {
-	// p.log.Debug("Received message from", "public-key", theirPublicKey)
+func (p *Protocol) HandleMessage(
+	myIdentityKey *ecdsa.PrivateKey,
+	theirPublicKey *ecdsa.PublicKey,
+	protocolMessage *ProtocolMessage,
+	messageID []byte,
+) ([]byte, error) {
+	log.Printf("[Protocol::HandleMessage] received a protocol message from %#x", crypto.FromECDSAPub(theirPublicKey))
+
 	if p.encryptor == nil {
 		return nil, errors.New("encryption service not initialized")
 	}
@@ -393,15 +399,21 @@ func (p *Protocol) HandleMessage(myIdentityKey *ecdsa.PrivateKey, theirPublicKey
 
 	// Check if it's a public message
 	if publicMessage := protocolMessage.GetPublicMessage(); publicMessage != nil {
-		// p.log.Debug("Public message, nothing to do")
+		log.Printf("[Protocol::HandleMessage] received a public message in direct message")
 		// Nothing to do, as already in cleartext
 		return publicMessage, nil
 	}
 
 	// Decrypt message
 	if directMessage := protocolMessage.GetDirectMessage(); directMessage != nil {
-		// p.log.Debug("Processing direct message")
-		message, err := p.encryptor.DecryptPayload(myIdentityKey, theirPublicKey, protocolMessage.GetInstallationId(), directMessage, messageID)
+		log.Printf("[Protocol::HandleMessage] processing direct message")
+		message, err := p.encryptor.DecryptPayload(
+			myIdentityKey,
+			theirPublicKey,
+			protocolMessage.GetInstallationId(),
+			directMessage,
+			messageID,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -409,9 +421,9 @@ func (p *Protocol) HandleMessage(myIdentityKey *ecdsa.PrivateKey, theirPublicKey
 		// Handle protocol negotiation for compatible clients
 		bundles := append(protocolMessage.GetBundles(), protocolMessage.GetBundle())
 		version := getProtocolVersion(bundles, protocolMessage.GetInstallationId())
-		// p.log.Debug("Message version is", "version", version)
+		log.Printf("[Protocol::HandleMessage] direct message version: %d", version)
 		if version >= sharedSecretNegotiationVersion {
-			// p.log.Debug("Negotiating shared secret")
+			log.Printf("[Protocol::HandleMessage] negotiating shared secret for %#x", crypto.FromECDSAPub(theirPublicKey))
 			sharedSecret, err := p.secret.Generate(myIdentityKey, theirPublicKey, protocolMessage.GetInstallationId())
 			if err != nil {
 				return nil, err

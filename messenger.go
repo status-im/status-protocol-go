@@ -100,7 +100,6 @@ func NewMessenger(
 			}
 		},
 		onNewSharedSecretHandler: func(secrets []*sharedsecret.Secret) {
-			log.Printf("[onNewSharedSecretHandler] received shared secrets from %#v", secrets)
 			if err := messenger.handleSharedSecrets(secrets); err != nil {
 				log.Printf("[onNewSharedSecretHandler] failed to process secrets: %v", err)
 			}

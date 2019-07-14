@@ -293,6 +293,11 @@ func (a *whisperAdapter) messageSpecToWhisper(spec *encryption.ProtocolMessageSp
 
 func (a *whisperAdapter) handleSharedSecrets(secrets []*sharedsecret.Secret) error {
 	for _, secret := range secrets {
+		log.Printf(
+			"[whisperAdapter::handleSharedSecrets] received shared secrets from %#x",
+			crypto.FromECDSAPub(secret.Identity),
+		)
+
 		fSecret := filter.NegotiatedSecret{
 			PublicKey: secret.Identity,
 			Key:       secret.Key,
