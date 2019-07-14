@@ -253,8 +253,11 @@ func (m *Messenger) retrieveMessages(ctx context.Context, chat Chat, c RetrieveC
 
 	messages = append(messages, latest...)
 
-	if _, err := m.persistence.SaveMessages(chat.ID(), messages); err != nil {
-		return nil, errors.Wrap(err, "failed to save messages")
+	_, err = m.persistence.SaveMessages(chat.ID(), messages)
+	switch err {
+	case ErrMsgAlreadyExist, nil:
+		return messages, nil
+	default:
+		return nil, err
 	}
-	return messages, nil
 }

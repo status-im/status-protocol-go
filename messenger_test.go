@@ -124,4 +124,9 @@ func TestMessengerRetrieve(t *testing.T) {
 	messages, err := m.Retrieve(context.Background(), chat, RetrieveLatest)
 	require.NoError(t, err)
 	require.Len(t, messages, 1)
+
+	// Retrieve again to test skipping already existing err.
+	messages, err = m.Retrieve(context.Background(), chat, RetrieveLastDay)
+	require.NoError(t, err)
+	require.Len(t, messages, 1)
 }
