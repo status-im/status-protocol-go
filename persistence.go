@@ -93,9 +93,11 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 		if err != nil && err.Error() != uniqueIDContstraint {
 			return
 		}
-		last, err = rst.LastInsertId()
-		if err != nil {
-			return
+		if err == nil {
+			last, err = rst.LastInsertId()
+			if err != nil {
+				return
+			}
 		}
 	}
 	return
