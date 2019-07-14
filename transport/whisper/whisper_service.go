@@ -133,6 +133,11 @@ func (a *WhisperServiceTransport) Init(
 	return a.chats.Init(chatIDs, publicKeys, negotiated)
 }
 
+func (a *WhisperServiceTransport) ProcessNegotiatedSecret(secret filter.NegotiatedSecret) error {
+	_, err := a.chats.LoadNegotiated(secret)
+	return err
+}
+
 func (a *WhisperServiceTransport) JoinPublic(chatID string) error {
 	_, err := a.chats.LoadPublic(chatID)
 	return err

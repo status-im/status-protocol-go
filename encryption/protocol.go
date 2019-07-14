@@ -234,15 +234,15 @@ func (p *Protocol) BuildDirectMessage(myIdentityKey *ecdsa.PrivateKey, publicKey
 	if sharedSecret != nil {
 		p.onNewSharedSecretHandler([]*sharedsecret.Secret{sharedSecret})
 	}
-	response := &ProtocolMessageSpec{
+
+	spec := &ProtocolMessageSpec{
 		Message:       message,
 		Installations: installations,
 	}
-
 	if agreed {
-		response.SharedSecret = sharedSecret.Key
+		spec.SharedSecret = sharedSecret.Key
 	}
-	return response, nil
+	return spec, nil
 }
 
 // BuildDHMessage builds a message with DH encryption so that it can be decrypted by any other device.
@@ -418,7 +418,6 @@ func (p *Protocol) HandleMessage(myIdentityKey *ecdsa.PrivateKey, theirPublicKey
 			}
 
 			p.onNewSharedSecretHandler([]*sharedsecret.Secret{sharedSecret})
-
 		}
 		return message, nil
 	}

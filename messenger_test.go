@@ -156,3 +156,29 @@ func TestMessengerRetrieve(t *testing.T) {
 		})
 	}
 }
+
+func TestMessengerSharedSecretHandler(t *testing.T) {
+	tmpDir, err := ioutil.TempDir("", "messenger-test")
+	require.NoError(t, err)
+	privateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+
+	config := whisper.DefaultConfig
+	config.MinimumAcceptedPOW = 0
+	shh := whisper.New(&config)
+	err = shh.Start(nil)
+	require.NoError(t, err)
+
+	m, err := NewMessenger(
+		privateKey,
+		nil,
+		shh,
+		tmpDir,
+		"some-key",
+		"installation-1",
+	)
+	require.NoError(t, err)
+
+	err = m.handleSharedSecrets(nil)
+	require.NoError(t, err)
+}

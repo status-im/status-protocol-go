@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ecdsa"
 
+	"github.com/status-im/status-protocol-go/transport/whisper/filter"
 	whisper "github.com/status-im/whisper/whisperv6"
 )
 
@@ -20,6 +21,7 @@ type WhisperTransport interface {
 	SendPrivateWithSharedSecret(context.Context, whisper.NewMessage, *ecdsa.PublicKey, []byte) ([]byte, error)
 	SendPrivateWithPartitioned(context.Context, whisper.NewMessage, *ecdsa.PublicKey) ([]byte, error)
 	SendPrivateOnDiscovery(context.Context, whisper.NewMessage, *ecdsa.PublicKey) ([]byte, error)
+	ProcessNegotiatedSecret(filter.NegotiatedSecret) error
 	Request(context.Context, RequestOptions) error
 }
 

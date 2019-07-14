@@ -87,6 +87,8 @@ func NewMessenger(
 	installationID string,
 	opts ...Option,
 ) (*Messenger, error) {
+	var messenger *Messenger
+
 	// Set default config fields.
 	c := config{
 		onNewInstallationsHandler: func(installations []*multidevice.Installation) {
@@ -98,8 +100,9 @@ func NewMessenger(
 			}
 		},
 		onNewSharedSecretHandler: func(secrets []*sharedsecret.Secret) {
-			for _, secret := range secrets {
-				log.Printf("[onNewSharedSecretHandler] received a new shared secret from %#x", secret.Identity)
+			log.Printf("[onNewSharedSecretHandler] received shared secrets from %#v", secrets)
+			if err := messenger.handleSharedSecrets(secrets); err != nil {
+				log.Printf("[onNewSharedSecretHandler] failed to process secrets: %v", err)
 			}
 		},
 	}
@@ -147,13 +150,18 @@ func NewMessenger(
 		return nil, errors.Wrap(err, "failed to initialize messages db")
 	}
 
-	return &Messenger{
+	messenger = &Messenger{
 		identity:    identity,
 		persistence: &sqlitePersistence{db: messagesDB},
 		adapter:     newWhisperAdapter(identity, t, encryptionProtocol),
 		encryptor:   encryptionProtocol,
 		ownMessages: make(map[string][]*protocol.Message),
-	}, nil
+	}
+	return messenger, nil
+}
+
+func (m *Messenger) handleSharedSecrets(secrets []*sharedsecret.Secret) error {
+	return m.adapter.handleSharedSecrets(secrets)
 }
 
 func (m *Messenger) EnableInstallation(id string) error {

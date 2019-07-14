@@ -6,6 +6,9 @@ import (
 	"log"
 	"time"
 
+	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
+	"github.com/status-im/status-protocol-go/transport/whisper/filter"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
@@ -286,6 +289,19 @@ func (a *whisperAdapter) messageSpecToWhisper(spec *encryption.ProtocolMessageSp
 	}
 
 	return &newMessage, nil
+}
+
+func (a *whisperAdapter) handleSharedSecrets(secrets []*sharedsecret.Secret) error {
+	for _, secret := range secrets {
+		fSecret := filter.NegotiatedSecret{
+			PublicKey: secret.Identity,
+			Key:       secret.Key,
+		}
+		if err := a.transport.ProcessNegotiatedSecret(fSecret); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // isPubKeyEqual checks that two public keys are equal

@@ -17,6 +17,10 @@ type Secret struct {
 	Key      []byte
 }
 
+// SharedSecret generates and manages negotiated secrets.
+// Identities (public keys) stored by SharedSecret
+// are compressed.
+// TODO: make it a part of sqlitePersistence instead of SharedSecret.
 type SharedSecret struct {
 	persistence *sqlitePersistence
 }
@@ -95,11 +99,8 @@ func (s *SharedSecret) All() ([]*Secret, error) {
 		if err != nil {
 			return nil, err
 		}
-
 		secrets = append(secrets, &Secret{Identity: key, Key: tuple[1]})
-
 	}
 
 	return secrets, nil
-
 }
