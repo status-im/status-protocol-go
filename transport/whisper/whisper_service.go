@@ -152,11 +152,8 @@ func (a *WhisperServiceTransport) JoinPrivate(publicKey *ecdsa.PublicKey) error 
 }
 
 func (a *WhisperServiceTransport) LeavePrivate(publicKey *ecdsa.PublicKey) error {
-	chat := a.chats.ChatByPublicKey(publicKey)
-	if chat != nil {
-		return nil
-	}
-	return a.chats.Remove(chat)
+	chats := a.chats.ChatsByPublicKey(publicKey)
+	return a.chats.Remove(chats...)
 }
 
 func (a *WhisperServiceTransport) RetrievePublicMessages(chatID string) ([]*whisper.ReceivedMessage, error) {
@@ -174,17 +171,19 @@ func (a *WhisperServiceTransport) RetrievePublicMessages(chatID string) ([]*whis
 }
 
 func (a *WhisperServiceTransport) RetrievePrivateMessages(publicKey *ecdsa.PublicKey) ([]*whisper.ReceivedMessage, error) {
-	chat, err := a.chats.LoadContactCode(publicKey)
-	if err != nil {
-		return nil, err
+	chats := a.chats.ChatsByPublicKey(publicKey)
+
+	var result []*whisper.ReceivedMessage
+
+	for _, chat := range chats {
+		f := a.shh.GetFilter(chat.FilterID)
+		if f == nil {
+			return nil, errors.New("failed to return a filter")
+		}
+		result = append(result, f.Retrieve()...)
 	}
 
-	f := a.shh.GetFilter(chat.FilterID)
-	if f == nil {
-		return nil, errors.New("failed to return a filter")
-	}
-
-	return f.Retrieve(), nil
+	return result, nil
 }
 
 // SendPublic sends a new message using the Whisper service.

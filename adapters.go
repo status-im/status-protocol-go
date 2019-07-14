@@ -261,10 +261,13 @@ func (a *whisperAdapter) sendMessageSpec(ctx context.Context, publicKey *ecdsa.P
 	}
 
 	if messageSpec.SharedSecret != nil {
+		log.Printf("[whisperAdapter::sendMessageSpec] sending using shared secret")
 		return a.transport.SendPrivateWithSharedSecret(ctx, *newMessage, publicKey, messageSpec.SharedSecret)
 	} else if messageSpec.PartitionedTopicMode() == encryption.PartitionTopicV1 {
+		log.Printf("[whisperAdapter::sendMessageSpec] sending partitioned topic")
 		return a.transport.SendPrivateWithPartitioned(ctx, *newMessage, publicKey)
 	} else {
+		log.Printf("[whisperAdapter::sendMessageSpec] sending using discovery topic")
 		return a.transport.SendPrivateOnDiscovery(ctx, *newMessage, publicKey)
 	}
 }

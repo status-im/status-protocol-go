@@ -170,12 +170,19 @@ func (s *ChatsManager) ChatByID(chatID string) *Chat {
 	return s.chats[chatID]
 }
 
-func (s *ChatsManager) ChatByPublicKey(publicKey *ecdsa.PublicKey) *Chat {
+func (s *ChatsManager) ChatsByPublicKey(publicKey *ecdsa.PublicKey) (result []*Chat) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	chatID := contactCodeTopic(publicKey)
-	return s.chats[chatID]
+	identityStr := publicKeyToStr(publicKey)
+
+	for _, chat := range s.chats {
+		if chat.Identity == identityStr {
+			result = append(result, chat)
+		}
+	}
+
+	return
 }
 
 // Remove remove all the filters associated with a chat/identity
@@ -221,13 +228,11 @@ func (s *ChatsManager) loadPartitioned(publicKey *ecdsa.PublicKey, listen bool) 
 		return nil, err
 	}
 
-	identityStr := hex.EncodeToString(crypto.FromECDSAPub(publicKey))
-
 	chat := &Chat{
 		ChatID:   chatID,
 		FilterID: filter.FilterID,
 		Topic:    filter.Topic,
-		Identity: identityStr,
+		Identity: publicKeyToStr(publicKey),
 		Listen:   listen,
 	}
 
@@ -283,7 +288,7 @@ func (s *ChatsManager) loadDiscovery() error {
 
 	discoveryChat := &Chat{
 		ChatID:    DiscoveryTopic,
-		Identity:  identityStr, // TODO: remove?
+		Identity:  identityStr,
 		Discovery: true,
 		Listen:    true,
 	}
