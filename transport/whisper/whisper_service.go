@@ -172,10 +172,14 @@ func (a *WhisperServiceTransport) RetrievePublicMessages(chatID string) ([]*whis
 
 func (a *WhisperServiceTransport) RetrievePrivateMessages(publicKey *ecdsa.PublicKey) ([]*whisper.ReceivedMessage, error) {
 	chats := a.chats.ChatsByPublicKey(publicKey)
+	discoveryChats, err := a.chats.LoadDiscovery()
+	if err != nil {
+		return nil, err
+	}
 
 	var result []*whisper.ReceivedMessage
 
-	for _, chat := range chats {
+	for _, chat := range append(chats, discoveryChats...) {
 		f := a.shh.GetFilter(chat.FilterID)
 		if f == nil {
 			return nil, errors.New("failed to return a filter")

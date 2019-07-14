@@ -104,7 +104,7 @@ func (s *ChatsManager) Init(chatIDs []string, publicKeys []*ecdsa.PublicKey, neg
 	}
 
 	// Add discovery topic.
-	err = s.loadDiscovery()
+	_, err = s.LoadDiscovery()
 	if err != nil {
 		return nil, err
 	}
@@ -275,12 +275,24 @@ func (s *ChatsManager) LoadNegotiated(secret NegotiatedSecret) (*Chat, error) {
 
 // loadDiscovery adds two discovery filters: for generic discovery topic
 // and for the personal discovery topic.
-func (s *ChatsManager) loadDiscovery() error {
+func (s *ChatsManager) LoadDiscovery() ([]*Chat, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	if _, ok := s.chats[DiscoveryTopic]; ok {
-		return nil
+	personalDiscoveryTopic := personalDiscoveryTopic(&s.privateKey.PublicKey)
+
+	// Check if chats are already loaded.
+	var result []*Chat
+
+	if chat, ok := s.chats[DiscoveryTopic]; ok {
+		result = append(result, chat)
+	}
+	if chat, ok := s.chats[personalDiscoveryTopic]; ok {
+		result = append(result, chat)
+	}
+
+	if len(result) == 2 {
+		return result, nil
 	}
 
 	// Load generic discovery topic.
@@ -295,7 +307,7 @@ func (s *ChatsManager) loadDiscovery() error {
 
 	discoveryResponse, err := s.addAsymmetric(discoveryChat.ChatID, true)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	discoveryChat.Topic = discoveryResponse.Topic
@@ -304,7 +316,6 @@ func (s *ChatsManager) loadDiscovery() error {
 	s.chats[discoveryChat.ChatID] = discoveryChat
 
 	// Load personal discovery
-	personalDiscoveryTopic := personalDiscoveryTopic(&s.privateKey.PublicKey)
 	personalDiscoveryChat := &Chat{
 		ChatID:    personalDiscoveryTopic,
 		Identity:  identityStr,
@@ -314,7 +325,7 @@ func (s *ChatsManager) loadDiscovery() error {
 
 	discoveryResponse, err = s.addAsymmetric(personalDiscoveryChat.ChatID, true)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	personalDiscoveryChat.Topic = discoveryResponse.Topic
@@ -322,7 +333,7 @@ func (s *ChatsManager) loadDiscovery() error {
 
 	s.chats[personalDiscoveryChat.ChatID] = personalDiscoveryChat
 
-	return nil
+	return []*Chat{discoveryChat, personalDiscoveryChat}, nil
 }
 
 // loadPublic adds a filter for a public chat.
