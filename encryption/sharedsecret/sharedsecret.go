@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"database/sql"
 	"errors"
+	"log"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/ecies"
@@ -41,6 +42,12 @@ func (s *SharedSecret) generate(myPrivateKey *ecdsa.PrivateKey, theirPublicKey *
 		return nil, err
 	}
 
+	log.Printf(
+		"[SharedSecret::generate] saving a shared key for %#x and installation %s",
+		crypto.FromECDSAPub(theirPublicKey),
+		installationID,
+	)
+
 	theirIdentity := crypto.CompressPubkey(theirPublicKey)
 	if err = s.persistence.Add(theirIdentity, sharedKey, installationID); err != nil {
 		return nil, err
@@ -56,7 +63,11 @@ func (s *SharedSecret) Generate(myPrivateKey *ecdsa.PrivateKey, theirPublicKey *
 
 // Agreed returns true if a secret has been acknowledged by all the installationIDs.
 func (s *SharedSecret) Agreed(myPrivateKey *ecdsa.PrivateKey, myInstallationID string, theirPublicKey *ecdsa.PublicKey, theirInstallationIDs []string) (*Secret, bool, error) {
-	// log.Printf("[SharedSecret::Agreed] checking against their installation: %s", theirInstallationIDs)
+	log.Printf(
+		"[SharedSecret::Agreed] checking against for %#x and installations %#v",
+		crypto.FromECDSAPub(theirPublicKey),
+		theirInstallationIDs,
+	)
 
 	secret, err := s.generate(myPrivateKey, theirPublicKey, myInstallationID)
 	if err != nil {
@@ -75,7 +86,7 @@ func (s *SharedSecret) Agreed(myPrivateKey *ecdsa.PrivateKey, myInstallationID s
 
 	for _, installationID := range theirInstallationIDs {
 		if !response.installationIDs[installationID] {
-			// s.log.Debug("no shared secret with:", "installation-id", installationID)
+			log.Printf("[SharedSecret::Agreed] no shared secret with installation %s", installationID)
 			return secret, false, nil
 		}
 	}
