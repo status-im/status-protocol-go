@@ -73,10 +73,10 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 		if err == nil {
 			err = tx.Commit()
 			return
+
 		}
 		// don't shadow original error
 		_ = tx.Rollback()
-		return
 	}()
 
 	var rst sql.Result

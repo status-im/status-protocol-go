@@ -209,9 +209,7 @@ func (a *WhisperServiceTransport) SendPublic(ctx context.Context, newMessage whi
 	}
 
 	newMessage.SymKeyID = chat.SymKeyID
-	newMessage.Topic = whisper.BytesToTopic(
-		filter.ToTopic(chatName),
-	)
+	newMessage.Topic = chat.Topic
 
 	return a.shhAPI.Post(ctx, newMessage)
 }
@@ -518,35 +516,6 @@ func (a *WhisperServiceTransport) selectAndAddMailServer() (string, error) {
 		return enodeAddr, nil
 	}
 	return "", fmt.Errorf("peer %s failed to connect: %v", enodeAddr, err)
-}
-
-// whisperSubscription encapsulates a Whisper filter.
-type whisperSubscription struct {
-	shh      *whisper.Whisper
-	filterID string
-}
-
-// newWhisperSubscription returns a new whisperSubscription.
-func newWhisperSubscription(shh *whisper.Whisper, filterID string) *whisperSubscription {
-	return &whisperSubscription{
-		shh:      shh,
-		filterID: filterID,
-	}
-}
-
-// Messages retrieves a list of messages for a given filter.
-func (s whisperSubscription) Messages() ([]*whisper.ReceivedMessage, error) {
-	f := s.shh.GetFilter(s.filterID)
-	if f == nil {
-		return nil, errors.New("filter does not exist")
-	}
-	messages := f.Retrieve()
-	return messages, nil
-}
-
-// Unsubscribe removes the subscription.
-func (s whisperSubscription) Unsubscribe() error {
-	return s.shh.Unsubscribe(s.filterID)
 }
 
 func createRequestMessagesParam(enode, symKeyID string, options RequestOptions) (MessagesRequest, error) {

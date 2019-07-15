@@ -5,8 +5,11 @@ import (
 	"crypto/ecdsa"
 	"encoding/hex"
 	"io/ioutil"
+	"os"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/suite"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	whisper "github.com/status-im/whisper/whisperv6"
@@ -54,131 +57,112 @@ func (c testChat) PublicName() string {
 	return c.publicName
 }
 
-func TestMessengerSend(t *testing.T) {
-	tmpDir, err := ioutil.TempDir("", "messenger-test")
-	require.NoError(t, err)
-	privateKey, err := crypto.GenerateKey()
-	require.NoError(t, err)
+func TestMessengerSuite(t *testing.T) {
+	suite.Run(t, new(MessengerSuite))
+}
+
+type MessengerSuite struct {
+	suite.Suite
+
+	m          *Messenger
+	tmpDir     string
+	privateKey *ecdsa.PrivateKey
+}
+
+func (s *MessengerSuite) SetupTest() {
+	var err error
+
+	s.tmpDir, err = ioutil.TempDir("", "messenger-test")
+	s.Require().NoError(err)
+
+	s.privateKey, err = crypto.GenerateKey()
+	s.Require().NoError(err)
 
 	config := whisper.DefaultConfig
 	config.MinimumAcceptedPOW = 0
 	shh := whisper.New(&config)
+	shh.Start(nil)
 
-	m, err := NewMessenger(
-		privateKey,
+	s.m, err = NewMessenger(
+		s.privateKey,
 		nil,
 		shh,
-		tmpDir,
+		s.tmpDir,
 		"some-key",
 		"installation-1",
 	)
-	require.NoError(t, err)
+	s.Require().NoError(err)
+}
 
-	// Send public
-	_, err = m.Send(context.Background(), testChat{publicName: "status"}, []byte("test"))
-	require.NoError(t, err)
+func (s *MessengerSuite) TearDownTest() {
+	os.Remove(s.tmpDir)
+}
 
-	// Send private
+func (s *MessengerSuite) TestSendPublic() {
+	_, err := s.m.Send(context.Background(), testChat{publicName: "status"}, []byte("test"))
+	s.NoError(err)
+}
+
+func (s *MessengerSuite) TestSendPrivate() {
 	recipientKey, err := crypto.GenerateKey()
-	require.NoError(t, err)
-	_, err = m.Send(context.Background(), testChat{publicKey: &recipientKey.PublicKey}, []byte("test"))
-	require.NoError(t, err)
+	s.NoError(err)
+	_, err = s.m.Send(context.Background(), testChat{publicKey: &recipientKey.PublicKey}, []byte("test"))
+	s.NoError(err)
 }
 
-func TestMessengerRetrieve(t *testing.T) {
-	tmpDir, err := ioutil.TempDir("", "messenger-test")
-	require.NoError(t, err)
-	privateKey, err := crypto.GenerateKey()
-	require.NoError(t, err)
+func (s *MessengerSuite) TestRetrievePublic() {
+	chat := testChat{publicName: "status"}
 
-	config := whisper.DefaultConfig
-	config.MinimumAcceptedPOW = 0
-	shh := whisper.New(&config)
-	err = shh.Start(nil)
-	require.NoError(t, err)
+	_, err := s.m.Send(context.Background(), chat, []byte("test"))
+	s.NoError(err)
 
-	m, err := NewMessenger(
-		privateKey,
-		nil,
-		shh,
-		tmpDir,
-		"some-key",
-		"installation-1",
-	)
-	require.NoError(t, err)
+	// Give Whisper some time to propagate message to filters.
+	time.Sleep(time.Millisecond * 500)
 
+	// Retrieve chat
+	messages, err := s.m.Retrieve(context.Background(), chat, RetrieveLatest)
+	s.NoError(err)
+	s.Len(messages, 1)
+
+	// Retrieve again to test skipping already existing err.
+	messages, err = s.m.Retrieve(context.Background(), chat, RetrieveLastDay)
+	s.NoError(err)
+	s.Require().Len(messages, 1)
+
+	// Verify message fields.
+	message := messages[0]
+	s.NotEmpty(message.ID)
+	s.Equal(&s.privateKey.PublicKey, message.SigPubKey) // this is OUR message
+}
+
+func (s *MessengerSuite) TestRetrievePrivate() {
 	publicContact, err := crypto.GenerateKey()
-	require.NoError(t, err)
+	s.NoError(err)
+	chat := testChat{publicKey: &publicContact.PublicKey}
 
-	testCases := []struct {
-		Name string
-		Chat Chat
-	}{
-		{
-			Name: "Public Chat",
-			Chat: testChat{publicName: "status"},
-		},
-		{
-			Name: "Private Chat",
-			Chat: testChat{publicKey: &publicContact.PublicKey},
-		},
-	}
+	_, err = s.m.Send(context.Background(), chat, []byte("test"))
+	s.NoError(err)
 
-	for _, tc := range testCases {
-		t.Run(tc.Name, func(t *testing.T) {
-			chat := tc.Chat
+	// Give Whisper some time to propagate message to filters.
+	time.Sleep(time.Millisecond * 500)
 
-			// Join chat
-			err = m.Join(chat)
-			require.NoError(t, err)
+	// Retrieve chat
+	messages, err := s.m.Retrieve(context.Background(), chat, RetrieveLatest)
+	s.NoError(err)
+	s.Len(messages, 1)
 
-			// Send public
-			_, err = m.Send(context.Background(), chat, []byte("test"))
-			require.NoError(t, err)
+	// Retrieve again to test skipping already existing err.
+	messages, err = s.m.Retrieve(context.Background(), chat, RetrieveLastDay)
+	s.NoError(err)
+	s.Len(messages, 1)
 
-			// Give Whisper some time to propagate message to filters.
-			time.Sleep(time.Millisecond * 500)
-
-			// Retrieve chat
-			messages, err := m.Retrieve(context.Background(), chat, RetrieveLatest)
-			require.NoError(t, err)
-			require.Len(t, messages, 1)
-
-			// Retrieve again to test skipping already existing err.
-			messages, err = m.Retrieve(context.Background(), chat, RetrieveLastDay)
-			require.NoError(t, err)
-			require.Len(t, messages, 1)
-
-			// Verify message fields.
-			message := messages[0]
-			require.NotEmpty(t, message.ID)
-			require.Equal(t, &privateKey.PublicKey, message.SigPubKey) // this is OUR message
-		})
-	}
+	// Verify message fields.
+	message := messages[0]
+	s.NotEmpty(message.ID)
+	s.Equal(&s.privateKey.PublicKey, message.SigPubKey) // this is OUR message
 }
 
-func TestMessengerSharedSecretHandler(t *testing.T) {
-	tmpDir, err := ioutil.TempDir("", "messenger-test")
-	require.NoError(t, err)
-	privateKey, err := crypto.GenerateKey()
-	require.NoError(t, err)
-
-	config := whisper.DefaultConfig
-	config.MinimumAcceptedPOW = 0
-	shh := whisper.New(&config)
-	err = shh.Start(nil)
-	require.NoError(t, err)
-
-	m, err := NewMessenger(
-		privateKey,
-		nil,
-		shh,
-		tmpDir,
-		"some-key",
-		"installation-1",
-	)
-	require.NoError(t, err)
-
-	err = m.handleSharedSecrets(nil)
-	require.NoError(t, err)
+func (s *MessengerSuite) TestSharedSecretHandler() {
+	err := s.m.handleSharedSecrets(nil)
+	s.NoError(err)
 }

@@ -59,7 +59,7 @@ func (s *ProtocolServiceTestSuite) SetupTest() {
 	s.Require().NoError(err)
 }
 
-func (s *ProtocolServiceTestSuite) TearDown() {
+func (s *ProtocolServiceTestSuite) TearDownTest() {
 	os.Remove(s.aliceDir)
 	os.Remove(s.bobDir)
 }

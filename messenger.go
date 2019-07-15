@@ -21,7 +21,8 @@ import (
 )
 
 var (
-	ErrChatIDEmpty = errors.New("chat ID is empty")
+	ErrChatIDEmpty    = errors.New("chat ID is empty")
+	ErrNotImplemented = errors.New("not implemented")
 )
 
 // Messenger is a entity managing chats and messages.
@@ -195,22 +196,22 @@ func (m *Messenger) SetInstallationMetadata(id string, data *multidevice.Install
 
 // NOT_IMPLEMENTED
 func (m *Messenger) SelectMailserver(id string) error {
-	return nil
+	return ErrNotImplemented
 }
 
 // NOT_IMPLEMENTED
 func (m *Messenger) AddMailserver(enode string) error {
-	return nil
+	return ErrNotImplemented
 }
 
 // NOT_IMPLEMENTED
 func (m *Messenger) RemoveMailserver(id string) error {
-	return nil
+	return ErrNotImplemented
 }
 
 // NOT_IMPLEMENTED
 func (m *Messenger) Mailservers() ([]string, error) {
-	return nil, nil
+	return nil, ErrNotImplemented
 }
 
 func (m *Messenger) Join(chat Chat) error {
@@ -292,6 +293,11 @@ func (m *Messenger) Retrieve(ctx context.Context, chat Chat, c RetrieveConfig) (
 		latest, err = m.adapter.RetrievePublicMessages(chat.PublicName())
 	} else {
 		return nil, errors.New("chat is neither public nor private")
+	}
+
+	if err != nil {
+		err = errors.Wrap(err, "failed to retrieve messages")
+		return
 	}
 
 	_, err = m.persistence.SaveMessages(chat.ID(), latest)

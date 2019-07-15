@@ -145,8 +145,6 @@ func (p *Protocol) Start(myIdentity *ecdsa.PrivateKey) {
 			p.onSendContactCodeHandler(messageSpec)
 		}
 	}()
-
-	return
 }
 
 func (p *Protocol) addBundle(myIdentityKey *ecdsa.PrivateKey, msg *ProtocolMessage, sendSingle bool) error {
