@@ -138,6 +138,7 @@ func NewMessenger(
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create the encryption layer")
 	}
+	encryptionProtocol.Start(identity)
 
 	messagesDB, err := sqlite.Open(filepath.Join(dataDir, "messages.sql"), dbKey, sqlite.MigrationConfig{
 		AssetNames: migrations.AssetNames(),

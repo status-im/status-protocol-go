@@ -36,6 +36,8 @@ func New(db *sql.DB) *Publisher {
 }
 
 func (p *Publisher) Start() <-chan struct{} {
+	log.Printf("[Publisher::Start] starting publisher")
+
 	p.notifyCh = make(chan struct{})
 	p.quit = make(chan struct{})
 

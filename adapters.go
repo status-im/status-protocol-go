@@ -70,9 +70,13 @@ func (a *whisperAdapter) RetrievePublicMessages(chatID string) ([]*protocol.Mess
 	decodedMessages := make([]*protocol.Message, 0, len(messages))
 	for _, item := range messages {
 		shhMessage := whisper.ToWhisperMessage(item)
+
+		log.Printf("[whisperAdapter::RetrievePublicMessages] received a public message: %#x", shhMessage.Hash)
+
 		statusMessage, err := a.decodeMessage(shhMessage)
 		if err != nil {
 			log.Printf("failed to decode message %#x", shhMessage.Hash)
+			continue
 		}
 
 		switch m := statusMessage.Message.(type) {
@@ -99,7 +103,7 @@ func (a *whisperAdapter) RetrievePrivateMessages(publicKey *ecdsa.PublicKey) ([]
 	for _, item := range messages {
 		shhMessage := whisper.ToWhisperMessage(item)
 
-		log.Printf("[whisperAdapter::RetrievePrivateMessages] received a messagee: %#x", shhMessage.Hash)
+		log.Printf("[whisperAdapter::RetrievePrivateMessages] received a private message: %#x", shhMessage.Hash)
 
 		err := a.decryptMessage(context.Background(), shhMessage)
 		if err != nil {
@@ -108,7 +112,8 @@ func (a *whisperAdapter) RetrievePrivateMessages(publicKey *ecdsa.PublicKey) ([]
 
 		statusMessage, err := a.decodeMessage(shhMessage)
 		if err != nil {
-			log.Printf("failed to decode message %#x", shhMessage.Hash)
+			log.Printf("failed to decode a message %#x", shhMessage.Hash)
+			continue
 		}
 
 		switch m := statusMessage.Message.(type) {
@@ -241,6 +246,8 @@ func (a *whisperAdapter) SendPrivate(
 	data []byte,
 	clock int64,
 ) ([]byte, *protocol.Message, error) {
+	log.Printf("[whisperAdapter::SendPrivate] sending a mesage to %#x", crypto.FromECDSAPub(publicKey))
+
 	message := protocol.CreatePrivateTextMessage(data, clock, chatID)
 
 	encodedMessage, err := protocol.EncodeMessage(message)
