@@ -98,9 +98,12 @@ func (a *whisperAdapter) RetrievePrivateMessages(publicKey *ecdsa.PublicKey) ([]
 	decodedMessages := make([]*protocol.Message, 0, len(messages))
 	for _, item := range messages {
 		shhMessage := whisper.ToWhisperMessage(item)
+
+		log.Printf("[whisperAdapter::RetrievePrivateMessages] received a messagee: %#x", shhMessage.Hash)
+
 		err := a.decryptMessage(context.Background(), shhMessage)
 		if err != nil {
-			log.Printf("failed to decrypt a message: %#x", shhMessage.Hash)
+			log.Printf("[whisperAdapter::RetrievePrivateMessages] failed to decrypt a message: %#x", shhMessage.Hash)
 		}
 
 		statusMessage, err := a.decodeMessage(shhMessage)
