@@ -57,6 +57,7 @@ func setupUser(user string, s *EncryptionServiceMultiDeviceSuite, n int) error {
 			installationID,
 			func(s []*multidevice.Installation) {},
 			func(s []*sharedsecret.Secret) {},
+			func(*ProtocolMessageSpec) {},
 		)
 		if err != nil {
 			return err

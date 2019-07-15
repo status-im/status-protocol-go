@@ -44,6 +44,7 @@ func (s *ProtocolServiceTestSuite) SetupTest() {
 		"1",
 		addedBundlesHandler,
 		onNewSharedSecretHandler,
+		func(*ProtocolMessageSpec) {},
 	)
 	s.Require().NoError(err)
 
@@ -53,6 +54,7 @@ func (s *ProtocolServiceTestSuite) SetupTest() {
 		"2",
 		addedBundlesHandler,
 		onNewSharedSecretHandler,
+		func(*ProtocolMessageSpec) {},
 	)
 	s.Require().NoError(err)
 }

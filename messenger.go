@@ -43,7 +43,7 @@ type Messenger struct {
 type config struct {
 	onNewInstallationsHandler func([]*multidevice.Installation)
 	onNewSharedSecretHandler  func([]*sharedsecret.Secret)
-	onSendContactCodeHandler  func(*ProtocolMessageSpec)
+	onSendContactCodeHandler  func(*encryption.ProtocolMessageSpec)
 
 	publicChatNames []string
 	publicKeys      []*ecdsa.PublicKey

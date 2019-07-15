@@ -53,6 +53,7 @@ func (s *EncryptionServiceTestSuite) initDatabases(config encryptorConfig) {
 		config,
 		func(s []*multidevice.Installation) {},
 		func(s []*sharedsecret.Secret) {},
+		func(*ProtocolMessageSpec) {},
 	)
 	s.Require().NoError(err)
 
@@ -64,6 +65,7 @@ func (s *EncryptionServiceTestSuite) initDatabases(config encryptorConfig) {
 		config,
 		func(s []*multidevice.Installation) {},
 		func(s []*sharedsecret.Secret) {},
+		func(*ProtocolMessageSpec) {},
 	)
 	s.Require().NoError(err)
 }
