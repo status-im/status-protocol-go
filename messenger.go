@@ -43,6 +43,7 @@ type Messenger struct {
 type config struct {
 	onNewInstallationsHandler func([]*multidevice.Installation)
 	onNewSharedSecretHandler  func([]*sharedsecret.Secret)
+	onSendContactCodeHandler  func(*ProtocolMessageSpec)
 
 	publicChatNames []string
 	publicKeys      []*ecdsa.PublicKey
@@ -104,6 +105,15 @@ func NewMessenger(
 				log.Printf("[onNewSharedSecretHandler] failed to process secrets: %v", err)
 			}
 		},
+		onSendContactCodeHandler: func(messageSpec *encryption.ProtocolMessageSpec) {
+			log.Printf("[onSendContactCodeHandler] received a SendContactCode request")
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_, err := messenger.adapter.SendContactCode(ctx, messageSpec)
+			if err != nil {
+				log.Printf("[onSendContactCodeHandler] failed to send a contact code: %v", err)
+			}
+		},
 	}
 
 	for _, opt := range opts {
@@ -134,10 +144,12 @@ func NewMessenger(
 		installationID,
 		c.onNewInstallationsHandler,
 		c.onNewSharedSecretHandler,
+		c.onSendContactCodeHandler,
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create the encryption layer")
 	}
+	// TODO: consider removing identity as an argument to Start().
 	encryptionProtocol.Start(identity)
 
 	messagesDB, err := sqlite.Open(filepath.Join(dataDir, "messages.sql"), dbKey, sqlite.MigrationConfig{
@@ -157,6 +169,7 @@ func NewMessenger(
 		encryptor:   encryptionProtocol,
 		ownMessages: make(map[string][]*protocol.Message),
 	}
+
 	return messenger, nil
 }
 

@@ -237,6 +237,15 @@ func (a *whisperAdapter) SendPublic(ctx context.Context, chatName, chatID string
 	return a.transport.SendPublic(ctx, newMessage, chatName)
 }
 
+func (a *whisperAdapter) SendContactCode(ctx context.Context, messageSpec *encryption.ProtocolMessageSpec) ([]byte, error) {
+	newMessage, err := a.messageSpecToWhisper(messageSpec)
+	if err != nil {
+		return nil, err
+	}
+
+	return a.transport.SendPublic(ctx, *newMessage, filter.ContactCodeTopic(&a.privateKey.PublicKey))
+}
+
 // SendPrivate sends a one-to-one message. It needs to return it
 // because the registered Whisper filter handles only incoming messages.
 func (a *whisperAdapter) SendPrivate(
@@ -246,7 +255,7 @@ func (a *whisperAdapter) SendPrivate(
 	data []byte,
 	clock int64,
 ) ([]byte, *protocol.Message, error) {
-	log.Printf("[whisperAdapter::SendPrivate] sending a mesage to %#x", crypto.FromECDSAPub(publicKey))
+	log.Printf("[whisperAdapter::SendPrivate] sending a private mesage to %#x", crypto.FromECDSAPub(publicKey))
 
 	message := protocol.CreatePrivateTextMessage(data, clock, chatID)
 
@@ -304,7 +313,7 @@ func (a *whisperAdapter) messageSpecToWhisper(spec *encryption.ProtocolMessageSp
 func (a *whisperAdapter) handleSharedSecrets(secrets []*sharedsecret.Secret) error {
 	for _, secret := range secrets {
 		log.Printf(
-			"[whisperAdapter::handleSharedSecrets] received shared secrets from %#x",
+			"[whisperAdapter::handleSharedSecrets] received shared secret with identity %#x",
 			crypto.FromECDSAPub(secret.Identity),
 		)
 

@@ -69,8 +69,7 @@ type Protocol struct {
 
 	onAddedBundlesHandler    func([]*multidevice.Installation)
 	onNewSharedSecretHandler func([]*sharedsecret.Secret)
-
-	systemMessages chan *ProtocolMessageSpec
+	onSendContactCodeHandler func(*ProtocolMessageSpec)
 }
 
 var (
@@ -85,6 +84,7 @@ func New(
 	installationID string,
 	addedBundlesHandler func([]*multidevice.Installation),
 	onNewSharedSecretHandler func([]*sharedsecret.Secret),
+	onSendContactCodeHandler func(*ProtocolMessageSpec),
 ) (*Protocol, error) {
 	return NewWithEncryptorConfig(
 		dataDir,
@@ -93,6 +93,7 @@ func New(
 		defaultEncryptorConfig(installationID),
 		addedBundlesHandler,
 		onNewSharedSecretHandler,
+		onSendContactCodeHandler,
 	)
 }
 
@@ -103,6 +104,7 @@ func NewWithEncryptorConfig(
 	encryptorConfig encryptorConfig,
 	addedBundlesHandler func([]*multidevice.Installation),
 	onNewSharedSecretHandler func([]*sharedsecret.Secret),
+	onSendContactCodeHandler func(*ProtocolMessageSpec),
 ) (*Protocol, error) {
 	encryptor, err := newEncryptor(dataDir, dbKey, encryptorConfig)
 	if err != nil {
@@ -124,23 +126,27 @@ func NewWithEncryptorConfig(
 		publisher:                publisher.New(db),
 		onAddedBundlesHandler:    addedBundlesHandler,
 		onNewSharedSecretHandler: onNewSharedSecretHandler,
-		systemMessages:           make(chan *ProtocolMessageSpec),
+		onSendContactCodeHandler: onSendContactCodeHandler,
 	}, nil
 }
 
 func (p *Protocol) Start(myIdentity *ecdsa.PrivateKey) {
+	// Handle Publisher system messages.
 	publisherCh := p.publisher.Start()
 
 	go func() {
 		for range publisherCh {
-			spec, err := p.buildContactCodeMessage(myIdentity)
+			messageSpec, err := p.buildContactCodeMessage(myIdentity)
 			if err != nil {
-				log.Printf("[Protocol::Start] failed to build a public messages for Publisher: %v", err)
-			} else {
-				p.systemMessages <- spec
+				log.Printf("[Protocol::Start] failed to build contact code message: %v", err)
+				continue
 			}
+
+			p.onSendContactCodeHandler(messageSpec)
 		}
 	}()
+
+	return
 }
 
 func (p *Protocol) addBundle(myIdentityKey *ecdsa.PrivateKey, msg *ProtocolMessage, sendSingle bool) error {

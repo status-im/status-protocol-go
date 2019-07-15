@@ -69,6 +69,8 @@ func (p *Publisher) tickerLoop() {
 				switch err {
 				case errNotEnoughTimePassed:
 					log.Printf("[Publisher::startTicker] not enough time passed")
+				case nil:
+					// skip
 				default:
 					log.Printf("[Publisher::startTicker] error while sending a contact code: %v", err)
 				}
