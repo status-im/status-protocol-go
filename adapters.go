@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	datasyncnode "github.com/status-im/mvds/node"
 	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
 	"github.com/status-im/status-protocol-go/transport/whisper/filter"
 
@@ -32,14 +33,16 @@ const (
 type whisperAdapter struct {
 	privateKey *ecdsa.PrivateKey
 	transport  transport.WhisperTransport
+	datasync   *datasyncnode.Node
 	protocol   *encryption.Protocol
 }
 
-func newWhisperAdapter(pk *ecdsa.PrivateKey, t transport.WhisperTransport, p *encryption.Protocol) *whisperAdapter {
+func newWhisperAdapter(pk *ecdsa.PrivateKey, t transport.WhisperTransport, p *encryption.Protocol, d *datasyncnode.Node) *whisperAdapter {
 	return &whisperAdapter{
 		privateKey: pk,
 		transport:  t,
 		protocol:   p,
+		datasync:   d,
 	}
 }
 

@@ -14,6 +14,7 @@ require (
 	github.com/russolsen/transit v0.0.0-20180705123435-0794b4c4505a
 	github.com/status-im/doubleratchet v2.0.0+incompatible
 	github.com/status-im/migrate/v4 v4.3.1-status
+	github.com/status-im/mvds v0.0.18
 	github.com/status-im/status-go v0.29.0-beta.3
 	github.com/status-im/whisper v1.4.14
 	github.com/stretchr/testify v1.3.0

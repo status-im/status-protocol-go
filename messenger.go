@@ -10,6 +10,12 @@ import (
 	"github.com/pkg/errors"
 	whisper "github.com/status-im/whisper/whisperv6"
 
+	datasyncnode "github.com/status-im/mvds/node"
+	datasyncstate "github.com/status-im/mvds/state"
+	datasyncstore "github.com/status-im/mvds/store"
+	"github.com/status-im/status-protocol-go/datasync"
+	datasyncpeer "github.com/status-im/status-protocol-go/datasync/peer"
+
 	"github.com/status-im/status-protocol-go/encryption"
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
 	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
@@ -46,6 +52,7 @@ type config struct {
 	onNewSharedSecretHandler  func([]*sharedsecret.Secret)
 	onSendContactCodeHandler  func(*encryption.ProtocolMessageSpec)
 
+	datasync        bool
 	publicChatNames []string
 	publicKeys      []*ecdsa.PublicKey
 	secrets         []filter.NegotiatedSecret
@@ -63,6 +70,13 @@ func WithOnNewInstallationsHandler(h func([]*multidevice.Installation)) func(c *
 func WithOnNewSharedSecret(h func([]*sharedsecret.Secret)) func(c *config) error {
 	return func(c *config) error {
 		c.onNewSharedSecretHandler = h
+		return nil
+	}
+}
+
+func WithDatasync() func(c *config) error {
+	return func(c *config) error {
+		c.datasync = true
 		return nil
 	}
 }
@@ -162,11 +176,27 @@ func NewMessenger(
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to initialize messages db")
 	}
+	var dataSyncNode *datasyncnode.Node
+
+	if c.datasync {
+		dataSyncTransport := datasync.NewDataSyncNodeTransport()
+		dataSyncStore := datasyncstore.NewDummyStore()
+		dataSyncNode = datasyncnode.NewNode(
+			&dataSyncStore,
+			dataSyncTransport,
+			datasyncstate.NewSyncState(), // @todo sqlite syncstate
+			datasync.CalculateSendTime,
+			0,
+			datasyncpeer.PublicKeyToPeerID(identity.PublicKey),
+			datasyncnode.BATCH,
+		)
+		dataSyncNode.Start()
+	}
 
 	messenger = &Messenger{
 		identity:    identity,
 		persistence: &sqlitePersistence{db: messagesDB},
-		adapter:     newWhisperAdapter(identity, t, encryptionProtocol),
+		adapter:     newWhisperAdapter(identity, t, encryptionProtocol, nil),
 		encryptor:   encryptionProtocol,
 		ownMessages: make(map[string][]*protocol.Message),
 	}

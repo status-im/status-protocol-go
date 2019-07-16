@@ -83,6 +83,12 @@ github.com/status-im/migrate/v4
 github.com/status-im/migrate/v4/database/sqlcipher
 github.com/status-im/migrate/v4/source/go_bindata
 github.com/status-im/migrate/v4/database/postgres
+# github.com/status-im/mvds v0.0.18
+github.com/status-im/mvds/node
+github.com/status-im/mvds/protobuf
+github.com/status-im/mvds/state
+github.com/status-im/mvds/store
+github.com/status-im/mvds/transport
 # github.com/status-im/status-go v0.29.0-beta.3
 github.com/status-im/status-go/mailserver
 github.com/status-im/status-go/mailserver/migrations
