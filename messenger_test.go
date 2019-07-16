@@ -81,7 +81,7 @@ func (s *MessengerSuite) SetupTest() {
 	config := whisper.DefaultConfig
 	config.MinimumAcceptedPOW = 0
 	shh := whisper.New(&config)
-	shh.Start(nil)
+	s.Require().NoError(shh.Start(nil))
 
 	s.m, err = NewMessenger(
 		s.privateKey,

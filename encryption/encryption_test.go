@@ -88,7 +88,8 @@ func (s *EncryptionServiceTestSuite) TestGetBundle() {
 
 	aliceBundle2, err := s.alice.GetBundle(aliceKey)
 	s.Require().NoError(err)
-	s.Equal(aliceBundle1, aliceBundle2, "It returns the same bundle")
+	s.Equal(aliceBundle1.GetSignedPreKeys(), aliceBundle2.GetSignedPreKeys(), "It returns the same signed pre keys")
+	s.NotEqual(aliceBundle1.Timestamp, aliceBundle2.Timestamp, "It refreshes the timestamp")
 }
 
 // Alice sends Bob an encrypted message with DH using an ephemeral key
