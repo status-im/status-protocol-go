@@ -63,6 +63,8 @@ type ChatsManager struct {
 	privateKey  *ecdsa.PrivateKey
 	keys        map[string][]byte // a cache of symmetric keys derived from passwords
 
+	genericDiscoveryTopicEnabled bool
+
 	mutex sync.Mutex
 	chats map[string]*Chat
 }
@@ -82,8 +84,10 @@ func New(db *sql.DB, w *whisper.Whisper, privateKey *ecdsa.PrivateKey) (*ChatsMa
 	}, nil
 }
 
-func (s *ChatsManager) Init(chatIDs []string, publicKeys []*ecdsa.PublicKey, negotiated []NegotiatedSecret) ([]*Chat, error) {
-	log.Printf("[FiltersManager::Init] initializing")
+func (s *ChatsManager) Init(chatIDs []string, publicKeys []*ecdsa.PublicKey, negotiated []NegotiatedSecret, genericDiscoveryTopicEnabled bool) ([]*Chat, error) {
+	log.Printf("[ChatsManager::Init] initializing")
+
+	s.genericDiscoveryTopicEnabled = genericDiscoveryTopicEnabled
 
 	keys, err := s.persistence.All()
 	if err != nil {
@@ -273,8 +277,8 @@ func (s *ChatsManager) LoadNegotiated(secret NegotiatedSecret) (*Chat, error) {
 	return chat, nil
 }
 
-// loadDiscovery adds two discovery filters: for generic discovery topic
-// and for the personal discovery topic.
+// LoadDiscovery adds 1-2 discovery filters: one for generic discovery topic (if enabled)
+// and one for the personal discovery topic.
 func (s *ChatsManager) LoadDiscovery() ([]*Chat, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -284,36 +288,25 @@ func (s *ChatsManager) LoadDiscovery() ([]*Chat, error) {
 	// Check if chats are already loaded.
 	var result []*Chat
 
-	if chat, ok := s.chats[DiscoveryTopic]; ok {
-		result = append(result, chat)
+	expectedTopicCount := 1
+
+	if s.genericDiscoveryTopicEnabled {
+		expectedTopicCount = 2
+		if chat, ok := s.chats[DiscoveryTopic]; ok {
+			result = append(result, chat)
+		}
 	}
 	if chat, ok := s.chats[personalDiscoveryTopic]; ok {
 		result = append(result, chat)
 	}
 
-	if len(result) == 2 {
+	if len(result) == expectedTopicCount {
 		return result, nil
 	}
 
-	// Load generic discovery topic.
+	var discoveryResponse *Filter
+	var err error
 	identityStr := publicKeyToStr(&s.privateKey.PublicKey)
-
-	discoveryChat := &Chat{
-		ChatID:    DiscoveryTopic,
-		Identity:  identityStr,
-		Discovery: true,
-		Listen:    true,
-	}
-
-	discoveryResponse, err := s.addAsymmetric(discoveryChat.ChatID, true)
-	if err != nil {
-		return nil, err
-	}
-
-	discoveryChat.Topic = discoveryResponse.Topic
-	discoveryChat.FilterID = discoveryResponse.FilterID
-
-	s.chats[discoveryChat.ChatID] = discoveryChat
 
 	// Load personal discovery
 	personalDiscoveryChat := &Chat{
@@ -333,10 +326,32 @@ func (s *ChatsManager) LoadDiscovery() ([]*Chat, error) {
 
 	s.chats[personalDiscoveryChat.ChatID] = personalDiscoveryChat
 
-	return []*Chat{discoveryChat, personalDiscoveryChat}, nil
+	if s.genericDiscoveryTopicEnabled {
+		// Load generic discovery topic.
+		discoveryChat := &Chat{
+			ChatID:    DiscoveryTopic,
+			Identity:  identityStr,
+			Discovery: true,
+			Listen:    true,
+		}
+
+		discoveryResponse, err = s.addAsymmetric(discoveryChat.ChatID, true)
+		if err != nil {
+			return nil, err
+		}
+
+		discoveryChat.Topic = discoveryResponse.Topic
+		discoveryChat.FilterID = discoveryResponse.FilterID
+
+		s.chats[discoveryChat.ChatID] = discoveryChat
+
+		return []*Chat{discoveryChat, personalDiscoveryChat}, nil
+	}
+
+	return []*Chat{personalDiscoveryChat}, nil
 }
 
-// loadPublic adds a filter for a public chat.
+// LoadPublic adds a filter for a public chat.
 func (s *ChatsManager) LoadPublic(chatID string) (*Chat, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -472,7 +487,7 @@ func (s *ChatsManager) addAsymmetric(chatID string, listen bool) (*Filter, error
 	return &Filter{FilterID: id, Topic: whisper.BytesToTopic(topic)}, nil
 }
 
-// Get returns a negotiated chat given an identity
+// GetNegotiated returns a negotiated chat given an identity
 func (s *ChatsManager) GetNegotiated(identity *ecdsa.PublicKey) *Chat {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -481,7 +496,7 @@ func (s *ChatsManager) GetNegotiated(identity *ecdsa.PublicKey) *Chat {
 }
 
 // DEPRECATED
-func (s *ChatsManager) InitDeprecated(chats []*Chat, secrets []NegotiatedSecret) ([]*Chat, error) {
+func (s *ChatsManager) InitDeprecated(chats []*Chat, secrets []NegotiatedSecret, genericDiscoveryTopicEnabled bool) ([]*Chat, error) {
 	var (
 		chatIDs    []string
 		publicKeys []*ecdsa.PublicKey
@@ -505,7 +520,7 @@ func (s *ChatsManager) InitDeprecated(chats []*Chat, secrets []NegotiatedSecret)
 		}
 	}
 
-	return s.Init(chatIDs, publicKeys, secrets)
+	return s.Init(chatIDs, publicKeys, secrets, genericDiscoveryTopicEnabled)
 }
 
 // DEPRECATED
