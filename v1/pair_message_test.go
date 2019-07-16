@@ -21,6 +21,7 @@ func TestDecodePairMessageMessage(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, StatusMessage{
 		Message: testPairMessageStruct,
+		ID:      MessageID(testPairMessageBytes),
 	}, val)
 }
 
@@ -33,5 +34,6 @@ func TestEncodePairMessage(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, StatusMessage{
 		Message: testPairMessageStruct,
+		ID:      MessageID(data),
 	}, val)
 }

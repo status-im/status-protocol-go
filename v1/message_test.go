@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
 )
 
@@ -24,6 +25,7 @@ func TestDecodeMessage(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, StatusMessage{
 		Message: testMessageStruct,
+		ID:      MessageID(testMessageBytes),
 	}, val)
 }
 
@@ -49,6 +51,41 @@ func TestEncodeMessage(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, StatusMessage{
 		Message: testMessageStruct,
+		ID:      MessageID(data),
+	}, val)
+}
+
+func TestWrappedMessageWithSignature(t *testing.T) {
+	key, err := crypto.GenerateKey()
+	require.NoError(t, err)
+
+	data, err := EncodeMessage(testMessageStruct)
+	require.NoError(t, err)
+	wrappedMessage, err := WrapMessageV1(data, key)
+	require.NoError(t, err)
+	// Decode it back to a struct because, for example, map encoding is non-deterministic
+	// and it is not possible to compare bytes.
+	val, err := DecodeMessage(wrappedMessage)
+	require.NoError(t, err)
+	require.EqualValues(t, StatusMessage{
+		Message:   testMessageStruct,
+		ID:        MessageID(data),
+		SigPubKey: &key.PublicKey,
+	}, val)
+}
+
+func TestWrappedMessageWithoutSignature(t *testing.T) {
+	data, err := EncodeMessage(testMessageStruct)
+	require.NoError(t, err)
+	wrappedMessage, err := WrapMessageV1(data, nil)
+	require.NoError(t, err)
+	// Decode it back to a struct because, for example, map encoding is non-deterministic
+	// and it is not possible to compare bytes.
+	val, err := DecodeMessage(wrappedMessage)
+	require.NoError(t, err)
+	require.EqualValues(t, StatusMessage{
+		Message: testMessageStruct,
+		ID:      MessageID(data),
 	}, val)
 }
 
