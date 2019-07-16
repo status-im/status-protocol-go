@@ -155,9 +155,10 @@ func (p *Protocol) addBundle(myIdentityKey *ecdsa.PrivateKey, msg *ProtocolMessa
 		return err
 	}
 
+	log.Printf("[Protocol::addBundle] adding bundle to the message with installatoins %#v", installations)
+
 	bundle, err := p.encryptor.CreateBundle(myIdentityKey, installations)
 	if err != nil {
-		// // p.log.Error("encryption-service", "error creating bundle", err)
 		return err
 	}
 
@@ -287,6 +288,8 @@ func (p *Protocol) ProcessPublicBundle(myIdentityKey *ecdsa.PrivateKey, bundle *
 		return nil, err
 	}
 
+	log.Printf("[Protocol::ProcessPublicBundle] recovered %d installation from ours %t", len(installations), fromOurs)
+
 	// TODO(adam): why do we add installations using identity obtained from GetIdentity()
 	// instead of the output of crypto.CompressPubkey()? I tried the second option
 	// and the unit tests TestTopic and TestMaxDevices fail.
@@ -322,6 +325,7 @@ func (p *Protocol) recoverInstallationsFromBundle(myIdentityKey *ecdsa.PrivateKe
 	signedPreKeys := bundle.GetSignedPreKeys()
 
 	for installationID, signedPreKey := range signedPreKeys {
+		log.Printf("[Protocol::recoverInstallationsFromBundle] recovered installation %s", installationID)
 		if installationID != p.multidevice.InstallationID() {
 			installations = append(installations, &multidevice.Installation{
 				Identity: theirIdentityStr,
