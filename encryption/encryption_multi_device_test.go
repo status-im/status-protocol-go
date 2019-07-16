@@ -3,7 +3,7 @@ package encryption
 import (
 	"crypto/ecdsa"
 	"fmt"
-	"os"
+	"io/ioutil"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/crypto"
@@ -23,7 +23,7 @@ func TestEncryptionServiceMultiDeviceSuite(t *testing.T) {
 }
 
 type serviceAndKey struct {
-	services []*ProtocolService
+	services []*Protocol
 	key      *ecdsa.PrivateKey
 }
 
@@ -40,41 +40,29 @@ func setupUser(user string, s *EncryptionServiceMultiDeviceSuite, n int) error {
 
 	s.services[user] = &serviceAndKey{
 		key:      key,
-		services: make([]*ProtocolService, n),
+		services: make([]*Protocol, n),
 	}
 
 	for i := 0; i < n; i++ {
 		installationID := fmt.Sprintf("%s%d", user, i+1)
-		dbPath := fmt.Sprintf("/tmp/%s.db", installationID)
-
-		os.Remove(dbPath)
-
-		persistence, err := NewSQLLitePersistence(dbPath, "key")
+		installationDir := fmt.Sprintf("sqlite-persistence-test-%s", installationID)
+		dir, err := ioutil.TempDir("", installationDir)
 		if err != nil {
 			return err
 		}
-		// Initialize sharedsecret
-		multideviceConfig := &multidevice.Config{
-			MaxInstallations: n - 1,
-			InstallationID:   installationID,
-			ProtocolVersion:  1,
-		}
 
-		sharedSecretService := sharedsecret.NewService(persistence.GetSharedSecretStorage())
-		multideviceService := multidevice.New(multideviceConfig, persistence.GetMultideviceStorage())
-
-		protocol := NewProtocolService(
-			NewEncryptionService(
-				persistence,
-				DefaultEncryptionServiceConfig(installationID)),
-			sharedSecretService,
-			multideviceService,
+		protocol, err := New(
+			dir,
+			"some-key",
+			installationID,
 			func(s []*multidevice.Installation) {},
 			func(s []*sharedsecret.Secret) {},
+			func(*ProtocolMessageSpec) {},
 		)
-
+		if err != nil {
+			return err
+		}
 		s.services[user].services[i] = protocol
-
 	}
 
 	return nil
@@ -204,7 +192,7 @@ func pairDevices(s *serviceAndKey, target int) error {
 			return err
 		}
 
-		err = device.EnableInstallation(&s.key.PublicKey, s.services[i].encryption.config.InstallationID)
+		err = device.EnableInstallation(&s.key.PublicKey, s.services[i].encryptor.config.InstallationID)
 		if err != nil {
 			return nil
 		}

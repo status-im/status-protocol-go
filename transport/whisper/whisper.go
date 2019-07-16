@@ -4,24 +4,24 @@ import (
 	"context"
 	"crypto/ecdsa"
 
+	"github.com/status-im/status-protocol-go/transport/whisper/filter"
 	whisper "github.com/status-im/whisper/whisperv6"
-
-	"github.com/status-im/status-protocol-go/subscription"
 )
-
-type KeysManager interface {
-	PrivateKey() *ecdsa.PrivateKey
-	AddOrGetKeyPair(*ecdsa.PrivateKey) (string, error)
-	AddOrGetSymKeyFromPassword(password string) (string, error)
-	GetRawSymKey(string) ([]byte, error)
-}
 
 // WhisperTransport defines an interface which each Whisper transport
 // should conform to.
 type WhisperTransport interface {
-	KeysManager() KeysManager
-	Subscribe(context.Context, chan<- *whisper.ReceivedMessage, *whisper.Filter) (*subscription.Subscription, error)
-	Send(context.Context, whisper.NewMessage) ([]byte, error)
+	JoinPublic(string) error
+	LeavePublic(string) error
+	JoinPrivate(*ecdsa.PublicKey) error
+	LeavePrivate(*ecdsa.PublicKey) error
+	RetrievePublicMessages(string) ([]*whisper.ReceivedMessage, error)
+	RetrievePrivateMessages(*ecdsa.PublicKey) ([]*whisper.ReceivedMessage, error)
+	SendPublic(context.Context, whisper.NewMessage, string) ([]byte, error)
+	SendPrivateWithSharedSecret(context.Context, whisper.NewMessage, *ecdsa.PublicKey, []byte) ([]byte, error)
+	SendPrivateWithPartitioned(context.Context, whisper.NewMessage, *ecdsa.PublicKey) ([]byte, error)
+	SendPrivateOnDiscovery(context.Context, whisper.NewMessage, *ecdsa.PublicKey) ([]byte, error)
+	ProcessNegotiatedSecret(filter.NegotiatedSecret) error
 	Request(context.Context, RequestOptions) error
 }
 
@@ -31,4 +31,18 @@ type RequestOptions struct {
 	Limit    int
 	From     int64 // in seconds
 	To       int64 // in seconds
+}
+
+const (
+	defaultPowTime = 1
+)
+
+func DefaultWhisperMessage() whisper.NewMessage {
+	msg := whisper.NewMessage{}
+
+	msg.TTL = 10
+	msg.PowTarget = 0.002
+	msg.PowTime = defaultPowTime
+
+	return msg
 }

@@ -1,6 +1,7 @@
 package encryption
 
 import (
+	"io/ioutil"
 	"os"
 	"testing"
 
@@ -17,60 +18,50 @@ func TestProtocolServiceTestSuite(t *testing.T) {
 
 type ProtocolServiceTestSuite struct {
 	suite.Suite
-	alice *ProtocolService
-	bob   *ProtocolService
+	aliceDir string
+	bobDir   string
+	alice    *Protocol
+	bob      *Protocol
 }
 
 func (s *ProtocolServiceTestSuite) SetupTest() {
-	aliceDBPath := "/tmp/alice.db"
+	var err error
+
+	s.aliceDir, err = ioutil.TempDir("", "alice.db")
+	s.Require().NoError(err)
 	aliceDBKey := "alice"
-	bobDBPath := "/tmp/bob.db"
+
+	s.bobDir, err = ioutil.TempDir("", "bob.db")
+	s.Require().NoError(err)
 	bobDBKey := "bob"
-
-	os.Remove(aliceDBPath)
-	os.Remove(bobDBPath)
-
-	alicePersistence, err := NewSQLLitePersistence(aliceDBPath, aliceDBKey)
-	if err != nil {
-		panic(err)
-	}
-
-	bobPersistence, err := NewSQLLitePersistence(bobDBPath, bobDBKey)
-	if err != nil {
-		panic(err)
-	}
 
 	addedBundlesHandler := func(addedBundles []*multidevice.Installation) {}
 	onNewSharedSecretHandler := func(secret []*sharedsecret.Secret) {}
 
-	aliceMultideviceConfig := &multidevice.Config{
-		MaxInstallations: 3,
-		InstallationID:   "1",
-		ProtocolVersion:  ProtocolVersion,
-	}
-
-	s.alice = NewProtocolService(
-		NewEncryptionService(alicePersistence, DefaultEncryptionServiceConfig("1")),
-		sharedsecret.NewService(alicePersistence.GetSharedSecretStorage()),
-		multidevice.New(aliceMultideviceConfig, alicePersistence.GetMultideviceStorage()),
+	s.alice, err = New(
+		s.aliceDir,
+		aliceDBKey,
+		"1",
 		addedBundlesHandler,
 		onNewSharedSecretHandler,
+		func(*ProtocolMessageSpec) {},
 	)
+	s.Require().NoError(err)
 
-	bobMultideviceConfig := &multidevice.Config{
-		MaxInstallations: 3,
-		InstallationID:   "2",
-		ProtocolVersion:  ProtocolVersion,
-	}
-
-	s.bob = NewProtocolService(
-		NewEncryptionService(bobPersistence, DefaultEncryptionServiceConfig("2")),
-		sharedsecret.NewService(bobPersistence.GetSharedSecretStorage()),
-		multidevice.New(bobMultideviceConfig, bobPersistence.GetMultideviceStorage()),
+	s.bob, err = New(
+		s.bobDir,
+		bobDBKey,
+		"2",
 		addedBundlesHandler,
 		onNewSharedSecretHandler,
+		func(*ProtocolMessageSpec) {},
 	)
+	s.Require().NoError(err)
+}
 
+func (s *ProtocolServiceTestSuite) TearDownTest() {
+	os.Remove(s.aliceDir)
+	os.Remove(s.bobDir)
 }
 
 func (s *ProtocolServiceTestSuite) TestBuildPublicMessage() {
@@ -84,7 +75,7 @@ func (s *ProtocolServiceTestSuite) TestBuildPublicMessage() {
 	s.NoError(err)
 	s.NotNil(msg, "It creates a message")
 
-	s.NotNilf(msg.GetBundles(), "It adds a bundle to the message")
+	s.NotNilf(msg.Message.GetBundles(), "It adds a bundle to the message")
 }
 
 func (s *ProtocolServiceTestSuite) TestBuildDirectMessage() {

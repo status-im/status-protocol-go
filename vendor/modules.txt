@@ -7,22 +7,22 @@ github.com/davecgh/go-spew/spew
 # github.com/deckarep/golang-set v1.7.1
 github.com/deckarep/golang-set
 # github.com/ethereum/go-ethereum v1.8.27 => github.com/status-im/go-ethereum v1.8.27-status.4
-github.com/ethereum/go-ethereum/common/hexutil
 github.com/ethereum/go-ethereum/crypto
 github.com/ethereum/go-ethereum/crypto/secp256k1
-github.com/ethereum/go-ethereum/event
 github.com/ethereum/go-ethereum/crypto/ecies
 github.com/ethereum/go-ethereum/common
+github.com/ethereum/go-ethereum/common/hexutil
 github.com/ethereum/go-ethereum/p2p/enode
 github.com/ethereum/go-ethereum/rlp
 github.com/ethereum/go-ethereum/common/math
-github.com/ethereum/go-ethereum/common/mclock
+github.com/ethereum/go-ethereum/event
 github.com/ethereum/go-ethereum/log
 github.com/ethereum/go-ethereum/metrics
 github.com/ethereum/go-ethereum/p2p
 github.com/ethereum/go-ethereum/rpc
 github.com/ethereum/go-ethereum/p2p/enr
 github.com/ethereum/go-ethereum/p2p/netutil
+github.com/ethereum/go-ethereum/common/mclock
 github.com/ethereum/go-ethereum/common/bitutil
 github.com/ethereum/go-ethereum/p2p/discover
 github.com/ethereum/go-ethereum/p2p/discv5
@@ -110,8 +110,8 @@ github.com/syndtr/goleveldb/leveldb/table
 # golang.org/x/crypto v0.0.0-20190701094942-4def268fd1a4
 golang.org/x/crypto/hkdf
 golang.org/x/crypto/sha3
-golang.org/x/crypto/curve25519
 golang.org/x/crypto/pbkdf2
+golang.org/x/crypto/curve25519
 # golang.org/x/net v0.0.0-20190628185345-da137c7871d7
 golang.org/x/net/context
 golang.org/x/net/websocket

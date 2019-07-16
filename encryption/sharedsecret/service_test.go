@@ -6,37 +6,42 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/status-im/status-protocol-go/encryption/internal/storage"
+	migrations "github.com/status-im/status-protocol-go/encryption/internal/sqlite"
+	"github.com/status-im/status-protocol-go/sqlite"
 	"github.com/stretchr/testify/suite"
 )
 
 func TestServiceTestSuite(t *testing.T) {
-	suite.Run(t, new(ServiceTestSuite))
+	suite.Run(t, new(SharedSecretTestSuite))
 }
 
-type ServiceTestSuite struct {
+type SharedSecretTestSuite struct {
 	suite.Suite
-	service *Service
+	service *SharedSecret
 	path    string
 }
 
-func (s *ServiceTestSuite) SetupTest() {
+func (s *SharedSecretTestSuite) SetupTest() {
 	dbFile, err := ioutil.TempFile(os.TempDir(), "sharedsecret")
 	s.Require().NoError(err)
 	s.path = dbFile.Name()
 
-	db, err := storage.Open(s.path, "", 0)
-
+	db, err := sqlite.Open(s.path, "", sqlite.MigrationConfig{
+		AssetNames:migrations.AssetNames(),
+		AssetGetter: func(name string) ([]byte, error) {
+			return migrations.Asset(name)
+		},
+	})
 	s.Require().NoError(err)
 
-	s.service = NewService(NewSQLLitePersistence(db))
+	s.service = New(db)
 }
 
-func (s *ServiceTestSuite) TearDownTest() {
+func (s *SharedSecretTestSuite) TearDownTest() {
 	os.Remove(s.path)
 }
 
-func (s *ServiceTestSuite) TestSingleInstallationID() {
+func (s *SharedSecretTestSuite) TestSingleInstallationID() {
 	ourInstallationID := "our"
 	installationID1 := "1"
 	installationID2 := "2"
@@ -48,31 +53,31 @@ func (s *ServiceTestSuite) TestSingleInstallationID() {
 	s.Require().NoError(err)
 
 	// We receive a message from installationID1
-	sharedKey1, err := s.service.Receive(myKey, &theirKey.PublicKey, installationID1)
+	sharedKey1, err := s.service.Generate(myKey, &theirKey.PublicKey, installationID1)
 	s.Require().NoError(err)
 	s.Require().NotNil(sharedKey1, "it generates a shared key")
 
 	// We want to send a message to installationID1
-	sharedKey2, agreed2, err := s.service.Send(myKey, ourInstallationID, &theirKey.PublicKey, []string{installationID1})
+	sharedKey2, agreed2, err := s.service.Agreed(myKey, ourInstallationID, &theirKey.PublicKey, []string{installationID1})
 	s.Require().NoError(err)
 	s.Require().True(agreed2)
 	s.Require().NotNil(sharedKey2, "We can retrieve a shared secret")
 	s.Require().Equal(sharedKey1, sharedKey2, "The shared secret is the same as the one stored")
 
 	// We want to send a message to multiple installationIDs, one of which we haven't never communicated with
-	sharedKey3, agreed3, err := s.service.Send(myKey, ourInstallationID, &theirKey.PublicKey, []string{installationID1, installationID2})
+	sharedKey3, agreed3, err := s.service.Agreed(myKey, ourInstallationID, &theirKey.PublicKey, []string{installationID1, installationID2})
 	s.Require().NoError(err)
 	s.Require().NotNil(sharedKey3, "A shared key is returned")
 	s.Require().False(agreed3)
 
 	// We receive a message from installationID2
-	sharedKey4, err := s.service.Receive(myKey, &theirKey.PublicKey, installationID2)
+	sharedKey4, err := s.service.Generate(myKey, &theirKey.PublicKey, installationID2)
 	s.Require().NoError(err)
 	s.Require().NotNil(sharedKey4, "it generates a shared key")
 	s.Require().Equal(sharedKey1, sharedKey4, "It generates the same key")
 
 	// We want to send a message to installationID 1 & 2, both have been
-	sharedKey5, agreed5, err := s.service.Send(myKey, ourInstallationID, &theirKey.PublicKey, []string{installationID1, installationID2})
+	sharedKey5, agreed5, err := s.service.Agreed(myKey, ourInstallationID, &theirKey.PublicKey, []string{installationID1, installationID2})
 	s.Require().NoError(err)
 	s.Require().NotNil(sharedKey5, "We can retrieve a shared secret")
 	s.Require().True(agreed5)
@@ -80,7 +85,7 @@ func (s *ServiceTestSuite) TestSingleInstallationID() {
 
 }
 
-func (s *ServiceTestSuite) TestAll() {
+func (s *SharedSecretTestSuite) TestAll() {
 	installationID1 := "1"
 	installationID2 := "2"
 
@@ -94,12 +99,12 @@ func (s *ServiceTestSuite) TestAll() {
 	s.Require().NoError(err)
 
 	// We receive a message from user 1
-	sharedKey1, err := s.service.Receive(myKey, &theirKey1.PublicKey, installationID1)
+	sharedKey1, err := s.service.Generate(myKey, &theirKey1.PublicKey, installationID1)
 	s.Require().NoError(err)
 	s.Require().NotNil(sharedKey1, "it generates a shared key")
 
 	// We receive a message from user 2
-	sharedKey2, err := s.service.Receive(myKey, &theirKey2.PublicKey, installationID2)
+	sharedKey2, err := s.service.Generate(myKey, &theirKey2.PublicKey, installationID2)
 	s.Require().NoError(err)
 	s.Require().NotNil(sharedKey2, "it generates a shared key")
 

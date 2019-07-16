@@ -6,11 +6,11 @@ import (
 )
 
 type Persistence interface {
-	// Add adds a shared secret, associated with an identity and an installationID
+	// Add adds a shared secret, associated with an identity and an installationID.
 	Add(identity []byte, secret []byte, installationID string) error
-	// Get returns a shared secret associated with multiple installationIDs
+	// Get returns a shared secret associated with multiple installationIDs.
 	Get(identity []byte, installationIDs []string) (*Response, error)
-	// All returns an array of shared secrets, each one of them represented
+	// All returns an array of shared secrets, each one of them represented.
 	// as a byte array
 	All() ([][][]byte, error)
 }
@@ -20,15 +20,15 @@ type Response struct {
 	installationIDs map[string]bool
 }
 
-type SQLLitePersistence struct {
+type sqlitePersistence struct {
 	db *sql.DB
 }
 
-func NewSQLLitePersistence(db *sql.DB) *SQLLitePersistence {
-	return &SQLLitePersistence{db: db}
+func newSQLitePersistence(db *sql.DB) *sqlitePersistence {
+	return &sqlitePersistence{db: db}
 }
 
-func (s *SQLLitePersistence) Add(identity []byte, secret []byte, installationID string) error {
+func (s *sqlitePersistence) Add(identity []byte, secret []byte, installationID string) error {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
@@ -62,7 +62,7 @@ func (s *SQLLitePersistence) Add(identity []byte, secret []byte, installationID 
 	return tx.Commit()
 }
 
-func (s *SQLLitePersistence) Get(identity []byte, installationIDs []string) (*Response, error) {
+func (s *sqlitePersistence) Get(identity []byte, installationIDs []string) (*Response, error) {
 	response := &Response{
 		installationIDs: make(map[string]bool),
 	}
@@ -74,14 +74,14 @@ func (s *SQLLitePersistence) Get(identity []byte, installationIDs []string) (*Re
 
 	/* #nosec */
 	query := `SELECT secret, id
-	          FROM secrets t
-		  JOIN
-		  secret_installation_ids tid
-		  ON t.identity = tid.identity_id
-		  WHERE
-		  t.identity = ?
-		  AND
-		  tid.id IN (?` + strings.Repeat(",?", len(installationIDs)-1) + `)`
+	    	FROM secrets t
+			JOIN
+		  		secret_installation_ids tid
+		  	ON t.identity = tid.identity_id
+		  	WHERE
+		  		t.identity = ?
+		  	AND
+		  		tid.id IN (?` + strings.Repeat(",?", len(installationIDs)-1) + `)`
 
 	rows, err := s.db.Query(query, args...)
 	if err != nil && err != sql.ErrNoRows {
@@ -103,9 +103,8 @@ func (s *SQLLitePersistence) Get(identity []byte, installationIDs []string) (*Re
 	return response, nil
 }
 
-func (s *SQLLitePersistence) All() ([][][]byte, error) {
-	query := `SELECT identity, secret
-	          FROM secrets`
+func (s *sqlitePersistence) All() ([][][]byte, error) {
+	query := "SELECT identity, secret FROM secrets"
 
 	var secrets [][][]byte
 

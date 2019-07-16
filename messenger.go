@@ -3,316 +3,321 @@ package statusproto
 import (
 	"context"
 	"crypto/ecdsa"
-	"fmt"
 	"log"
-	"sync"
+	"path/filepath"
 	"time"
 
-	"github.com/ethereum/go-ethereum/event"
 	"github.com/pkg/errors"
+	whisper "github.com/status-im/whisper/whisperv6"
 
+	"github.com/status-im/status-protocol-go/encryption"
+	"github.com/status-im/status-protocol-go/encryption/multidevice"
+	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
+	migrations "github.com/status-im/status-protocol-go/internal/sqlite"
+	"github.com/status-im/status-protocol-go/sqlite"
+	transport "github.com/status-im/status-protocol-go/transport/whisper"
+	"github.com/status-im/status-protocol-go/transport/whisper/filter"
 	protocol "github.com/status-im/status-protocol-go/v1"
 )
 
+var (
+	ErrChatIDEmpty    = errors.New("chat ID is empty")
+	ErrNotImplemented = errors.New("not implemented")
+)
+
+// Messenger is a entity managing chats and messages.
+// It acts as a bridge between the application and encryption
+// layers.
+// It needs to expose an interface to manage installations
+// because installations are managed by the user.
+// Similarly, it needs to expose an interface to manage
+// mailservers because they can also be managed by the user.
 type Messenger struct {
-	identity *ecdsa.PrivateKey
-	proto    protocol.Protocol
-	db       database
+	identity    *ecdsa.PrivateKey
+	persistence persistence
+	adapter     *whisperAdapter
+	encryptor   *encryption.Protocol
 
-	mu      sync.Mutex         // guards public and private maps
-	public  map[string]*Stream // key is Contact.Topic
-	private map[string]*Stream // key is Contact.Topic
-
-	events *event.Feed
+	ownMessages map[string][]*protocol.Message
 }
 
-func NewMessenger(identity *ecdsa.PrivateKey, proto protocol.Protocol, db database) *Messenger {
-	events := &event.Feed{}
-	return &Messenger{
-		identity: identity,
-		proto:    proto,
-		db:       newDatabaseWithEvents(db, events),
+type config struct {
+	onNewInstallationsHandler func([]*multidevice.Installation)
+	onNewSharedSecretHandler  func([]*sharedsecret.Secret)
+	onSendContactCodeHandler  func(*encryption.ProtocolMessageSpec)
 
-		public:  make(map[string]*Stream),
-		private: make(map[string]*Stream),
-		events:  events,
+	publicChatNames []string
+	publicKeys      []*ecdsa.PublicKey
+	secrets         []filter.NegotiatedSecret
+}
+
+type Option func(*config) error
+
+func WithOnNewInstallationsHandler(h func([]*multidevice.Installation)) func(c *config) error {
+	return func(c *config) error {
+		c.onNewInstallationsHandler = h
+		return nil
 	}
 }
 
-func (m *Messenger) Start() error {
-	log.Printf("[Messenger::Start]")
+func WithOnNewSharedSecret(h func([]*sharedsecret.Secret)) func(c *config) error {
+	return func(c *config) error {
+		c.onNewSharedSecretHandler = h
+		return nil
+	}
+}
 
-	m.mu.Lock()
-	defer m.mu.Unlock()
+func WithChats(
+	publicChatNames []string,
+	publicKeys []*ecdsa.PublicKey,
+	secrets []filter.NegotiatedSecret,
+) func(c *config) error {
+	return func(c *config) error {
+		c.publicChatNames = publicChatNames
+		c.publicKeys = publicKeys
+		c.secrets = secrets
+		return nil
+	}
+}
 
-	contacts, err := m.db.Contacts()
-	if err != nil {
-		return errors.Wrap(err, "unable to read contacts from database")
+func NewMessenger(
+	identity *ecdsa.PrivateKey,
+	server transport.Server,
+	shh *whisper.Whisper,
+	dataDir string,
+	dbKey string,
+	installationID string,
+	opts ...Option,
+) (*Messenger, error) {
+	var messenger *Messenger
+
+	// Set default config fields.
+	c := config{
+		onNewInstallationsHandler: func(installations []*multidevice.Installation) {
+			for _, installation := range installations {
+				log.Printf(
+					"[onNewInstallationsHandler] received a new installation %s from %s",
+					installation.Identity, installation.ID,
+				)
+			}
+		},
+		onNewSharedSecretHandler: func(secrets []*sharedsecret.Secret) {
+			if err := messenger.handleSharedSecrets(secrets); err != nil {
+				log.Printf("[onNewSharedSecretHandler] failed to process secrets: %v", err)
+			}
+		},
+		onSendContactCodeHandler: func(messageSpec *encryption.ProtocolMessageSpec) {
+			log.Printf("[onSendContactCodeHandler] received a SendContactCode request")
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_, err := messenger.adapter.SendContactCode(ctx, messageSpec)
+			if err != nil {
+				log.Printf("[onSendContactCodeHandler] failed to send a contact code: %v", err)
+			}
+		},
 	}
 
-	// For each contact, a new Stream is created that subscribes to the protocol
-	// and forwards incoming messages to the Stream instance.
-	// We iterate over all contacts, however, there are two cases:
-	// (1) Public chats where each has a unique topic,
-	// (2) Private chats where a single or shared topic is used.
-	// This means that we don't know from which contact the message
-	// came from until it is examined.
-	for i := range contacts {
-		if err := m.addStream(contacts[i]); err != nil {
-			return err
+	for _, opt := range opts {
+		if err := opt(&c); err != nil {
+			return nil, err
 		}
 	}
 
-	log.Printf("[Messenger::Start] request messages from mail sever")
-
-	return m.RequestAll(context.Background(), true)
-}
-
-func (m *Messenger) Stop() {
-	log.Printf("[Messenger::Stop]")
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	for _, s := range m.private {
-		s.Stop()
-	}
-	for _, s := range m.public {
-		s.Stop()
-	}
-}
-
-// addStream creates a new Stream and adds it to the Messenger.
-// For contacts with public key, we just need to make sure
-// each possible topic has a stream. For a single topic
-// for all private conversations, the map will have a len of 1.
-// In the future, private conversations will have sharded topics,
-// which means there will be many conversation over a particular topic
-// but there will be more than one topic.
-func (m *Messenger) addStream(c Contact) error {
-	options, err := createSubscribeOptions(c)
-	if err != nil {
-		return errors.Wrap(err, "failed to create SubscribeOptions")
-	}
-
-	switch c.Type {
-	case ContactPrivate:
-		_, exist := m.private[c.Topic]
-		if exist {
-			return nil
-		}
-
-		stream := NewStream(
-			m.proto,
-			StreamStoreHandlerMultiplexed(m.db),
-		)
-		if err := stream.Start(context.Background(), options); err != nil {
-			return errors.Wrap(err, "can't subscribe to a stream")
-		}
-
-		m.private[c.Name] = stream
-	case ContactPublicRoom:
-		_, exist := m.public[c.Topic]
-		if exist {
-			return nil
-		}
-
-		stream := NewStream(
-			m.proto,
-			StreamStoreHandlerForContact(m.db, c),
-		)
-		if err := stream.Start(context.Background(), options); err != nil {
-			return errors.Wrap(err, "can't subscribe to a stream")
-		}
-
-		m.public[c.Name] = stream
-	default:
-		return fmt.Errorf("unsupported contect type: %s", c.Type)
-	}
-
-	return nil
-}
-
-func (m *Messenger) Join(ctx context.Context, c Contact) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if err := m.addStream(c); err != nil {
-		return err
-	}
-
-	opts := protocol.DefaultRequestOptions()
-	// NOTE(dshulyak) join ctx shouldn't have an impact on history timeout.
-	if err := m.Request(context.Background(), c, opts); err != nil {
-		return err
-	}
-	return m.db.UpdateHistories([]History{{Contact: c, Synced: opts.To}})
-}
-
-// Messages reads all messages from database.
-func (m *Messenger) Messages(c Contact, offset int64) ([]*protocol.Message, error) {
-	return m.db.NewMessages(c, offset)
-}
-
-func (m *Messenger) Request(ctx context.Context, c Contact, options protocol.RequestOptions) error {
-	err := enhanceRequestOptions(c, &options)
-	if err != nil {
-		return err
-	}
-	return m.proto.Request(ctx, options)
-}
-
-func (m *Messenger) requestHistories(ctx context.Context, histories []History, opts protocol.RequestOptions) error {
-	log.Printf("[Messenger::requestHistories] requesting messages for chats %+v: from %d to %d\n", opts.Chats, opts.From, opts.To)
-
-	start := time.Now()
-
-	err := m.proto.Request(ctx, opts)
-	if err != nil {
-		return err
-	}
-
-	log.Printf("[Messenger::requestHistories] requesting message for chats %+v finished in %s\n", opts.Chats, time.Since(start))
-
-	for i := range histories {
-		histories[i].Synced = opts.To
-	}
-	return m.db.UpdateHistories(histories)
-}
-
-func (m *Messenger) RequestAll(ctx context.Context, newest bool) error {
-	// FIXME(dshulyak) if newest is false request 24 hour of messages older then the
-	// earliest envelope for each contact.
-	histories, err := m.db.Histories()
-	if err != nil {
-		return errors.Wrap(err, "error fetching contacts")
-	}
-	var (
-		now               = time.Now()
-		synced, notsynced = splitIntoSyncedNotSynced(histories)
-		errors            = make(chan error, 2)
-		wg                sync.WaitGroup
+	t, err := transport.NewWhisperServiceTransport(
+		server,
+		shh,
+		identity,
+		dataDir,
+		dbKey,
+		nil,
 	)
-	if len(synced) != 0 {
-		wg.Add(1)
-		go func() {
-			errors <- m.requestHistories(ctx, synced, syncedToOpts(synced, now))
-			wg.Done()
-		}()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create a WhisperServiceTransport")
 	}
-	if len(notsynced) != 0 {
-		wg.Add(1)
-		go func() {
-			errors <- m.requestHistories(ctx, notsynced, notsyncedToOpts(notsynced, now))
-			wg.Done()
-		}()
+
+	if _, err := t.Init(c.publicChatNames, c.publicKeys, c.secrets); err != nil {
+		return nil, errors.Wrap(err, "failed to initialize WhisperServiceTransport")
 	}
-	wg.Wait()
 
-	log.Printf("[Messenger::RequestAll] finished requesting histories")
+	encryptionProtocol, err := encryption.New(
+		dataDir,
+		dbKey,
+		installationID,
+		c.onNewInstallationsHandler,
+		c.onNewSharedSecretHandler,
+		c.onSendContactCodeHandler,
+	)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create the encryption layer")
+	}
+	// TODO: consider removing identity as an argument to Start().
+	encryptionProtocol.Start(identity)
 
-	close(errors)
-	for err := range errors {
+	messagesDB, err := sqlite.Open(filepath.Join(dataDir, "messages.sql"), dbKey, sqlite.MigrationConfig{
+		AssetNames: migrations.AssetNames(),
+		AssetGetter: func(name string) ([]byte, error) {
+			return migrations.Asset(name)
+		},
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to initialize messages db")
+	}
+
+	messenger = &Messenger{
+		identity:    identity,
+		persistence: &sqlitePersistence{db: messagesDB},
+		adapter:     newWhisperAdapter(identity, t, encryptionProtocol),
+		encryptor:   encryptionProtocol,
+		ownMessages: make(map[string][]*protocol.Message),
+	}
+
+	return messenger, nil
+}
+
+func (m *Messenger) handleSharedSecrets(secrets []*sharedsecret.Secret) error {
+	return m.adapter.handleSharedSecrets(secrets)
+}
+
+func (m *Messenger) EnableInstallation(id string) error {
+	return m.encryptor.EnableInstallation(&m.identity.PublicKey, id)
+}
+
+func (m *Messenger) DisableInstallation(id string) error {
+	return m.encryptor.DisableInstallation(&m.identity.PublicKey, id)
+}
+
+func (m *Messenger) Installations() ([]*multidevice.Installation, error) {
+	return m.encryptor.GetOurInstallations(&m.identity.PublicKey)
+}
+
+func (m *Messenger) SetInstallationMetadata(id string, data *multidevice.InstallationMetadata) error {
+	return m.encryptor.SetInstallationMetadata(&m.identity.PublicKey, id, data)
+}
+
+// NOT_IMPLEMENTED
+func (m *Messenger) SelectMailserver(id string) error {
+	return ErrNotImplemented
+}
+
+// NOT_IMPLEMENTED
+func (m *Messenger) AddMailserver(enode string) error {
+	return ErrNotImplemented
+}
+
+// NOT_IMPLEMENTED
+func (m *Messenger) RemoveMailserver(id string) error {
+	return ErrNotImplemented
+}
+
+// NOT_IMPLEMENTED
+func (m *Messenger) Mailservers() ([]string, error) {
+	return nil, ErrNotImplemented
+}
+
+func (m *Messenger) Join(chat Chat) error {
+	if chat.PublicKey() != nil {
+		return m.adapter.JoinPrivate(chat.PublicKey())
+	} else if chat.PublicName() != "" {
+		return m.adapter.JoinPublic(chat.PublicName())
+	}
+	return errors.New("chat is neither public nor private")
+}
+
+func (m *Messenger) Leave(chat Chat) error {
+	if chat.PublicKey() != nil {
+		return m.adapter.LeavePrivate(chat.PublicKey())
+	} else if chat.PublicName() != "" {
+		return m.adapter.LeavePublic(chat.PublicName())
+	}
+	return errors.New("chat is neither public nor private")
+}
+
+func (m *Messenger) Send(ctx context.Context, chat Chat, data []byte) ([]byte, error) {
+	chatID := chat.ID()
+	if chatID == "" {
+		return nil, ErrChatIDEmpty
+	}
+
+	clock, err := m.persistence.LastMessageClock(chat.ID())
+	if err != nil {
+		return nil, err
+	}
+
+	if chat.PublicKey() != nil {
+		hash, message, err := m.adapter.SendPrivate(ctx, chat.PublicKey(), chat.ID(), data, clock)
 		if err != nil {
-			return err
+			return nil, err
 		}
-	}
-	return nil
-}
 
-func (m *Messenger) Send(c Contact, data []byte) error {
-	// FIXME(dshulyak) sending must be locked by contact to prevent sending second msg with same clock
-	clock, err := m.db.LastMessageClock(c)
-	if err != nil {
-		return errors.Wrap(err, "failed to read last message clock for contact")
-	}
-	var message protocol.Message
-
-	switch c.Type {
-	case ContactPublicRoom:
-		message = protocol.CreatePublicTextMessage(data, clock, c.Name)
-	case ContactPrivate:
-		message = protocol.CreatePrivateTextMessage(data, clock, c.Name)
-	default:
-		return fmt.Errorf("failed to send message: unsupported contact type")
-	}
-
-	encodedMessage, err := protocol.EncodeMessage(message)
-	if err != nil {
-		return errors.Wrap(err, "failed to encode message")
-	}
-	opts, err := createSendOptions(c)
-	if err != nil {
-		return errors.Wrap(err, "failed to prepare send options")
-	}
-
-	log.Printf("[Messenger::Send] sending message")
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	defer cancel()
-
-	hash, err := m.proto.Send(ctx, encodedMessage, opts)
-	if err != nil {
-		return errors.Wrap(err, "can't send a message")
-	}
-
-	log.Printf("[Messenger::Send] sent message with hash %x", hash)
-
-	message.ID = hash
-	message.SigPubKey = &m.identity.PublicKey
-	_, err = m.db.SaveMessages(c, []*protocol.Message{&message})
-	switch err {
-	case ErrMsgAlreadyExist:
-		log.Printf("[Messenger::Send] message with ID %x already exists", message.ID)
-		return nil
-	case nil:
-		return nil
-	default:
-		return errors.Wrap(err, "failed to save the message")
-	}
-}
-
-func (m *Messenger) RemoveContact(c Contact) error {
-	return m.db.DeleteContact(c)
-}
-
-func (m *Messenger) AddContact(c Contact) error {
-	return m.db.SaveContacts([]Contact{c})
-}
-
-func (m *Messenger) Contacts() ([]Contact, error) {
-	return m.db.Contacts()
-}
-
-func (m *Messenger) Leave(c Contact) error {
-	var stream *Stream
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	switch c.Type {
-	case ContactPublicRoom:
-		stream = m.public[c.Topic]
-		if stream != nil {
-			delete(m.public, c.Topic)
+		// Save our message because it won't be received from the transport layer.
+		message.ID = hash // a Message need ID to be properly stored in the db
+		message.SigPubKey = &m.identity.PublicKey
+		_, err = m.persistence.SaveMessages(chat.ID(), []*protocol.Message{message})
+		if err != nil {
+			return nil, err
 		}
-	case ContactPrivate:
-		// TODO: should we additionally block that peer?
-		stream = m.private[c.Topic]
-		if stream != nil {
-			delete(m.private, c.Topic)
-		}
+
+		// Cache it to be returned in Retrieve().
+		m.ownMessages[chatID] = append(m.ownMessages[chatID], message)
+
+		return hash, nil
+	} else if chat.PublicName() != "" {
+		return m.adapter.SendPublic(ctx, chat.PublicName(), chat.ID(), data, clock)
 	}
-
-	if stream == nil {
-		return errors.New("stream not found")
-	}
-
-	stream.Stop()
-
-	return nil
+	return nil, errors.New("chat is neither public nor private")
 }
 
-func (m *Messenger) Subscribe(events chan Event) event.Subscription {
-	return m.events.Subscribe(events)
+type RetrieveConfig struct {
+	From        time.Time
+	To          time.Time
+	latest      bool
+	last24Hours bool
+}
+
+var (
+	RetrieveLatest  = RetrieveConfig{latest: true}
+	RetrieveLastDay = RetrieveConfig{latest: true, last24Hours: true}
+)
+
+func (m *Messenger) Retrieve(ctx context.Context, chat Chat, c RetrieveConfig) (messages []*protocol.Message, err error) {
+	var latest []*protocol.Message
+
+	if chat.PublicKey() != nil {
+		latest, err = m.adapter.RetrievePrivateMessages(chat.PublicKey())
+		// Return any own messages for this chat as well.
+		if ownMessages, ok := m.ownMessages[chat.ID()]; ok {
+			latest = append(latest, ownMessages...)
+			delete(m.ownMessages, chat.ID())
+		}
+	} else if chat.PublicName() != "" {
+		latest, err = m.adapter.RetrievePublicMessages(chat.PublicName())
+	} else {
+		return nil, errors.New("chat is neither public nor private")
+	}
+
+	if err != nil {
+		err = errors.Wrap(err, "failed to retrieve messages")
+		return
+	}
+
+	_, err = m.persistence.SaveMessages(chat.ID(), latest)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to save latest messages")
+	}
+
+	return m.retrieveMessages(ctx, chat, c, latest)
+}
+
+func (m *Messenger) retrieveMessages(ctx context.Context, chat Chat, c RetrieveConfig, latest []*protocol.Message) (messages []*protocol.Message, err error) {
+	if !c.latest {
+		return m.persistence.Messages(chat.ID(), c.From, c.To)
+	}
+
+	if c.last24Hours {
+		to := time.Now()
+		from := to.Add(-time.Hour * 24)
+		return m.persistence.Messages(chat.ID(), from, to)
+	}
+
+	return latest, nil
 }

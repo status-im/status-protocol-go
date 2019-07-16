@@ -7,23 +7,25 @@ import (
 	"fmt"
 	"log"
 	"math/big"
+	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/pkg/errors"
 	"github.com/status-im/status-go/mailserver"
 	whisper "github.com/status-im/whisper/whisperv6"
 
-	"github.com/status-im/status-protocol-go/subscription"
+	"github.com/status-im/status-protocol-go/sqlite"
+	"github.com/status-im/status-protocol-go/transport/whisper/filter"
+	migrations "github.com/status-im/status-protocol-go/transport/whisper/internal/sqlite"
 )
 
 const (
-	// defaultWorkTime is a work time reported in messages sent to MailServer nodes.
-	defaultWorkTime = 5
 	// defaultRequestTimeout is the default request timeout in seconds
 	defaultRequestTimeout = 10
 )
@@ -33,7 +35,7 @@ var (
 	ErrNoMailservers = errors.New("no configured mailservers")
 )
 
-type WhisperServiceKeysManager struct {
+type whisperServiceKeysManager struct {
 	shh *whisper.Whisper
 
 	// Identity of the current user.
@@ -43,16 +45,12 @@ type WhisperServiceKeysManager struct {
 	passToSymKeyCache map[string]string
 }
 
-func (m *WhisperServiceKeysManager) PrivateKey() *ecdsa.PrivateKey {
-	return m.privateKey
-}
-
-func (m *WhisperServiceKeysManager) AddOrGetKeyPair(priv *ecdsa.PrivateKey) (string, error) {
+func (m *whisperServiceKeysManager) AddOrGetKeyPair(priv *ecdsa.PrivateKey) (string, error) {
 	// caching is handled in Whisper
 	return m.shh.AddKeyPair(priv)
 }
 
-func (m *WhisperServiceKeysManager) AddOrGetSymKeyFromPassword(password string) (string, error) {
+func (m *whisperServiceKeysManager) AddOrGetSymKeyFromPassword(password string) (string, error) {
 	m.passToSymKeyMutex.Lock()
 	defer m.passToSymKeyMutex.Unlock()
 
@@ -70,15 +68,17 @@ func (m *WhisperServiceKeysManager) AddOrGetSymKeyFromPassword(password string) 
 	return id, nil
 }
 
-func (m *WhisperServiceKeysManager) GetRawSymKey(id string) ([]byte, error) {
+func (m *whisperServiceKeysManager) RawSymKey(id string) ([]byte, error) {
 	return m.shh.GetSymKey(id)
 }
 
 // WhisperServiceTransport is a transport based on Whisper service.
 type WhisperServiceTransport struct {
-	node        server
+	node        Server
 	shh         *whisper.Whisper
-	keysManager *WhisperServiceKeysManager
+	shhAPI      *whisper.PublicWhisperAPI // only PublicWhisperAPI implements logic to send messages
+	keysManager *whisperServiceKeysManager
+	chats       *filter.ChatsManager
 
 	mailservers             []string
 	selectedMailServerEnode string
@@ -88,78 +88,194 @@ var _ WhisperTransport = (*WhisperServiceTransport)(nil)
 
 // NewWhisperService returns a new WhisperServiceTransport.
 func NewWhisperServiceTransport(
-	node server,
-	mailservers []string,
+	node Server,
 	shh *whisper.Whisper,
 	privateKey *ecdsa.PrivateKey,
+	dataDir string,
+	dbKey string,
+	mailservers []string,
 ) (*WhisperServiceTransport, error) {
-	// TODO: this should not be necessary after refactoring.
-	if err := shh.SelectKeyPair(privateKey); err != nil {
-		return nil, err
-	}
-
-	return &WhisperServiceTransport{
-		node:        node,
-		shh:         shh,
-		mailservers: mailservers,
-		keysManager: &WhisperServiceKeysManager{
-			shh:               shh,
-			privateKey:        privateKey,
-			passToSymKeyCache: make(map[string]string),
+	// DB is shared between this package and all sub-packages.
+	dbPath := filepath.Join(dataDir, "transport.sql")
+	db, err := sqlite.Open(dbPath, dbKey, sqlite.MigrationConfig{
+		AssetNames: migrations.AssetNames(),
+		AssetGetter: func(name string) ([]byte, error) {
+			return migrations.Asset(name)
 		},
-	}, nil
-}
-
-func (a *WhisperServiceTransport) KeysManager() KeysManager {
-	return a.keysManager
-}
-
-// Subscribe subscribes to a public chat using the Whisper service.
-func (a *WhisperServiceTransport) Subscribe(
-	ctx context.Context,
-	in chan<- *whisper.ReceivedMessage,
-	filter *whisper.Filter,
-) (*subscription.Subscription, error) {
-	filterID, err := a.shh.Subscribe(filter)
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	subWhisper := newWhisperSubscription(a.shh, filterID)
-	sub := subscription.New()
+	chats, err := filter.New(db, shh, privateKey)
+	if err != nil {
+		return nil, err
+	}
 
-	go func() {
-		defer subWhisper.Unsubscribe() // nolint: errcheck
-
-		t := time.NewTicker(time.Second)
-		defer t.Stop()
-
-		for {
-			select {
-			case <-t.C:
-				received, err := subWhisper.Messages()
-				if err != nil {
-					sub.Cancel(err)
-					return
-				}
-
-				for _, message := range received {
-					in <- message
-				}
-			case <-sub.Done():
-				return
-			}
-		}
-	}()
-
-	return sub, nil
+	return &WhisperServiceTransport{
+		node:   node,
+		shh:    shh,
+		shhAPI: whisper.NewPublicWhisperAPI(shh),
+		keysManager: &whisperServiceKeysManager{
+			shh:               shh,
+			privateKey:        privateKey,
+			passToSymKeyCache: make(map[string]string),
+		},
+		chats:       chats,
+		mailservers: mailservers,
+	}, nil
+}
+func (a *WhisperServiceTransport) Init(
+	chatIDs []string,
+	publicKeys []*ecdsa.PublicKey,
+	negotiated []filter.NegotiatedSecret,
+) ([]*filter.Chat, error) {
+	return a.chats.Init(chatIDs, publicKeys, negotiated)
 }
 
-// Send sends a new message using the Whisper service.
-func (a *WhisperServiceTransport) Send(ctx context.Context, newMessage whisper.NewMessage) ([]byte, error) {
-	// Only public Whisper API implements logic to send messages.
-	shhAPI := whisper.NewPublicWhisperAPI(a.shh)
-	return shhAPI.Post(ctx, newMessage)
+func (a *WhisperServiceTransport) ProcessNegotiatedSecret(secret filter.NegotiatedSecret) error {
+	_, err := a.chats.LoadNegotiated(secret)
+	return err
+}
+
+func (a *WhisperServiceTransport) JoinPublic(chatID string) error {
+	_, err := a.chats.LoadPublic(chatID)
+	return err
+}
+
+func (a *WhisperServiceTransport) LeavePublic(chatID string) error {
+	chat := a.chats.ChatByID(chatID)
+	if chat != nil {
+		return nil
+	}
+	return a.chats.Remove(chat)
+}
+
+func (a *WhisperServiceTransport) JoinPrivate(publicKey *ecdsa.PublicKey) error {
+	_, err := a.chats.LoadContactCode(publicKey)
+	return err
+}
+
+func (a *WhisperServiceTransport) LeavePrivate(publicKey *ecdsa.PublicKey) error {
+	chats := a.chats.ChatsByPublicKey(publicKey)
+	return a.chats.Remove(chats...)
+}
+
+func (a *WhisperServiceTransport) RetrievePublicMessages(chatID string) ([]*whisper.ReceivedMessage, error) {
+	chat, err := a.chats.LoadPublic(chatID)
+	if err != nil {
+		return nil, err
+	}
+
+	f := a.shh.GetFilter(chat.FilterID)
+	if f == nil {
+		return nil, errors.New("failed to return a filter")
+	}
+
+	return f.Retrieve(), nil
+}
+
+func (a *WhisperServiceTransport) RetrievePrivateMessages(publicKey *ecdsa.PublicKey) ([]*whisper.ReceivedMessage, error) {
+	chats := a.chats.ChatsByPublicKey(publicKey)
+	discoveryChats, err := a.chats.LoadDiscovery()
+	if err != nil {
+		return nil, err
+	}
+
+	var result []*whisper.ReceivedMessage
+
+	for _, chat := range append(chats, discoveryChats...) {
+		f := a.shh.GetFilter(chat.FilterID)
+		if f == nil {
+			return nil, errors.New("failed to return a filter")
+		}
+		result = append(result, f.Retrieve()...)
+	}
+
+	return result, nil
+}
+
+// SendPublic sends a new message using the Whisper service.
+// For public chats, chat name is used as an ID as well as
+// a topic.
+func (a *WhisperServiceTransport) SendPublic(ctx context.Context, newMessage whisper.NewMessage, chatName string) ([]byte, error) {
+	if err := a.addSig(&newMessage); err != nil {
+		return nil, err
+	}
+
+	chat, err := a.chats.LoadPublic(chatName)
+	if err != nil {
+		return nil, err
+	}
+
+	newMessage.SymKeyID = chat.SymKeyID
+	newMessage.Topic = chat.Topic
+
+	return a.shhAPI.Post(ctx, newMessage)
+}
+
+func (a *WhisperServiceTransport) SendPrivateWithSharedSecret(ctx context.Context, newMessage whisper.NewMessage, publicKey *ecdsa.PublicKey, secret []byte) ([]byte, error) {
+	if err := a.addSig(&newMessage); err != nil {
+		return nil, err
+	}
+
+	chat, err := a.chats.LoadNegotiated(filter.NegotiatedSecret{
+		PublicKey: publicKey,
+		Key:       secret,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	newMessage.SymKeyID = chat.SymKeyID
+	newMessage.Topic = chat.Topic
+	newMessage.PublicKey = nil
+
+	return a.shhAPI.Post(ctx, newMessage)
+}
+
+func (a *WhisperServiceTransport) SendPrivateWithPartitioned(ctx context.Context, newMessage whisper.NewMessage, publicKey *ecdsa.PublicKey) ([]byte, error) {
+	if err := a.addSig(&newMessage); err != nil {
+		return nil, err
+	}
+
+	chat, err := a.chats.LoadPartitioned(publicKey)
+	if err != nil {
+		return nil, err
+	}
+
+	newMessage.Topic = chat.Topic
+	newMessage.PublicKey = crypto.FromECDSAPub(publicKey)
+
+	return a.shhAPI.Post(ctx, newMessage)
+}
+
+func (a *WhisperServiceTransport) SendPrivateOnDiscovery(ctx context.Context, newMessage whisper.NewMessage, publicKey *ecdsa.PublicKey) ([]byte, error) {
+	if err := a.addSig(&newMessage); err != nil {
+		return nil, err
+	}
+
+	// There is no need to load any chat
+	// because listening on the discovery topic
+	// is done automatically.
+	// TODO: change this anyway, it should be explicit
+	// and idempotent.
+
+	newMessage.Topic = whisper.BytesToTopic(
+		filter.ToTopic(filter.DiscoveryTopic),
+	)
+	newMessage.PublicKey = crypto.FromECDSAPub(publicKey)
+
+	return a.shhAPI.Post(ctx, newMessage)
+}
+
+func (a *WhisperServiceTransport) addSig(newMessage *whisper.NewMessage) error {
+	sigID, err := a.keysManager.AddOrGetKeyPair(a.keysManager.privateKey)
+	if err != nil {
+		return err
+	}
+	newMessage.Sig = sigID
+	return nil
 }
 
 // Request requests messages from mail servers.
@@ -182,27 +298,6 @@ func (a *WhisperServiceTransport) Request(ctx context.Context, options RequestOp
 
 	_, err = a.requestMessages(ctx, req, true)
 	return err
-}
-
-func (a *WhisperServiceTransport) selectAndAddMailServer() (string, error) {
-	var enodeAddr string
-	if a.selectedMailServerEnode != "" {
-		enodeAddr = a.selectedMailServerEnode
-	} else {
-		if len(a.mailservers) == 0 {
-			return "", ErrNoMailservers
-		}
-		enodeAddr = randomItem(a.mailservers)
-	}
-	log.Printf("dialing mail server %s", enodeAddr)
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	err := dial(ctx, a.node, enodeAddr, dialOpts{PollInterval: 200 * time.Millisecond})
-	cancel()
-	if err == nil {
-		a.selectedMailServerEnode = enodeAddr
-		return enodeAddr, nil
-	}
-	return "", fmt.Errorf("peer %s failed to connect: %v", enodeAddr, err)
 }
 
 func (a *WhisperServiceTransport) requestMessages(ctx context.Context, req MessagesRequest, followCursor bool) (resp MessagesResponse, err error) {
@@ -402,33 +497,25 @@ func (a *WhisperServiceTransport) requestMessagesSync(_ context.Context, r Messa
 	return hash[:], nil
 }
 
-// whisperSubscription encapsulates a Whisper filter.
-type whisperSubscription struct {
-	shh      *whisper.Whisper
-	filterID string
-}
-
-// newWhisperSubscription returns a new whisperSubscription.
-func newWhisperSubscription(shh *whisper.Whisper, filterID string) *whisperSubscription {
-	return &whisperSubscription{
-		shh:      shh,
-		filterID: filterID,
+func (a *WhisperServiceTransport) selectAndAddMailServer() (string, error) {
+	var enodeAddr string
+	if a.selectedMailServerEnode != "" {
+		enodeAddr = a.selectedMailServerEnode
+	} else {
+		if len(a.mailservers) == 0 {
+			return "", ErrNoMailservers
+		}
+		enodeAddr = randomItem(a.mailservers)
 	}
-}
-
-// Messages retrieves a list of messages for a given filter.
-func (s whisperSubscription) Messages() ([]*whisper.ReceivedMessage, error) {
-	f := s.shh.GetFilter(s.filterID)
-	if f == nil {
-		return nil, errors.New("filter does not exist")
+	log.Printf("dialing mail server %s", enodeAddr)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	err := dial(ctx, a.node, enodeAddr, dialOpts{PollInterval: 200 * time.Millisecond})
+	cancel()
+	if err == nil {
+		a.selectedMailServerEnode = enodeAddr
+		return enodeAddr, nil
 	}
-	messages := f.Retrieve()
-	return messages, nil
-}
-
-// Unsubscribe removes the subscription.
-func (s whisperSubscription) Unsubscribe() error {
-	return s.shh.Unsubscribe(s.filterID)
+	return "", fmt.Errorf("peer %s failed to connect: %v", enodeAddr, err)
 }
 
 func createRequestMessagesParam(enode, symKeyID string, options RequestOptions) (MessagesRequest, error) {
@@ -511,7 +598,7 @@ func makeEnvelop(
 	params := whisper.MessageParams{
 		PoW:      pow,
 		Payload:  payload,
-		WorkTime: defaultWorkTime,
+		WorkTime: DefaultWhisperMessage().PowTime,
 		Src:      nodeID,
 	}
 	// Either symKey or public key is required.

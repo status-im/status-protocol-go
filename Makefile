@@ -16,10 +16,6 @@ lint:
 	golangci-lint run -v
 .PHONY: lint
 
-lint-v110:
-	golangci-lint run -v --config .golangci-v110.yml
-.PHONY: lint-v110
-
 vendor:
 	go mod tidy
 	go mod vendor
