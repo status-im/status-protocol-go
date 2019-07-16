@@ -283,12 +283,12 @@ func (p *Protocol) ProcessPublicBundle(myIdentityKey *ecdsa.PrivateKey, bundle *
 		return nil, err
 	}
 
-	installations, fromOurs, err := p.recoverInstallationsFromBundle(myIdentityKey, bundle)
+	installations, enabled, err := p.recoverInstallationsFromBundle(myIdentityKey, bundle)
 	if err != nil {
 		return nil, err
 	}
 
-	log.Printf("[Protocol::ProcessPublicBundle] recovered %d installation from ours %t", len(installations), fromOurs)
+	log.Printf("[Protocol::ProcessPublicBundle] recovered %d installation enabled %t", len(installations), enabled)
 
 	// TODO(adam): why do we add installations using identity obtained from GetIdentity()
 	// instead of the output of crypto.CompressPubkey()? I tried the second option
@@ -303,7 +303,7 @@ func (p *Protocol) ProcessPublicBundle(myIdentityKey *ecdsa.PrivateKey, bundle *
 		panic("identity from bundle and compressed are not equal")
 	}
 
-	return p.multidevice.AddInstallations(bundle.GetIdentity(), bundle.GetTimestamp(), installations, fromOurs)
+	return p.multidevice.AddInstallations(bundle.GetIdentity(), bundle.GetTimestamp(), installations, enabled)
 }
 
 // recoverInstallationsFromBundle extracts installations from the bundle.
@@ -320,8 +320,8 @@ func (p *Protocol) recoverInstallationsFromBundle(myIdentityKey *ecdsa.PrivateKe
 	myIdentityStr := fmt.Sprintf("0x%x", crypto.FromECDSAPub(&myIdentityKey.PublicKey))
 	theirIdentityStr := fmt.Sprintf("0x%x", crypto.FromECDSAPub(theirIdentity))
 	// Any device from other peers will be considered enabled, ours needs to
-	// be explicitly enabled
-	fromOurIdentity := theirIdentityStr != myIdentityStr
+	// be explicitly enabled.
+	enabled := theirIdentityStr != myIdentityStr
 	signedPreKeys := bundle.GetSignedPreKeys()
 
 	for installationID, signedPreKey := range signedPreKeys {
@@ -335,7 +335,7 @@ func (p *Protocol) recoverInstallationsFromBundle(myIdentityKey *ecdsa.PrivateKe
 		}
 	}
 
-	return installations, fromOurIdentity, nil
+	return installations, enabled, nil
 }
 
 // GetBundle retrieves or creates a X3DH bundle, given a private identity key.

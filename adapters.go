@@ -107,12 +107,12 @@ func (a *whisperAdapter) RetrievePrivateMessages(publicKey *ecdsa.PublicKey) ([]
 
 		err := a.decryptMessage(context.Background(), shhMessage)
 		if err != nil {
-			log.Printf("[whisperAdapter::RetrievePrivateMessages] failed to decrypt a message: %#x", shhMessage.Hash)
+			log.Printf("[whisperAdapter::RetrievePrivateMessages] failed to decrypt a message %#x: %v", shhMessage.Hash, err)
 		}
 
 		statusMessage, err := a.decodeMessage(shhMessage)
 		if err != nil {
-			log.Printf("failed to decode a message %#x", shhMessage.Hash)
+			log.Printf("[whisperAdapter::RetrievePrivateMessages] failed to decode a message %#x: %v", shhMessage.Hash, err)
 			continue
 		}
 
