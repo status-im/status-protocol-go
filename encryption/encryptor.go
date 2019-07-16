@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"path/filepath"
 	"sync"
 	"time"
@@ -470,31 +471,30 @@ func (s *encryptor) GetPublicBundle(theirIdentityKey *ecdsa.PublicKey, installat
 
 // EncryptPayload returns a new DirectMessageProtocol with a given payload encrypted, given a recipient's public key and the sender private identity key
 func (s *encryptor) EncryptPayload(theirIdentityKey *ecdsa.PublicKey, myIdentityKey *ecdsa.PrivateKey, installations []*multidevice.Installation, payload []byte) (map[string]*DirectMessageProtocol, []*multidevice.Installation, error) {
+	log.Printf("[Protocol::EncryptPayload] for %#x", ecrypto.FromECDSAPub(theirIdentityKey))
 	// Which installations we are sending the message to
 	var targetedInstallations []*multidevice.Installation
 
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	// s.log.Debug("Sending message", "theirKey", theirIdentityKey)
-
-	theirIdentityKeyC := ecrypto.CompressPubkey(theirIdentityKey)
-
 	// We don't have any, send a message with DH
 	if len(installations) == 0 {
-		// s.log.Debug("no installations, sending to all devices")
+		log.Printf("[Protocol::EncryptPayload] no installations, sending to all devices")
 		encryptedPayload, err := s.EncryptPayloadWithDH(theirIdentityKey, payload)
 		return encryptedPayload, targetedInstallations, err
 	}
 
+	theirIdentityKeyC := ecrypto.CompressPubkey(theirIdentityKey)
 	response := make(map[string]*DirectMessageProtocol)
 
 	for _, installation := range installations {
 		installationID := installation.ID
-		// s.log.Debug("Processing installation", "installationID", installationID)
+		log.Printf("[Protocol::EncryptPayload] processing installation %s", installationID)
 		if s.config.InstallationID == installationID {
 			continue
 		}
+
 		bundle, err := s.persistence.GetPublicBundle(theirIdentityKey, []*multidevice.Installation{installation})
 		if err != nil {
 			return nil, nil, err
@@ -509,7 +509,7 @@ func (s *encryptor) EncryptPayload(theirIdentityKey *ecdsa.PublicKey, myIdentity
 		targetedInstallations = append(targetedInstallations, installation)
 
 		if drInfo != nil {
-			// s.log.Debug("Found DR info", "installationID", installationID)
+			log.Printf("[Protocol::EncryptPayload] found DR info for installation %s", installationID)
 			encryptedPayload, drHeader, err := s.encryptUsingDR(theirIdentityKey, drInfo, payload)
 			if err != nil {
 				return nil, nil, err
@@ -535,11 +535,12 @@ func (s *encryptor) EncryptPayload(theirIdentityKey *ecdsa.PublicKey, myIdentity
 
 		// This should not be nil at this point
 		if theirSignedPreKeyContainer == nil {
-			// s.log.Warn("Could not find either a ratchet info or a bundle for installationId", "installationID", installationID)
+			log.Printf("[Protocol::EncryptPayload] could not find DR info or bundle for installation %s", installationID)
 			continue
 
 		}
-		// s.log.Debug("DR info not found, using bundle", "installationID", installationID)
+
+		log.Printf("[Protocol::EncryptPayload] DR info not found, using bundle for installation %s", installationID)
 
 		theirSignedPreKey := theirSignedPreKeyContainer.GetSignedPreKey()
 
@@ -581,7 +582,15 @@ func (s *encryptor) EncryptPayload(theirIdentityKey *ecdsa.PublicKey, myIdentity
 		}
 	}
 
-	// s.log.Debug("Built message", "theirKey", theirIdentityKey)
+	var installationIDs []string
+	for _, i := range targetedInstallations {
+		installationIDs = append(installationIDs, i.ID)
+	}
+	log.Printf(
+		"[Protocol::EncryptPayload] built a message for %#x and installations %v",
+		ecrypto.FromECDSAPub(theirIdentityKey),
+		installationIDs,
+	)
 
 	return response, targetedInstallations, nil
 }

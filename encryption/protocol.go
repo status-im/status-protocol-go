@@ -1,6 +1,7 @@
 package encryption
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"errors"
 	"fmt"
@@ -195,22 +196,24 @@ func (p *Protocol) buildContactCodeMessage(myIdentityKey *ecdsa.PrivateKey) (*Pr
 
 // BuildDirectMessage returns a 1:1 chat message and optionally a negotiated topic given the user identity private key, the recipient's public key, and a payload
 func (p *Protocol) BuildDirectMessage(myIdentityKey *ecdsa.PrivateKey, publicKey *ecdsa.PublicKey, payload []byte) (*ProtocolMessageSpec, error) {
+	log.Printf("[Protocol::BuildDirectMessage] to %#x", crypto.FromECDSAPub(publicKey))
+
+	// Get recipients installations.
 	activeInstallations, err := p.multidevice.GetActiveInstallations(publicKey)
 	if err != nil {
 		return nil, err
 	}
 
 	// Encrypt payload
-	encryptionResponse, installations, err := p.encryptor.EncryptPayload(publicKey, myIdentityKey, activeInstallations, payload)
+	directMessage, installations, err := p.encryptor.EncryptPayload(publicKey, myIdentityKey, activeInstallations, payload)
 	if err != nil {
-		// p.log.Error("encryption-service", "error encrypting payload", err)
 		return nil, err
 	}
 
 	// Build message
 	message := &ProtocolMessage{
 		InstallationId: p.encryptor.config.InstallationID,
-		DirectMessage:  encryptionResponse,
+		DirectMessage:  directMessage,
 	}
 
 	err = p.addBundle(myIdentityKey, message, true)
@@ -221,18 +224,18 @@ func (p *Protocol) BuildDirectMessage(myIdentityKey *ecdsa.PrivateKey, publicKey
 	// Check who we are sending the message to, and see if we have a shared secret
 	// across devices
 	var installationIDs []string
-	var sharedSecret *sharedsecret.Secret
-	var agreed bool
 	for installationID := range message.GetDirectMessage() {
 		if installationID != noInstallationID {
 			installationIDs = append(installationIDs, installationID)
 		}
 	}
 
-	sharedSecret, agreed, err = p.secret.Agreed(myIdentityKey, p.encryptor.config.InstallationID, publicKey, installationIDs)
+	sharedSecret, agreed, err := p.secret.Agreed(myIdentityKey, p.encryptor.config.InstallationID, publicKey, installationIDs)
 	if err != nil {
 		return nil, err
 	}
+
+	log.Printf("[Protocol::BuildDirectMessage] found shared secret %t and agreed %t", sharedSecret != nil, agreed)
 
 	// Call handler
 	if sharedSecret != nil {
@@ -254,7 +257,6 @@ func (p *Protocol) BuildDHMessage(myIdentityKey *ecdsa.PrivateKey, destination *
 	// Encrypt payload
 	encryptionResponse, err := p.encryptor.EncryptPayloadWithDH(destination, payload)
 	if err != nil {
-		// // p.log.Error("encryption-service", "error encrypting payload", err)
 		return nil, err
 	}
 
@@ -274,7 +276,7 @@ func (p *Protocol) BuildDHMessage(myIdentityKey *ecdsa.PrivateKey, destination *
 
 // ProcessPublicBundle processes a received X3DH bundle.
 func (p *Protocol) ProcessPublicBundle(myIdentityKey *ecdsa.PrivateKey, bundle *Bundle) ([]*multidevice.Installation, error) {
-	// p.log.Debug("Processing bundle", "bundle", bundle)
+	log.Printf("[Protocol::ProcessPublicBundle] processing public bundle")
 
 	if err := p.encryptor.ProcessPublicBundle(myIdentityKey, bundle); err != nil {
 		return nil, err
@@ -288,6 +290,16 @@ func (p *Protocol) ProcessPublicBundle(myIdentityKey *ecdsa.PrivateKey, bundle *
 	// TODO(adam): why do we add installations using identity obtained from GetIdentity()
 	// instead of the output of crypto.CompressPubkey()? I tried the second option
 	// and the unit tests TestTopic and TestMaxDevices fail.
+	identityFromBundle := bundle.GetIdentity()
+	theirIdentity, err := ExtractIdentity(bundle)
+	if err != nil {
+		panic(err)
+	}
+	compressedIdentity := crypto.CompressPubkey(theirIdentity)
+	if !bytes.Equal(identityFromBundle, compressedIdentity) {
+		panic("identity from bundle and compressed are not equal")
+	}
+
 	return p.multidevice.AddInstallations(bundle.GetIdentity(), bundle.GetTimestamp(), installations, fromOurs)
 }
 
