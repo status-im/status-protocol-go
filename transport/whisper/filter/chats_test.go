@@ -67,7 +67,7 @@ func (s *ChatsTestSuite) SetupTest() {
 	}
 
 	db, err := sqlite.Open(s.dbPath, "filter-key", sqlite.MigrationConfig{
-		AssetNames:migrations.AssetNames(),
+		AssetNames: migrations.AssetNames(),
 		AssetGetter: func(name string) ([]byte, error) {
 			return migrations.Asset(name)
 		},
@@ -85,11 +85,7 @@ func (s *ChatsTestSuite) TearDownTest() {
 }
 
 func (s *ChatsTestSuite) TestDiscoveryAndPartitionedTopic() {
-	partitionedTopic := fmt.Sprintf("contact-discovery-%d", s.keys[0].partitionedTopic)
-	personalDiscoveryTopic := fmt.Sprintf("contact-discovery-%s", s.keys[0].publicKeyString())
-	contactCodeTopic := contactCodeTopic(&s.keys[0].privateKey.PublicKey)
-
-	_, err := s.chats.InitDeprecated(nil, nil)
+	_, err := s.chats.InitDeprecated(nil, nil, true)
 	s.Require().NoError(err)
 
 	s.Require().Equal(4, len(s.chats.chats), "It creates four filters")
@@ -97,6 +93,26 @@ func (s *ChatsTestSuite) TestDiscoveryAndPartitionedTopic() {
 	discoveryFilter := s.chats.chats[DiscoveryTopic]
 	s.Require().NotNil(discoveryFilter, "It adds the discovery filter")
 	s.Require().True(discoveryFilter.Listen)
+
+	s.assertRequiredFilters()
+}
+
+func (s *ChatsTestSuite) TestPartitionedTopicWithDiscoveryDisabled() {
+	_, err := s.chats.InitDeprecated(nil, nil, false)
+	s.Require().NoError(err)
+
+	s.Require().Equal(3, len(s.chats.chats), "It creates three filters")
+
+	discoveryFilter := s.chats.chats[DiscoveryTopic]
+	s.Require().Nil(discoveryFilter, "It does not add the discovery filter")
+
+	s.assertRequiredFilters()
+}
+
+func (s *ChatsTestSuite) assertRequiredFilters() {
+	partitionedTopic := fmt.Sprintf("contact-discovery-%d", s.keys[0].partitionedTopic)
+	personalDiscoveryTopic := fmt.Sprintf("contact-discovery-%s", s.keys[0].publicKeyString())
+	contactCodeTopic := contactCodeTopic(&s.keys[0].privateKey.PublicKey)
 
 	personalDiscoveryFilter := s.chats.chats[personalDiscoveryTopic]
 	s.Require().NotNil(personalDiscoveryFilter, "It adds the discovery filter")

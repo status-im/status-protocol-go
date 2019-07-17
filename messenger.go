@@ -41,6 +41,10 @@ type Messenger struct {
 	ownMessages map[string][]*protocol.Message
 }
 
+type featureFlags struct {
+	genericDiscoveryTopicEnabled bool
+}
+
 type config struct {
 	onNewInstallationsHandler func([]*multidevice.Installation)
 	onNewSharedSecretHandler  func([]*sharedsecret.Secret)
@@ -49,6 +53,8 @@ type config struct {
 	publicChatNames []string
 	publicKeys      []*ecdsa.PublicKey
 	secrets         []filter.NegotiatedSecret
+
+	featureFlags featureFlags
 }
 
 type Option func(*config) error
@@ -76,6 +82,13 @@ func WithChats(
 		c.publicChatNames = publicChatNames
 		c.publicKeys = publicKeys
 		c.secrets = secrets
+		return nil
+	}
+}
+
+func WithGenericDiscoveryTopicSupport() func(c *config) error {
+	return func(c *config) error {
+		c.featureFlags.genericDiscoveryTopicEnabled = true
 		return nil
 	}
 }
@@ -135,7 +148,7 @@ func NewMessenger(
 		return nil, errors.Wrap(err, "failed to create a WhisperServiceTransport")
 	}
 
-	if _, err := t.Init(c.publicChatNames, c.publicKeys, c.secrets); err != nil {
+	if _, err := t.Init(c.publicChatNames, c.publicKeys, c.secrets, c.featureFlags.genericDiscoveryTopicEnabled); err != nil {
 		return nil, errors.Wrap(err, "failed to initialize WhisperServiceTransport")
 	}
 
@@ -164,7 +177,7 @@ func NewMessenger(
 	messenger = &Messenger{
 		identity:    identity,
 		persistence: &sqlitePersistence{db: messagesDB},
-		adapter:     newWhisperAdapter(identity, t, encryptionProtocol),
+		adapter:     newWhisperAdapter(identity, t, encryptionProtocol, c.featureFlags),
 		encryptor:   encryptionProtocol,
 		ownMessages: make(map[string][]*protocol.Message),
 	}

@@ -129,8 +129,9 @@ func (a *WhisperServiceTransport) Init(
 	chatIDs []string,
 	publicKeys []*ecdsa.PublicKey,
 	negotiated []filter.NegotiatedSecret,
+	genericDiscoveryTopicEnabled bool,
 ) ([]*filter.Chat, error) {
-	return a.chats.Init(chatIDs, publicKeys, negotiated)
+	return a.chats.Init(chatIDs, publicKeys, negotiated, genericDiscoveryTopicEnabled)
 }
 
 func (a *WhisperServiceTransport) ProcessNegotiatedSecret(secret filter.NegotiatedSecret) error {

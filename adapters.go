@@ -33,13 +33,16 @@ type whisperAdapter struct {
 	privateKey *ecdsa.PrivateKey
 	transport  transport.WhisperTransport
 	protocol   *encryption.Protocol
+
+	featureFlags featureFlags
 }
 
-func newWhisperAdapter(pk *ecdsa.PrivateKey, t transport.WhisperTransport, p *encryption.Protocol) *whisperAdapter {
+func newWhisperAdapter(pk *ecdsa.PrivateKey, t transport.WhisperTransport, p *encryption.Protocol, featureFlags featureFlags) *whisperAdapter {
 	return &whisperAdapter{
-		privateKey: pk,
-		transport:  t,
-		protocol:   p,
+		privateKey:   pk,
+		transport:    t,
+		protocol:     p,
+		featureFlags: featureFlags,
 	}
 }
 
@@ -284,13 +287,17 @@ func (a *whisperAdapter) sendMessageSpec(ctx context.Context, publicKey *ecdsa.P
 		return nil, err
 	}
 
-	if messageSpec.SharedSecret != nil {
+	switch {
+	case messageSpec.SharedSecret != nil:
 		log.Printf("[whisperAdapter::sendMessageSpec] sending using shared secret")
 		return a.transport.SendPrivateWithSharedSecret(ctx, *newMessage, publicKey, messageSpec.SharedSecret)
-	} else if messageSpec.PartitionedTopicMode() == encryption.PartitionTopicV1 {
+	case messageSpec.PartitionedTopicMode() == encryption.PartitionTopicV1:
 		log.Printf("[whisperAdapter::sendMessageSpec] sending partitioned topic")
 		return a.transport.SendPrivateWithPartitioned(ctx, *newMessage, publicKey)
-	} else {
+	case !a.featureFlags.genericDiscoveryTopicEnabled:
+		log.Printf("[whisperAdapter::sendMessageSpec] sending partitioned topic (generic discovery topic disabled)")
+		return a.transport.SendPrivateWithPartitioned(ctx, *newMessage, publicKey)
+	default:
 		log.Printf("[whisperAdapter::sendMessageSpec] sending using discovery topic")
 		return a.transport.SendPrivateOnDiscovery(ctx, *newMessage, publicKey)
 	}
