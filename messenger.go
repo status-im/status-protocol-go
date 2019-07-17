@@ -305,10 +305,16 @@ func (m *Messenger) Retrieve(ctx context.Context, chat Chat, c RetrieveConfig) (
 		return nil, errors.Wrap(err, "failed to save latest messages")
 	}
 
-	return m.retrieveMessages(ctx, chat, c, latest)
+	for _, message := range latest {
+		if err := m.encryptor.ConfirmMessageProcessed(message.ID); err != nil {
+			return nil, errors.Wrap(err, "failed to confirm message being processed")
+		}
+	}
+
+	return m.retrieveSaved(ctx, chat, c, latest)
 }
 
-func (m *Messenger) retrieveMessages(ctx context.Context, chat Chat, c RetrieveConfig, latest []*protocol.Message) (messages []*protocol.Message, err error) {
+func (m *Messenger) retrieveSaved(ctx context.Context, chat Chat, c RetrieveConfig, latest []*protocol.Message) (messages []*protocol.Message, err error) {
 	if !c.latest {
 		return m.persistence.Messages(chat.ID(), c.From, c.To)
 	}
@@ -322,6 +328,17 @@ func (m *Messenger) retrieveMessages(ctx context.Context, chat Chat, c RetrieveC
 	return latest, nil
 }
 
+// LEGACY
 func (m *Messenger) RetrieveAllRaw() (map[filter.Chat][]*whisper.Message, error) {
 	return m.adapter.RetrieveAllRaw()
+}
+
+// LEGACY
+func (m *Messenger) ConfirmMessagesProcessed(messageIDs [][]byte) error {
+	for _, id := range messageIDs {
+		if err := m.encryptor.ConfirmMessageProcessed(id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
