@@ -195,6 +195,22 @@ func (a *WhisperServiceTransport) RetrievePrivateMessages(publicKey *ecdsa.Publi
 	return result, nil
 }
 
+// LEGACY
+func (a *WhisperServiceTransport) RetrieveAllRaw() (map[filter.Chat][]*whisper.ReceivedMessage, error) {
+	result := make(map[filter.Chat][]*whisper.ReceivedMessage)
+
+	allChats := a.chats.Chats()
+	for _, chat := range allChats {
+		f := a.shh.GetFilter(chat.FilterID)
+		if f == nil {
+			return nil, errors.New("failed to return a filter")
+		}
+		result[*chat] = append(result[*chat], f.Retrieve()...)
+	}
+
+	return result, nil
+}
+
 // SendPublic sends a new message using the Whisper service.
 // For public chats, chat name is used as an ID as well as
 // a topic.

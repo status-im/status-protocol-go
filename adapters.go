@@ -142,6 +142,28 @@ func (a *whisperAdapter) RetrievePrivateMessages(publicKey *ecdsa.PublicKey) ([]
 	return decodedMessages, nil
 }
 
+func (a *whisperAdapter) RetrieveAllRaw() (map[filter.Chat][]*whisper.Message, error) {
+	chatWithMessages, err := a.transport.RetrieveAllRaw()
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[filter.Chat][]*whisper.Message)
+
+	for chat, messages := range chatWithMessages {
+		for _, message := range messages {
+			shhMessage := whisper.ToWhisperMessage(message)
+			err := a.decryptMessage(context.Background(), shhMessage)
+			if err != nil {
+				log.Printf("[whisperAdapter::RetrievePrivateMessages] failed to decrypt a message %#x: %v", shhMessage.Hash, err)
+			}
+			result[chat] = append(result[chat], shhMessage)
+		}
+	}
+
+	return result, nil
+}
+
 func (a *whisperAdapter) decodeMessage(message *whisper.Message) (*protocol.StatusMessage, error) {
 	publicKey, err := crypto.UnmarshalPubkey(message.Sig)
 	if err != nil {

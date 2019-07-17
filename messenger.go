@@ -321,3 +321,7 @@ func (m *Messenger) retrieveMessages(ctx context.Context, chat Chat, c RetrieveC
 
 	return latest, nil
 }
+
+func (m *Messenger) RetrieveAllRaw() (map[filter.Chat][]*whisper.Message, error) {
+	return m.adapter.RetrieveAllRaw()
+}
