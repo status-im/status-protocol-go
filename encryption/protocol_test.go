@@ -161,3 +161,28 @@ func (s *ProtocolServiceTestSuite) TestSecretNegotiation() {
 
 	s.Require().NotNil(secretResponse)
 }
+
+func (s *ProtocolServiceTestSuite) TestPropagatingSavedSharedSecretsOnStart() {
+	var secretResponse []*sharedsecret.Secret
+
+	aliceKey, err := crypto.GenerateKey()
+	s.NoError(err)
+	bobKey, err := crypto.GenerateKey()
+	s.NoError(err)
+
+	// Generate and save a shared secret.
+	generatedSecret, err := s.alice.secret.Generate(aliceKey, &bobKey.PublicKey, "installation-1")
+	s.NoError(err)
+
+	s.alice.onNewSharedSecretHandler = func(secret []*sharedsecret.Secret) {
+		secretResponse = secret
+	}
+
+	err = s.alice.Start(aliceKey)
+	s.NoError(err)
+
+	s.Require().NotNil(secretResponse)
+	s.Require().Len(secretResponse, 1)
+	s.Equal(crypto.FromECDSAPub(generatedSecret.Identity), crypto.FromECDSAPub(secretResponse[0].Identity))
+	s.Equal(generatedSecret.Key, secretResponse[0].Key)
+}
