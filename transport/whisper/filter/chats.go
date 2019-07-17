@@ -4,7 +4,6 @@ import (
 	"crypto/ecdsa"
 	"database/sql"
 	"encoding/hex"
-	"log"
 	"math/big"
 	"strconv"
 	"sync"
@@ -12,6 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/pkg/errors"
 	whisper "github.com/status-im/whisper/whisperv6"
+	"go.uber.org/zap"
 )
 
 const (
@@ -62,6 +62,7 @@ type ChatsManager struct {
 	persistence *sqlitePersistence
 	privateKey  *ecdsa.PrivateKey
 	keys        map[string][]byte // a cache of symmetric keys derived from passwords
+	logger      *zap.Logger
 
 	genericDiscoveryTopicEnabled bool
 
@@ -69,8 +70,12 @@ type ChatsManager struct {
 	chats map[string]*Chat
 }
 
-// New returns a new filter service
-func New(db *sql.DB, w *whisper.Whisper, privateKey *ecdsa.PrivateKey) (*ChatsManager, error) {
+// New returns a new ChatsManager service
+func New(db *sql.DB, w *whisper.Whisper, privateKey *ecdsa.PrivateKey, logger *zap.Logger) (*ChatsManager, error) {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+
 	persistence, err := newSQLitePersistence(db)
 	if err != nil {
 		return nil, err
@@ -81,11 +86,14 @@ func New(db *sql.DB, w *whisper.Whisper, privateKey *ecdsa.PrivateKey) (*ChatsMa
 		whisper:     w,
 		persistence: persistence,
 		chats:       make(map[string]*Chat),
+		logger:      logger.With(zap.Namespace("ChatsManager")),
 	}, nil
 }
 
 func (s *ChatsManager) Init(chatIDs []string, publicKeys []*ecdsa.PublicKey, negotiated []NegotiatedSecret, genericDiscoveryTopicEnabled bool) ([]*Chat, error) {
-	log.Printf("[ChatsManager::Init] initializing")
+	logger := s.logger.With(zap.String("site", "Init"))
+
+	logger.Info("initializing")
 
 	s.genericDiscoveryTopicEnabled = genericDiscoveryTopicEnabled
 

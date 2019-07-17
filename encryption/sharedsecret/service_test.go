@@ -9,6 +9,7 @@ import (
 	migrations "github.com/status-im/status-protocol-go/encryption/internal/sqlite"
 	"github.com/status-im/status-protocol-go/sqlite"
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/zap"
 )
 
 func TestServiceTestSuite(t *testing.T) {
@@ -19,26 +20,33 @@ type SharedSecretTestSuite struct {
 	suite.Suite
 	service *SharedSecret
 	path    string
+	logger  *zap.Logger
 }
 
 func (s *SharedSecretTestSuite) SetupTest() {
+	logger, err := zap.NewDevelopment()
+	s.Require().NoError(err)
+	s.logger = logger
+
 	dbFile, err := ioutil.TempFile(os.TempDir(), "sharedsecret")
 	s.Require().NoError(err)
 	s.path = dbFile.Name()
 
 	db, err := sqlite.Open(s.path, "", sqlite.MigrationConfig{
-		AssetNames:migrations.AssetNames(),
+		AssetNames: migrations.AssetNames(),
 		AssetGetter: func(name string) ([]byte, error) {
 			return migrations.Asset(name)
 		},
 	})
 	s.Require().NoError(err)
 
-	s.service = New(db)
+	s.service = New(db, logger)
 }
 
 func (s *SharedSecretTestSuite) TearDownTest() {
 	os.Remove(s.path)
+
+	s.logger.Sync()
 }
 
 func (s *SharedSecretTestSuite) TestSingleInstallationID() {
