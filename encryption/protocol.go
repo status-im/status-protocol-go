@@ -3,11 +3,11 @@ package encryption
 import (
 	"bytes"
 	"crypto/ecdsa"
-	"errors"
 	"fmt"
 	"log"
 
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/pkg/errors"
 
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
 	"github.com/status-im/status-protocol-go/encryption/publisher"
@@ -131,7 +131,14 @@ func NewWithEncryptorConfig(
 	}, nil
 }
 
-func (p *Protocol) Start(myIdentity *ecdsa.PrivateKey) {
+func (p *Protocol) Start(myIdentity *ecdsa.PrivateKey) error {
+	// Propagate currently cached shared secrets.
+	secrets, err := p.secret.All()
+	if err != nil {
+		return errors.Wrap(err, "failed to get all secrets")
+	}
+	p.onNewSharedSecretHandler(secrets)
+
 	// Handle Publisher system messages.
 	publisherCh := p.publisher.Start()
 
@@ -146,6 +153,8 @@ func (p *Protocol) Start(myIdentity *ecdsa.PrivateKey) {
 			p.onSendContactCodeHandler(messageSpec)
 		}
 	}()
+
+	return nil
 }
 
 func (p *Protocol) addBundle(myIdentityKey *ecdsa.PrivateKey, msg *ProtocolMessage, sendSingle bool) error {

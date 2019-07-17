@@ -150,8 +150,6 @@ func NewMessenger(
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create the encryption layer")
 	}
-	// TODO: consider removing identity as an argument to Start().
-	encryptionProtocol.Start(identity)
 
 	messagesDB, err := sqlite.Open(filepath.Join(dataDir, "messages.sql"), dbKey, sqlite.MigrationConfig{
 		AssetNames: migrations.AssetNames(),
@@ -169,6 +167,12 @@ func NewMessenger(
 		adapter:     newWhisperAdapter(identity, t, encryptionProtocol),
 		encryptor:   encryptionProtocol,
 		ownMessages: make(map[string][]*protocol.Message),
+	}
+
+	// Start all services immediately.
+	// TODO: consider removing identity as an argument to Start().
+	if err := encryptionProtocol.Start(identity); err != nil {
+		return nil, err
 	}
 
 	return messenger, nil
