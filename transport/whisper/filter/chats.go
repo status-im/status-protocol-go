@@ -61,7 +61,7 @@ type ChatsManager struct {
 	whisper     *whisper.Whisper
 	persistence *sqlitePersistence
 	privateKey  *ecdsa.PrivateKey
-	keys        map[string][]byte
+	keys        map[string][]byte // a cache of symmetric keys derived from passwords
 
 	mutex sync.Mutex
 	chats map[string]*Chat
@@ -109,7 +109,7 @@ func (s *ChatsManager) Init(chatIDs []string, publicKeys []*ecdsa.PublicKey, neg
 		return nil, err
 	}
 
-	// Add public, one-to-one and generic chats.
+	// Add public, one-to-one and negotiated chats.
 	for _, chatID := range chatIDs {
 		_, err := s.LoadPublic(chatID)
 		if err != nil {
