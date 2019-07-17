@@ -3,6 +3,7 @@ package statusproto
 import (
 	"context"
 	"crypto/ecdsa"
+	"fmt"
 	"path/filepath"
 	"time"
 
@@ -11,6 +12,8 @@ import (
 	"github.com/pkg/errors"
 	whisper "github.com/status-im/whisper/whisperv6"
 
+	"github.com/status-im/status-protocol-go/datasync"
+	datasyncpeer "github.com/status-im/status-protocol-go/datasync/peer"
 	"github.com/status-im/status-protocol-go/encryption"
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
 	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
@@ -19,12 +22,10 @@ import (
 	transport "github.com/status-im/status-protocol-go/transport/whisper"
 	"github.com/status-im/status-protocol-go/transport/whisper/filter"
 	protocol "github.com/status-im/status-protocol-go/v1"
-)
-
-const (
-	// messagesDatabaseFileName is a name of the SQL file in which
-	// messages are stored.
-	messagesDatabaseFileName = "messages.sql"
+	datasyncnode "github.com/vacp2p/mvds/node"
+	datasyncpeers "github.com/vacp2p/mvds/peers"
+	datasyncstate "github.com/vacp2p/mvds/state"
+	datasyncstore "github.com/vacp2p/mvds/store"
 )
 
 var (
@@ -59,6 +60,9 @@ type featureFlags struct {
 	// V1 messages adds additional wrapping
 	// which contains a signature and payload.
 	sendV1Messages bool
+
+	// datasync indicates whether messages should be sent using datasync, breaking change for non-v1 clients
+	datasync bool
 }
 
 type config struct {
@@ -126,6 +130,13 @@ func WithDatabaseFilePaths(encryptionLayerFilePath, transportLayerFilePath strin
 func WithSendV1Messages() func(c *config) error {
 	return func(c *config) error {
 		c.featureFlags.sendV1Messages = true
+		return nil
+	}
+}
+
+func WithDatasync() func(c *config) error {
+	return func(c *config) error {
+		c.featureFlags.datasync = true
 		return nil
 	}
 }
@@ -224,6 +235,8 @@ func NewMessenger(
 		return nil, errors.Wrap(err, "failed to create the encryption layer")
 	}
 
+	messagesDatabaseFileName := fmt.Sprintf("%s.messages.sql", installationID)
+
 	applicationLayerFilePath := filepath.Join(dataDir, messagesDatabaseFileName)
 	applicationLayerPersistence, err := sqlite.Open(applicationLayerFilePath, dbKey, sqlite.MigrationConfig{
 		AssetNames: migrations.AssetNames(),
@@ -234,9 +247,25 @@ func NewMessenger(
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to initialize messages db")
 	}
+	dataSyncTransport := datasync.NewDataSyncNodeTransport()
+	dataSyncStore := datasyncstore.NewDummyStore()
+	dataSyncNode := datasyncnode.NewNode(
+		&dataSyncStore,
+		dataSyncTransport,
+		datasyncstate.NewSyncState(), // @todo sqlite syncstate
+		datasync.CalculateSendTime,
+		0,
+		datasyncpeer.PublicKeyToPeerID(identity.PublicKey),
+		datasyncnode.BATCH,
+		datasyncpeers.NewMemoryPersistence(),
+	)
+	datasync := &datasync.DataSync{
+		Node:                  dataSyncNode,
+		DataSyncNodeTransport: dataSyncTransport,
+	}
 
 	persistence := &sqlitePersistence{db: applicationLayerPersistence}
-	adapter := newWhisperAdapter(identity, t, encryptionProtocol, c.featureFlags, logger)
+	adapter := newWhisperAdapter(identity, t, encryptionProtocol, datasync, c.featureFlags, logger)
 	messenger = &Messenger{
 		identity:                   identity,
 		persistence:                persistence,
@@ -248,6 +277,7 @@ func NewMessenger(
 		shutdownTasks: []func() error{
 			persistence.Close,
 			adapter.transport.Reset,
+			func() error { datasync.Node.Stop(); return nil },
 			// Currently this often fails, seems like it's safe to ignore them
 			// https://github.com/uber-go/zap/issues/328
 			func() error { _ = logger.Sync; return nil },
@@ -259,6 +289,9 @@ func NewMessenger(
 	// TODO: consider removing identity as an argument to Start().
 	if err := encryptionProtocol.Start(identity); err != nil {
 		return nil, err
+	}
+	if c.featureFlags.datasync {
+		dataSyncNode.Start(300 * time.Millisecond)
 	}
 
 	logger.Debug("messages persistence", zap.Bool("enabled", c.messagesPersistenceEnabled))
