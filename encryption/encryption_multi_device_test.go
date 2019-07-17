@@ -265,3 +265,74 @@ func (s *EncryptionServiceMultiDeviceSuite) TestMaxDevices() {
 	s.Require().NotNil(payload["alice2"])
 	s.Require().NotNil(payload["alice3"])
 }
+
+func (s *EncryptionServiceMultiDeviceSuite) TestMaxDevicesRefreshedBundle() {
+	alice1 := s.services[aliceUser].services[0]
+	alice2 := s.services[aliceUser].services[1]
+	alice3 := s.services[aliceUser].services[2]
+	alice4 := s.services[aliceUser].services[3]
+	bob1 := s.services[bobUser].services[0]
+	bobKey := s.services[bobUser].key
+	aliceKey := s.services[aliceUser].key
+
+	// We create alice bundles, in order
+	alice1Bundle, err := alice1.GetBundle(aliceKey)
+	s.Require().NoError(err)
+
+	alice2Bundle, err := alice2.GetBundle(aliceKey)
+	s.Require().NoError(err)
+
+	alice3Bundle, err := alice3.GetBundle(aliceKey)
+	s.Require().NoError(err)
+
+	alice4Bundle, err := alice4.GetBundle(aliceKey)
+	s.Require().NoError(err)
+
+	// We send all the bundles to bob
+	_, err = bob1.ProcessPublicBundle(bobKey, alice1Bundle)
+	s.Require().NoError(err)
+
+	_, err = bob1.ProcessPublicBundle(bobKey, alice2Bundle)
+	s.Require().NoError(err)
+
+	_, err = bob1.ProcessPublicBundle(bobKey, alice3Bundle)
+	s.Require().NoError(err)
+
+	_, err = bob1.ProcessPublicBundle(bobKey, alice4Bundle)
+	s.Require().NoError(err)
+
+	// Bob sends a message to alice
+	msg1, err := bob1.BuildDirectMessage(bobKey, &aliceKey.PublicKey, []byte("test"))
+	s.Require().NoError(err)
+	payload := msg1.Message.GetDirectMessage()
+	s.Require().Equal(3, len(payload))
+	// Alice1 is the oldest bundle and is rotated out
+	// as we send maximum to 3 devices
+	s.Require().Nil(payload["alice1"])
+	s.Require().NotNil(payload["alice2"])
+	s.Require().NotNil(payload["alice3"])
+	s.Require().NotNil(payload["alice4"])
+
+	// We send a message to bob from alice1, the timestamp should be refreshed
+	msg2, err := alice1.BuildDirectMessage(aliceKey, &bobKey.PublicKey, []byte("test"))
+	s.Require().NoError(err)
+
+	alice1Bundle = msg2.Message.GetBundle()
+
+	// Bob processes the bundle
+	_, err = bob1.ProcessPublicBundle(bobKey, alice1Bundle)
+	s.Require().NoError(err)
+
+	// Bob sends a message to alice
+	msg3, err := bob1.BuildDirectMessage(bobKey, &aliceKey.PublicKey, []byte("test"))
+	s.Require().NoError(err)
+	payload = msg3.Message.GetDirectMessage()
+	s.Require().Equal(3, len(payload))
+	// Alice 1 is added back to the list of active devices
+	s.Require().NotNil(payload["alice1"])
+	// Alice 2 is rotated out as the oldest device in terms of activity
+	s.Require().Nil(payload["alice2"])
+	// Alice 3, 4 are still in
+	s.Require().NotNil(payload["alice3"])
+	s.Require().NotNil(payload["alice4"])
+}
