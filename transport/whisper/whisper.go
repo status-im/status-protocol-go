@@ -17,6 +17,7 @@ type WhisperTransport interface {
 	LeavePrivate(*ecdsa.PublicKey) error
 	RetrievePublicMessages(string) ([]*whisper.ReceivedMessage, error)
 	RetrievePrivateMessages(*ecdsa.PublicKey) ([]*whisper.ReceivedMessage, error)
+	RetrieveAllMessages() (map[*filter.Chat][]*whisper.ReceivedMessage, error)
 	SendPublic(context.Context, whisper.NewMessage, string) ([]byte, error)
 	SendPrivateWithSharedSecret(context.Context, whisper.NewMessage, *ecdsa.PublicKey, []byte) ([]byte, error)
 	SendPrivateWithPartitioned(context.Context, whisper.NewMessage, *ecdsa.PublicKey) ([]byte, error)

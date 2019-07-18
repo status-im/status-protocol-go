@@ -193,7 +193,30 @@ func (a *WhisperServiceTransport) RetrievePrivateMessages(publicKey *ecdsa.Publi
 		if f == nil {
 			return nil, errors.New("failed to return a filter")
 		}
+
 		result = append(result, f.Retrieve()...)
+	}
+
+	return result, nil
+}
+
+// RetrieveAllMessages retrieves all available messages, even from chats we haven't joined yet
+func (a *WhisperServiceTransport) RetrieveAllMessages() (map[*filter.Chat][]*whisper.ReceivedMessage, error) {
+	chats := a.chats.Chats()
+	discoveryChats, err := a.chats.LoadDiscovery()
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[*filter.Chat][]*whisper.ReceivedMessage)
+
+	for _, chat := range append(chats, discoveryChats...) {
+		f := a.shh.GetFilter(chat.FilterID)
+		if f == nil {
+			return nil, errors.New("failed to return a filter")
+		}
+
+		result[chat] = f.Retrieve()
 	}
 
 	return result, nil

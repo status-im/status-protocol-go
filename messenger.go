@@ -39,6 +39,8 @@ type Messenger struct {
 	adapter     *whisperAdapter
 	encryptor   *encryption.Protocol
 
+	logger *zap.Logger
+
 	ownMessages map[string][]*protocol.Message
 
 	shutdownTasks []func()
@@ -209,6 +211,7 @@ func NewMessenger(
 		adapter:     newWhisperAdapter(identity, t, encryptionProtocol, c.featureFlags, logger),
 		encryptor:   encryptionProtocol,
 		ownMessages: make(map[string][]*protocol.Message),
+		logger:      logger,
 		shutdownTasks: []func(){
 			func() { messenger.persistence.Close() },
 			func() { logger.Sync() },
@@ -309,6 +312,8 @@ func (m *Messenger) Send(ctx context.Context, chat Chat, data []byte) ([]byte, e
 		// Save our message because it won't be received from the transport layer.
 		message.ID = hash // a Message need ID to be properly stored in the db
 		message.SigPubKey = &m.identity.PublicKey
+		message.ChatID = chat.ID()
+		message.Public = false
 		_, err = m.persistence.SaveMessages(chat.ID(), []*protocol.Message{message})
 		if err != nil {
 			return nil, err
@@ -336,6 +341,46 @@ var (
 	RetrieveLastDay = RetrieveConfig{latest: true, last24Hours: true}
 )
 
+// RetrieveAll retrieves all previously fetched messages
+func (m *Messenger) RetrieveAll(ctx context.Context, c RetrieveConfig) (allMessages []*protocol.Message, err error) {
+	latestByChat, err := m.adapter.RetrieveAllMessages()
+	if err != nil {
+		err = errors.Wrap(err, "failed to retrieve messages")
+		return
+	}
+
+	logger := m.logger.With(zap.String("site", "RetrieveAll"))
+
+	for _, messagesByChat := range latestByChat {
+		chatID := messagesByChat.ChatID
+
+		if !messagesByChat.Public {
+			// Return any own messages for this chat as well.
+			if ownMessages, ok := m.ownMessages[chatID]; ok {
+				messagesByChat.Messages = append(messagesByChat.Messages, ownMessages...)
+			}
+		}
+
+		_, err = m.persistence.SaveMessages(chatID, messagesByChat.Messages)
+		if err != nil {
+			logger.Warn("failed to save latest messages", zap.String("chat-id", chatID), zap.Int("count", len(messagesByChat.Messages)))
+			continue
+		}
+
+		if !messagesByChat.Public {
+			// Delete any own messages for this chat
+			delete(m.ownMessages, chatID)
+		}
+
+		retrievedMessages, err := m.retrieveMessages(ctx, chatID, c, messagesByChat.Messages)
+		if err == nil {
+			allMessages = append(allMessages, retrievedMessages...)
+		}
+	}
+
+	return
+}
+
 func (m *Messenger) Retrieve(ctx context.Context, chat Chat, c RetrieveConfig) (messages []*protocol.Message, err error) {
 	var latest []*protocol.Message
 
@@ -362,18 +407,18 @@ func (m *Messenger) Retrieve(ctx context.Context, chat Chat, c RetrieveConfig) (
 		return nil, errors.Wrap(err, "failed to save latest messages")
 	}
 
-	return m.retrieveMessages(ctx, chat, c, latest)
+	return m.retrieveMessages(ctx, chat.ID(), c, latest)
 }
 
-func (m *Messenger) retrieveMessages(ctx context.Context, chat Chat, c RetrieveConfig, latest []*protocol.Message) (messages []*protocol.Message, err error) {
+func (m *Messenger) retrieveMessages(ctx context.Context, chatID string, c RetrieveConfig, latest []*protocol.Message) (messages []*protocol.Message, err error) {
 	if !c.latest {
-		return m.persistence.Messages(chat.ID(), c.From, c.To)
+		return m.persistence.Messages(chatID, c.From, c.To)
 	}
 
 	if c.last24Hours {
 		to := time.Now()
 		from := to.Add(-time.Hour * 24)
-		return m.persistence.Messages(chat.ID(), from, to)
+		return m.persistence.Messages(chatID, from, to)
 	}
 
 	return latest, nil
