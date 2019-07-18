@@ -3,9 +3,10 @@ package statusproto
 import (
 	"context"
 	"crypto/ecdsa"
-	"log"
 	"path/filepath"
 	"time"
+
+	"go.uber.org/zap"
 
 	"github.com/pkg/errors"
 	whisper "github.com/status-im/whisper/whisperv6"
@@ -39,6 +40,8 @@ type Messenger struct {
 	encryptor   *encryption.Protocol
 
 	ownMessages map[string][]*protocol.Message
+
+	shutdownTasks []func()
 }
 
 type featureFlags struct {
@@ -55,6 +58,8 @@ type config struct {
 	secrets         []filter.NegotiatedSecret
 
 	featureFlags featureFlags
+
+	logger *zap.Logger
 }
 
 type Option func(*config) error
@@ -86,6 +91,13 @@ func WithChats(
 	}
 }
 
+func WithCustomLogger(logger *zap.Logger) func(c *config) error {
+	return func(c *config) error {
+		c.logger = logger
+		return nil
+	}
+}
+
 func WithGenericDiscoveryTopicSupport() func(c *config) error {
 	return func(c *config) error {
 		c.featureFlags.genericDiscoveryTopicEnabled = true
@@ -104,35 +116,50 @@ func NewMessenger(
 ) (*Messenger, error) {
 	var messenger *Messenger
 
-	// Set default config fields.
-	c := config{
-		onNewInstallationsHandler: func(installations []*multidevice.Installation) {
-			for _, installation := range installations {
-				log.Printf(
-					"[onNewInstallationsHandler] received a new installation %s from %s",
-					installation.Identity, installation.ID,
-				)
-			}
-		},
-		onNewSharedSecretHandler: func(secrets []*sharedsecret.Secret) {
-			if err := messenger.handleSharedSecrets(secrets); err != nil {
-				log.Printf("[onNewSharedSecretHandler] failed to process secrets: %v", err)
-			}
-		},
-		onSendContactCodeHandler: func(messageSpec *encryption.ProtocolMessageSpec) {
-			log.Printf("[onSendContactCodeHandler] received a SendContactCode request")
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			_, err := messenger.adapter.SendContactCode(ctx, messageSpec)
-			if err != nil {
-				log.Printf("[onSendContactCodeHandler] failed to send a contact code: %v", err)
-			}
-		},
-	}
+	c := config{}
 
 	for _, opt := range opts {
 		if err := opt(&c); err != nil {
 			return nil, err
+		}
+	}
+
+	logger := c.logger
+	if c.logger == nil {
+		var err error
+		if logger, err = zap.NewDevelopment(); err != nil {
+			return nil, errors.Wrap(err, "failed to create a logger")
+		}
+	}
+
+	// Set default config fields.
+	if c.onNewInstallationsHandler == nil {
+		c.onNewInstallationsHandler = func(installations []*multidevice.Installation) {
+			sugar := logger.Sugar().With("site", "onNewInstallationsHandler")
+			for _, installation := range installations {
+				sugar.Infow(
+					"received a new installation",
+					"identity", installation.Identity,
+					"id", installation.ID)
+			}
+		}
+	}
+	if c.onNewSharedSecretHandler == nil {
+		c.onNewSharedSecretHandler = func(secrets []*sharedsecret.Secret) {
+			if err := messenger.handleSharedSecrets(secrets); err != nil {
+				slogger := logger.With(zap.String("site", "onNewSharedSecretHandler"))
+				slogger.Warn("failed to process secrets", zap.Error(err))
+			}
+		}
+	}
+	if c.onSendContactCodeHandler == nil {
+		c.onSendContactCodeHandler = func(messageSpec *encryption.ProtocolMessageSpec) {
+			slogger := logger.With(zap.String("site", "onSendContactCodeHandler"))
+			slogger.Info("received a SendContactCode request")
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_, err := messenger.adapter.SendContactCode(ctx, messageSpec)
+			slogger.Warn("failed to send a contact code", zap.Error(err))
 		}
 	}
 
@@ -143,6 +170,7 @@ func NewMessenger(
 		dataDir,
 		dbKey,
 		nil,
+		logger,
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create a WhisperServiceTransport")
@@ -159,6 +187,7 @@ func NewMessenger(
 		c.onNewInstallationsHandler,
 		c.onNewSharedSecretHandler,
 		c.onSendContactCodeHandler,
+		logger,
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create the encryption layer")
@@ -177,9 +206,13 @@ func NewMessenger(
 	messenger = &Messenger{
 		identity:    identity,
 		persistence: &sqlitePersistence{db: messagesDB},
-		adapter:     newWhisperAdapter(identity, t, encryptionProtocol, c.featureFlags),
+		adapter:     newWhisperAdapter(identity, t, encryptionProtocol, c.featureFlags, logger),
 		encryptor:   encryptionProtocol,
 		ownMessages: make(map[string][]*protocol.Message),
+		shutdownTasks: []func(){
+			func() { messenger.persistence.Close() },
+			func() { logger.Sync() },
+		},
 	}
 
 	// Start all services immediately.
@@ -189,6 +222,13 @@ func NewMessenger(
 	}
 
 	return messenger, nil
+}
+
+// Shutdown takes care of ensuring a clean shutdown of Messenger
+func (m *Messenger) Shutdown() {
+	for _, task := range m.shutdownTasks {
+		task()
+	}
 }
 
 func (m *Messenger) handleSharedSecrets(secrets []*sharedsecret.Secret) error {

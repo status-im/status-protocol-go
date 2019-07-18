@@ -14,6 +14,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/zap"
 
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
 	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
@@ -30,6 +31,7 @@ func TestEncryptionServiceTestSuite(t *testing.T) {
 
 type EncryptionServiceTestSuite struct {
 	suite.Suite
+	logger   *zap.Logger
 	alice    *Protocol
 	bob      *Protocol
 	aliceDir string
@@ -54,6 +56,7 @@ func (s *EncryptionServiceTestSuite) initDatabases(config encryptorConfig) {
 		func(s []*multidevice.Installation) {},
 		func(s []*sharedsecret.Secret) {},
 		func(*ProtocolMessageSpec) {},
+		s.logger.With(zap.String("user", "alice")),
 	)
 	s.Require().NoError(err)
 
@@ -66,17 +69,24 @@ func (s *EncryptionServiceTestSuite) initDatabases(config encryptorConfig) {
 		func(s []*multidevice.Installation) {},
 		func(s []*sharedsecret.Secret) {},
 		func(*ProtocolMessageSpec) {},
+		s.logger.With(zap.String("user", "bob")),
 	)
 	s.Require().NoError(err)
 }
 
 func (s *EncryptionServiceTestSuite) SetupTest() {
-	s.initDatabases(defaultEncryptorConfig("none"))
+	logger, err := zap.NewDevelopment()
+	s.Require().NoError(err)
+	s.logger = logger
+
+	s.initDatabases(defaultEncryptorConfig("none", s.logger))
 }
 
 func (s *EncryptionServiceTestSuite) TearDownTest() {
 	os.Remove(s.aliceDir)
 	os.Remove(s.bobDir)
+
+	s.logger.Sync()
 }
 
 func (s *EncryptionServiceTestSuite) TestGetBundle() {
@@ -447,7 +457,7 @@ func (s *EncryptionServiceTestSuite) TestMaxSkipKeysError() {
 }
 
 func (s *EncryptionServiceTestSuite) TestMaxMessageKeysPerSession() {
-	config := defaultEncryptorConfig("none")
+	config := defaultEncryptorConfig("none", s.logger)
 	// Set MaxKeep and MaxSkip to an high value so it does not interfere
 	config.MaxKeep = 100000
 	config.MaxSkip = 100000
@@ -505,7 +515,7 @@ func (s *EncryptionServiceTestSuite) TestMaxMessageKeysPerSession() {
 }
 
 func (s *EncryptionServiceTestSuite) TestMaxKeep() {
-	config := defaultEncryptorConfig("none")
+	config := defaultEncryptorConfig("none", s.logger)
 	// Set MaxMessageKeysPerSession to an high value so it does not interfere
 	config.MaxMessageKeysPerSession = 100000
 
@@ -820,7 +830,7 @@ func (s *EncryptionServiceTestSuite) TestDeviceNotIncluded() {
 
 // A new bundle has been received
 func (s *EncryptionServiceTestSuite) TestRefreshedBundle() {
-	config := defaultEncryptorConfig("none")
+	config := defaultEncryptorConfig("none", s.logger)
 	// Set up refresh interval to "always"
 	config.BundleRefreshInterval = 1000
 

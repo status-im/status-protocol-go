@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func TestSelectAndAddNoMailservers(t *testing.T) {
@@ -20,6 +21,10 @@ func TestNewWhisperServiceTransport(t *testing.T) {
 	require.NoError(t, err)
 	defer os.Remove(dbDir)
 
-	_, err = NewWhisperServiceTransport(nil, nil, nil, dbDir, "some-key", nil)
+	logger, err := zap.NewDevelopment()
+	require.NoError(t, err)
+	defer logger.Sync()
+
+	_, err = NewWhisperServiceTransport(nil, nil, nil, dbDir, "some-key", nil, logger)
 	require.NoError(t, err)
 }

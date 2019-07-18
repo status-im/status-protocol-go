@@ -29,7 +29,7 @@ func (s *SQLLitePersistenceTestSuite) SetupTest() {
 	os.Remove(dbPath)
 
 	db, err := sqlite.Open(dbPath, "test-key", sqlite.MigrationConfig{
-		AssetNames:migrations.AssetNames(),
+		AssetNames: migrations.AssetNames(),
 		AssetGetter: func(name string) ([]byte, error) {
 			return migrations.Asset(name)
 		},
