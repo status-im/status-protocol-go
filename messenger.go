@@ -43,8 +43,10 @@ type Messenger struct {
 
 type config struct {
 	onNewInstallationsHandler func([]*multidevice.Installation)
-	onNewSharedSecretHandler  func([]*sharedsecret.Secret)
-	onSendContactCodeHandler  func(*encryption.ProtocolMessageSpec)
+	// DEPRECATED: no need to expose it
+	onNewSharedSecretHandler func([]*sharedsecret.Secret)
+	// DEPRECATED: no need to expose it
+	onSendContactCodeHandler func(*encryption.ProtocolMessageSpec)
 
 	publicChatNames []string
 	publicKeys      []*ecdsa.PublicKey
@@ -70,12 +72,10 @@ func WithOnNewSharedSecret(h func([]*sharedsecret.Secret)) func(c *config) error
 func WithChats(
 	publicChatNames []string,
 	publicKeys []*ecdsa.PublicKey,
-	secrets []filter.NegotiatedSecret,
 ) func(c *config) error {
 	return func(c *config) error {
 		c.publicChatNames = publicChatNames
 		c.publicKeys = publicKeys
-		c.secrets = secrets
 		return nil
 	}
 }
@@ -135,7 +135,7 @@ func NewMessenger(
 		return nil, errors.Wrap(err, "failed to create a WhisperServiceTransport")
 	}
 
-	if _, err := t.Init(c.publicChatNames, c.publicKeys, c.secrets); err != nil {
+	if _, err := t.Init(c.publicChatNames, c.publicKeys); err != nil {
 		return nil, errors.Wrap(err, "failed to initialize WhisperServiceTransport")
 	}
 
@@ -287,7 +287,6 @@ func (m *Messenger) Retrieve(ctx context.Context, chat Chat, c RetrieveConfig) (
 		// Return any own messages for this chat as well.
 		if ownMessages, ok := m.ownMessages[chat.ID()]; ok {
 			latest = append(latest, ownMessages...)
-			delete(m.ownMessages, chat.ID())
 		}
 	} else if chat.PublicName() != "" {
 		latest, err = m.adapter.RetrievePublicMessages(chat.PublicName())
@@ -311,6 +310,8 @@ func (m *Messenger) Retrieve(ctx context.Context, chat Chat, c RetrieveConfig) (
 		}
 	}
 
+	delete(m.ownMessages, chat.ID())
+
 	return m.retrieveSaved(ctx, chat, c, latest)
 }
 
@@ -331,6 +332,10 @@ func (m *Messenger) retrieveSaved(ctx context.Context, chat Chat, c RetrieveConf
 // LEGACY
 func (m *Messenger) RetrieveAllRaw() (map[filter.Chat][]*whisper.Message, error) {
 	return m.adapter.RetrieveAllRaw()
+}
+
+func (m *Messenger) Reset() error {
+	return m.adapter.transport.Reset()
 }
 
 // LEGACY

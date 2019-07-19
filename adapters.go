@@ -31,11 +31,11 @@ const (
 // layers.
 type whisperAdapter struct {
 	privateKey *ecdsa.PrivateKey
-	transport  transport.WhisperTransport
+	transport  *transport.WhisperServiceTransport
 	protocol   *encryption.Protocol
 }
 
-func newWhisperAdapter(pk *ecdsa.PrivateKey, t transport.WhisperTransport, p *encryption.Protocol) *whisperAdapter {
+func newWhisperAdapter(pk *ecdsa.PrivateKey, t *transport.WhisperServiceTransport, p *encryption.Protocol) *whisperAdapter {
 	return &whisperAdapter{
 		privateKey: pk,
 		transport:  t,
@@ -142,6 +142,7 @@ func (a *whisperAdapter) RetrievePrivateMessages(publicKey *ecdsa.PublicKey) ([]
 	return decodedMessages, nil
 }
 
+// LEGACY
 func (a *whisperAdapter) RetrieveAllRaw() (map[filter.Chat][]*whisper.Message, error) {
 	chatWithMessages, err := a.transport.RetrieveAllRaw()
 	if err != nil {

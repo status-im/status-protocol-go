@@ -82,7 +82,7 @@ func New(db *sql.DB, w *whisper.Whisper, privateKey *ecdsa.PrivateKey) (*ChatsMa
 	}, nil
 }
 
-func (s *ChatsManager) Init(chatIDs []string, publicKeys []*ecdsa.PublicKey, negotiated []NegotiatedSecret) ([]*Chat, error) {
+func (s *ChatsManager) Init(chatIDs []string, publicKeys []*ecdsa.PublicKey) ([]*Chat, error) {
 	log.Printf("[FiltersManager::Init] initializing")
 
 	keys, err := s.persistence.All()
@@ -124,12 +124,6 @@ func (s *ChatsManager) Init(chatIDs []string, publicKeys []*ecdsa.PublicKey, neg
 		}
 	}
 
-	for _, secret := range negotiated {
-		if _, err := s.LoadNegotiated(secret); err != nil {
-			return nil, err
-		}
-	}
-
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -140,7 +134,7 @@ func (s *ChatsManager) Init(chatIDs []string, publicKeys []*ecdsa.PublicKey, neg
 	return allChats, nil
 }
 
-func (s *ChatsManager) Uninitialize() error {
+func (s *ChatsManager) Reset() error {
 	var chats []*Chat
 
 	s.mutex.Lock()
@@ -480,8 +474,8 @@ func (s *ChatsManager) GetNegotiated(identity *ecdsa.PublicKey) *Chat {
 	return s.chats[negotiatedTopic(identity)]
 }
 
-// DEPRECATED
-func (s *ChatsManager) InitDeprecated(chats []*Chat, secrets []NegotiatedSecret) ([]*Chat, error) {
+// LEGACY
+func (s *ChatsManager) InitDeprecated(chats []*Chat) ([]*Chat, error) {
 	var (
 		chatIDs    []string
 		publicKeys []*ecdsa.PublicKey
@@ -505,10 +499,10 @@ func (s *ChatsManager) InitDeprecated(chats []*Chat, secrets []NegotiatedSecret)
 		}
 	}
 
-	return s.Init(chatIDs, publicKeys, secrets)
+	return s.Init(chatIDs, publicKeys, nil)
 }
 
-// DEPRECATED
+// LEGACY
 func (s *ChatsManager) Load(chat *Chat) ([]*Chat, error) {
 	if chat.ChatID != "" {
 		chat, err := s.LoadPublic(chat.ChatID)

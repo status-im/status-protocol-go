@@ -84,8 +84,6 @@ type WhisperServiceTransport struct {
 	selectedMailServerEnode string
 }
 
-var _ WhisperTransport = (*WhisperServiceTransport)(nil)
-
 // NewWhisperService returns a new WhisperServiceTransport.
 func NewWhisperServiceTransport(
 	node Server,
@@ -128,9 +126,12 @@ func NewWhisperServiceTransport(
 func (a *WhisperServiceTransport) Init(
 	chatIDs []string,
 	publicKeys []*ecdsa.PublicKey,
-	negotiated []filter.NegotiatedSecret,
 ) ([]*filter.Chat, error) {
-	return a.chats.Init(chatIDs, publicKeys, negotiated)
+	return a.chats.Init(chatIDs, publicKeys)
+}
+
+func (a *WhisperServiceTransport) Reset() error {
+	return a.chats.Reset()
 }
 
 func (a *WhisperServiceTransport) ProcessNegotiatedSecret(secret filter.NegotiatedSecret) error {
