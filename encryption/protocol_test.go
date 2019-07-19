@@ -7,6 +7,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/zap"
 
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
 	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
@@ -22,10 +23,15 @@ type ProtocolServiceTestSuite struct {
 	bobDir   string
 	alice    *Protocol
 	bob      *Protocol
+	logger   *zap.Logger
 }
 
 func (s *ProtocolServiceTestSuite) SetupTest() {
 	var err error
+
+	logger, err := zap.NewDevelopment()
+	s.Require().NoError(err)
+	s.logger = logger
 
 	s.aliceDir, err = ioutil.TempDir("", "alice.db")
 	s.Require().NoError(err)
@@ -45,6 +51,7 @@ func (s *ProtocolServiceTestSuite) SetupTest() {
 		addedBundlesHandler,
 		onNewSharedSecretHandler,
 		func(*ProtocolMessageSpec) {},
+		logger.With(zap.String("user", "alice")),
 	)
 	s.Require().NoError(err)
 
@@ -55,6 +62,7 @@ func (s *ProtocolServiceTestSuite) SetupTest() {
 		addedBundlesHandler,
 		onNewSharedSecretHandler,
 		func(*ProtocolMessageSpec) {},
+		logger.With(zap.String("user", "bob")),
 	)
 	s.Require().NoError(err)
 }
@@ -62,6 +70,8 @@ func (s *ProtocolServiceTestSuite) SetupTest() {
 func (s *ProtocolServiceTestSuite) TearDownTest() {
 	os.Remove(s.aliceDir)
 	os.Remove(s.bobDir)
+
+	s.logger.Sync()
 }
 
 func (s *ProtocolServiceTestSuite) TestBuildPublicMessage() {
@@ -160,4 +170,29 @@ func (s *ProtocolServiceTestSuite) TestSecretNegotiation() {
 	s.NoError(err)
 
 	s.Require().NotNil(secretResponse)
+}
+
+func (s *ProtocolServiceTestSuite) TestPropagatingSavedSharedSecretsOnStart() {
+	var secretResponse []*sharedsecret.Secret
+
+	aliceKey, err := crypto.GenerateKey()
+	s.NoError(err)
+	bobKey, err := crypto.GenerateKey()
+	s.NoError(err)
+
+	// Generate and save a shared secret.
+	generatedSecret, err := s.alice.secret.Generate(aliceKey, &bobKey.PublicKey, "installation-1")
+	s.NoError(err)
+
+	s.alice.onNewSharedSecretHandler = func(secret []*sharedsecret.Secret) {
+		secretResponse = secret
+	}
+
+	err = s.alice.Start(aliceKey)
+	s.NoError(err)
+
+	s.Require().NotNil(secretResponse)
+	s.Require().Len(secretResponse, 1)
+	s.Equal(crypto.FromECDSAPub(generatedSecret.Identity), crypto.FromECDSAPub(secretResponse[0].Identity))
+	s.Equal(generatedSecret.Key, secretResponse[0].Key)
 }

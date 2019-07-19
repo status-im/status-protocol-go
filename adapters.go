@@ -6,6 +6,8 @@ import (
 	"log"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
 	"github.com/status-im/status-protocol-go/transport/whisper/filter"
 
@@ -33,13 +35,28 @@ type whisperAdapter struct {
 	privateKey *ecdsa.PrivateKey
 	transport  *transport.WhisperServiceTransport
 	protocol   *encryption.Protocol
+	logger     *zap.Logger
+
+	featureFlags featureFlags
 }
 
-func newWhisperAdapter(pk *ecdsa.PrivateKey, t *transport.WhisperServiceTransport, p *encryption.Protocol) *whisperAdapter {
+func newWhisperAdapter(
+	pk *ecdsa.PrivateKey,
+	t *transport.WhisperServiceTransport,
+	p *encryption.Protocol,
+	featureFlags featureFlags,
+	logger *zap.Logger,
+) *whisperAdapter {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+
 	return &whisperAdapter{
-		privateKey: pk,
-		transport:  t,
-		protocol:   p,
+		privateKey:   pk,
+		transport:    t,
+		protocol:     p,
+		featureFlags: featureFlags,
+		logger:       logger.With(zap.Namespace("whisperAdapter")),
 	}
 }
 
@@ -67,15 +84,19 @@ func (a *whisperAdapter) RetrievePublicMessages(chatID string) ([]*protocol.Mess
 		return nil, err
 	}
 
+	logger := a.logger.With(zap.String("site", "RetrievePublicMessages"))
+
 	decodedMessages := make([]*protocol.Message, 0, len(messages))
 	for _, item := range messages {
 		shhMessage := whisper.ToWhisperMessage(item)
 
-		log.Printf("[whisperAdapter::RetrievePublicMessages] received a public message: %#x", shhMessage.Hash)
+		hlogger := logger.With(zap.Binary("hash", shhMessage.Hash))
+
+		hlogger.Debug("received a public message")
 
 		statusMessage, err := a.decodeMessage(shhMessage)
 		if err != nil {
-			log.Printf("failed to decode message %#x", shhMessage.Hash)
+			hlogger.Error("failed to decode message", zap.Error(err))
 			continue
 		}
 
@@ -85,7 +106,7 @@ func (a *whisperAdapter) RetrievePublicMessages(chatID string) ([]*protocol.Mess
 			m.SigPubKey = statusMessage.SigPubKey
 			decodedMessages = append(decodedMessages, &m)
 		default:
-			log.Printf("skipped a public message of unsupported type")
+			hlogger.Error("skipped a public message of unsupported type")
 		}
 	}
 	return decodedMessages, nil
@@ -99,20 +120,24 @@ func (a *whisperAdapter) RetrievePrivateMessages(publicKey *ecdsa.PublicKey) ([]
 		return nil, err
 	}
 
+	logger := a.logger.With(zap.String("site", "RetrievePrivateMessages"))
+
 	decodedMessages := make([]*protocol.Message, 0, len(messages))
 	for _, item := range messages {
 		shhMessage := whisper.ToWhisperMessage(item)
 
-		log.Printf("[whisperAdapter::RetrievePrivateMessages] received a private message: %#x", shhMessage.Hash)
+		hlogger := logger.With(zap.Binary("hash", shhMessage.Hash))
+
+		hlogger.Debug("received a private message")
 
 		err := a.decryptMessage(context.Background(), shhMessage)
 		if err != nil {
-			log.Printf("[whisperAdapter::RetrievePrivateMessages] failed to decrypt a message %#x: %v", shhMessage.Hash, err)
+			hlogger.Error("failed to decrypt a message", zap.Error(err))
 		}
 
 		statusMessage, err := a.decodeMessage(shhMessage)
 		if err != nil {
-			log.Printf("[whisperAdapter::RetrievePrivateMessages] failed to decode a message %#x: %v", shhMessage.Hash, err)
+			hlogger.Error("failed to decode a message", zap.Error(err))
 			continue
 		}
 
@@ -124,7 +149,7 @@ func (a *whisperAdapter) RetrievePrivateMessages(publicKey *ecdsa.PublicKey) ([]
 		case protocol.PairMessage:
 			fromOurDevice := isPubKeyEqual(statusMessage.SigPubKey, &a.privateKey.PublicKey)
 			if !fromOurDevice {
-				log.Printf("received PairMessage from not our device, skipping")
+				hlogger.Debug("received PairMessage from not our device, skipping")
 				break
 			}
 
@@ -194,6 +219,8 @@ func (a *whisperAdapter) decryptMessage(ctx context.Context, message *whisper.Me
 		return errors.Wrap(err, "failed to unmarshal ProtocolMessage")
 	}
 
+	logger := a.logger.With(zap.String("site", "decryptMessage"))
+
 	payload, err := a.protocol.HandleMessage(
 		a.privateKey,
 		publicKey,
@@ -201,9 +228,9 @@ func (a *whisperAdapter) decryptMessage(ctx context.Context, message *whisper.Me
 		message.Hash,
 	)
 	if err == encryption.ErrDeviceNotFound {
-		err := a.handleErrDeviceNotFound(ctx, publicKey)
-		if err != nil {
-			log.Printf("failed to handle ErrDeviceNotFound: %v", err)
+		handleErr := a.handleErrDeviceNotFound(ctx, publicKey)
+		if handleErr != nil {
+			logger.Error("failed to handle error", zap.Error(err), zap.NamedError("handleErr", handleErr))
 		}
 	}
 	if err != nil {
@@ -243,7 +270,9 @@ func (a *whisperAdapter) handleErrDeviceNotFound(ctx context.Context, publicKey 
 }
 
 func (a *whisperAdapter) SendPublic(ctx context.Context, chatName, chatID string, data []byte, clock int64) ([]byte, error) {
-	log.Printf("[whisperAdapter::SendPublic] sending a public message to %s", chatName)
+	logger := a.logger.With(zap.String("site", "SendPublic"))
+
+	logger.Debug("sending a public message", zap.String("chat-name", chatName))
 
 	message := protocol.CreatePublicTextMessage(data, clock, chatName)
 
@@ -280,7 +309,9 @@ func (a *whisperAdapter) SendPrivate(
 	data []byte,
 	clock int64,
 ) ([]byte, *protocol.Message, error) {
-	log.Printf("[whisperAdapter::SendPrivate] sending a private mesage to %#x", crypto.FromECDSAPub(publicKey))
+	logger := a.logger.With(zap.String("site", "SendPrivate"))
+
+	logger.Debug("sending a private message", zap.Binary("public-key", crypto.FromECDSAPub(publicKey)))
 
 	message := protocol.CreatePrivateTextMessage(data, clock, chatID)
 
@@ -307,14 +338,19 @@ func (a *whisperAdapter) sendMessageSpec(ctx context.Context, publicKey *ecdsa.P
 		return nil, err
 	}
 
-	if messageSpec.SharedSecret != nil {
-		log.Printf("[whisperAdapter::sendMessageSpec] sending using shared secret")
+	logger := a.logger.With(zap.String("site", "sendMessageSpec"))
+	switch {
+	case messageSpec.SharedSecret != nil:
+		logger.Debug("sending using shared secret")
 		return a.transport.SendPrivateWithSharedSecret(ctx, *newMessage, publicKey, messageSpec.SharedSecret)
-	} else if messageSpec.PartitionedTopicMode() == encryption.PartitionTopicV1 {
-		log.Printf("[whisperAdapter::sendMessageSpec] sending partitioned topic")
+	case messageSpec.PartitionedTopicMode() == encryption.PartitionTopicV1:
+		logger.Debug("sending partitioned topic")
 		return a.transport.SendPrivateWithPartitioned(ctx, *newMessage, publicKey)
-	} else {
-		log.Printf("[whisperAdapter::sendMessageSpec] sending using discovery topic")
+	case !a.featureFlags.genericDiscoveryTopicEnabled:
+		logger.Debug("sending partitioned topic (generic discovery topic disabled)")
+		return a.transport.SendPrivateWithPartitioned(ctx, *newMessage, publicKey)
+	default:
+		logger.Debug("sending using discovery topic")
 		return a.transport.SendPrivateOnDiscovery(ctx, *newMessage, publicKey)
 	}
 }
@@ -336,11 +372,9 @@ func (a *whisperAdapter) messageSpecToWhisper(spec *encryption.ProtocolMessageSp
 }
 
 func (a *whisperAdapter) handleSharedSecrets(secrets []*sharedsecret.Secret) error {
+	logger := a.logger.With(zap.String("site", "handleSharedSecrets"))
 	for _, secret := range secrets {
-		log.Printf(
-			"[whisperAdapter::handleSharedSecrets] received shared secret with identity %#x",
-			crypto.FromECDSAPub(secret.Identity),
-		)
+		logger.Debug("received shared secret", zap.Binary("identity", crypto.FromECDSAPub(secret.Identity)))
 
 		fSecret := filter.NegotiatedSecret{
 			PublicKey: secret.Identity,

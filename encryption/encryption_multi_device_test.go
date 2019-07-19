@@ -8,6 +8,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/zap"
 
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
 	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
@@ -30,6 +31,7 @@ type serviceAndKey struct {
 type EncryptionServiceMultiDeviceSuite struct {
 	suite.Suite
 	services map[string]*serviceAndKey
+	logger   *zap.Logger
 }
 
 func setupUser(user string, s *EncryptionServiceMultiDeviceSuite, n int) error {
@@ -58,6 +60,7 @@ func setupUser(user string, s *EncryptionServiceMultiDeviceSuite, n int) error {
 			func(s []*multidevice.Installation) {},
 			func(s []*sharedsecret.Secret) {},
 			func(*ProtocolMessageSpec) {},
+			s.logger.With(zap.String("user", user)),
 		)
 		if err != nil {
 			return err
@@ -69,12 +72,20 @@ func setupUser(user string, s *EncryptionServiceMultiDeviceSuite, n int) error {
 }
 
 func (s *EncryptionServiceMultiDeviceSuite) SetupTest() {
+	logger, err := zap.NewDevelopment()
+	s.Require().NoError(err)
+	s.logger = logger
+
 	s.services = make(map[string]*serviceAndKey)
-	err := setupUser(aliceUser, s, 4)
+	err = setupUser(aliceUser, s, 4)
 	s.Require().NoError(err)
 
 	err = setupUser(bobUser, s, 4)
 	s.Require().NoError(err)
+}
+
+func (s *EncryptionServiceMultiDeviceSuite) TearDownTest() {
+	s.logger.Sync()
 }
 
 func (s *EncryptionServiceMultiDeviceSuite) TestProcessPublicBundle() {

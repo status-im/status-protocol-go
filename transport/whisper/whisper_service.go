@@ -5,7 +5,6 @@ import (
 	"crypto/ecdsa"
 	"encoding/hex"
 	"fmt"
-	"log"
 	"math/big"
 	"path/filepath"
 	"sync"
@@ -19,6 +18,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/status-im/status-go/mailserver"
 	whisper "github.com/status-im/whisper/whisperv6"
+	"go.uber.org/zap"
 
 	"github.com/status-im/status-protocol-go/sqlite"
 	"github.com/status-im/status-protocol-go/transport/whisper/filter"
@@ -79,6 +79,7 @@ type WhisperServiceTransport struct {
 	shhAPI      *whisper.PublicWhisperAPI // only PublicWhisperAPI implements logic to send messages
 	keysManager *whisperServiceKeysManager
 	chats       *filter.ChatsManager
+	logger      *zap.Logger
 
 	mailservers             []string
 	selectedMailServerEnode string
@@ -92,6 +93,7 @@ func NewWhisperServiceTransport(
 	dataDir string,
 	dbKey string,
 	mailservers []string,
+	logger *zap.Logger,
 ) (*WhisperServiceTransport, error) {
 	// DB is shared between this package and all sub-packages.
 	dbPath := filepath.Join(dataDir, "transport.sql")
@@ -105,7 +107,7 @@ func NewWhisperServiceTransport(
 		return nil, err
 	}
 
-	chats, err := filter.New(db, shh, privateKey)
+	chats, err := filter.New(db, shh, privateKey, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -121,13 +123,39 @@ func NewWhisperServiceTransport(
 		},
 		chats:       chats,
 		mailservers: mailservers,
+		logger:      logger.With(zap.Namespace("WhisperServiceTransport")),
 	}, nil
 }
-func (a *WhisperServiceTransport) Init(
-	chatIDs []string,
-	publicKeys []*ecdsa.PublicKey,
-) ([]*filter.Chat, error) {
-	return a.chats.Init(chatIDs, publicKeys)
+
+// DEPRECATED
+func (a *WhisperServiceTransport) LoadFilters(chats []*filter.Chat, genericDiscoveryTopicEnabled bool) ([]*filter.Chat, error) {
+	var (
+		chatIDs []string
+		publicKeys []*ecdsa.PublicKey
+	)
+
+	for _, chat := range chats {
+		if chat.Identity != "" && chat.OneToOne {
+			publicKeyBytes, err := hexutil.Decode(chat.Identity)
+			if err != nil {
+				return nil, err
+			}
+			publicKey, err := crypto.UnmarshalPubkey(publicKeyBytes)
+			if err != nil {
+				return nil, err
+			}
+			publicKeys = append(publicKeys, publicKey)
+		} else if chat.ChatID != "" {
+			chatIDs = append(chatIDs, chat.ChatID)
+		}
+	}
+
+	return a.chats.Init(chatIDs, publicKeys, genericDiscoveryTopicEnabled)
+}
+
+// DEPRECATED
+func (a *WhisperServiceTransport) RemoveFilters(chats []*filter.Chat) error {
+	return a.chats.Remove(chats...)
 }
 
 func (a *WhisperServiceTransport) Reset() error {
@@ -196,7 +224,7 @@ func (a *WhisperServiceTransport) RetrievePrivateMessages(publicKey *ecdsa.Publi
 	return result, nil
 }
 
-// LEGACY
+// DEPRECATED
 func (a *WhisperServiceTransport) RetrieveAllRaw() (map[filter.Chat][]*whisper.ReceivedMessage, error) {
 	result := make(map[filter.Chat][]*whisper.ReceivedMessage)
 
@@ -318,7 +346,9 @@ func (a *WhisperServiceTransport) Request(ctx context.Context, options RequestOp
 }
 
 func (a *WhisperServiceTransport) requestMessages(ctx context.Context, req MessagesRequest, followCursor bool) (resp MessagesResponse, err error) {
-	log.Printf("[WhisperServiceTransport::requestMessages] request for a chunk with %d messages", req.Limit)
+	logger := a.logger.With(zap.String("site", "requestMessages"))
+
+	logger.Debug("request for a chunk", zap.Uint32("message-limit", req.Limit))
 
 	start := time.Now()
 	resp, err = a.requestMessagesWithRetry(RetryConfig{
@@ -327,12 +357,15 @@ func (a *WhisperServiceTransport) requestMessages(ctx context.Context, req Messa
 		MaxRetries:  3,
 	}, req)
 	if err != nil {
-		log.Printf("[WhisperServiceTransport::requestMessages] failed with err: %v", err)
+		logger.Error("failed requesting messages", zap.Error(err))
 		return
 	}
 
-	log.Printf("[WhisperServiceTransport::requestMessages] delivery of %d message took %v", req.Limit, time.Since(start))
-	log.Printf("[WhisperServiceTransport::requestMessages] response: %+v", resp)
+	logger.Debug("message delivery summary",
+		zap.Uint32("message-limit", req.Limit),
+		zap.Duration("duration", time.Since(start)),
+		zap.Any("response", resp),
+	)
 
 	if resp.Error != nil {
 		err = resp.Error
@@ -343,7 +376,7 @@ func (a *WhisperServiceTransport) requestMessages(ctx context.Context, req Messa
 	}
 
 	req.Cursor = resp.Cursor
-	log.Printf("[WhisperServiceTransport::requestMessages] request messages with cursor %v", req.Cursor)
+	logger.Debug("requesting messages with cursor", zap.String("cursor", req.Cursor))
 	return a.requestMessages(ctx, req, true)
 }
 
@@ -433,6 +466,8 @@ func (a *WhisperServiceTransport) requestMessagesWithRetry(conf RetryConfig, r M
 		retries   int
 	)
 
+	logger := a.logger.With(zap.String("site", "requestMessagesWithRetry"))
+
 	events := make(chan whisper.EnvelopeEvent, 10)
 
 	for retries <= conf.MaxRetries {
@@ -455,7 +490,7 @@ func (a *WhisperServiceTransport) requestMessagesWithRetry(conf RetryConfig, r M
 			return resp, nil
 		}
 		retries++
-		log.Printf("requestMessagesSync failed, retyring %d: %v", retries, err)
+		logger.Warn("requestMessagesSync failed, retrying", zap.Int("retries", retries), zap.Error(err))
 	}
 	return resp, fmt.Errorf("failed to request messages after %d retries", retries)
 }
@@ -515,6 +550,8 @@ func (a *WhisperServiceTransport) requestMessagesSync(_ context.Context, r Messa
 }
 
 func (a *WhisperServiceTransport) selectAndAddMailServer() (string, error) {
+	logger := a.logger.With(zap.String("site", "selectAndAddMailServer"))
+
 	var enodeAddr string
 	if a.selectedMailServerEnode != "" {
 		enodeAddr = a.selectedMailServerEnode
@@ -524,7 +561,7 @@ func (a *WhisperServiceTransport) selectAndAddMailServer() (string, error) {
 		}
 		enodeAddr = randomItem(a.mailservers)
 	}
-	log.Printf("dialing mail server %s", enodeAddr)
+	logger.Debug("dialing mail server", zap.String("enode", enodeAddr))
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	err := dial(ctx, a.node, enodeAddr, dialOpts{PollInterval: 200 * time.Millisecond})
 	cancel()

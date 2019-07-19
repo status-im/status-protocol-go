@@ -3,9 +3,10 @@ package statusproto
 import (
 	"context"
 	"crypto/ecdsa"
-	"log"
 	"path/filepath"
 	"time"
+
+	"go.uber.org/zap"
 
 	"github.com/pkg/errors"
 	whisper "github.com/status-im/whisper/whisperv6"
@@ -39,6 +40,15 @@ type Messenger struct {
 	encryptor   *encryption.Protocol
 
 	ownMessages map[string][]*protocol.Message
+	featureFlags featureFlags
+
+	logger *zap.Logger
+
+	shutdownTasks []func() error
+}
+
+type featureFlags struct {
+	genericDiscoveryTopicEnabled bool
 }
 
 type config struct {
@@ -48,9 +58,9 @@ type config struct {
 	// DEPRECATED: no need to expose it
 	onSendContactCodeHandler func(*encryption.ProtocolMessageSpec)
 
-	publicChatNames []string
-	publicKeys      []*ecdsa.PublicKey
-	secrets         []filter.NegotiatedSecret
+	featureFlags featureFlags
+
+	logger *zap.Logger
 }
 
 type Option func(*config) error
@@ -69,13 +79,16 @@ func WithOnNewSharedSecret(h func([]*sharedsecret.Secret)) func(c *config) error
 	}
 }
 
-func WithChats(
-	publicChatNames []string,
-	publicKeys []*ecdsa.PublicKey,
-) func(c *config) error {
+func WithCustomLogger(logger *zap.Logger) func(c *config) error {
 	return func(c *config) error {
-		c.publicChatNames = publicChatNames
-		c.publicKeys = publicKeys
+		c.logger = logger
+		return nil
+	}
+}
+
+func WithGenericDiscoveryTopicSupport() func(c *config) error {
+	return func(c *config) error {
+		c.featureFlags.genericDiscoveryTopicEnabled = true
 		return nil
 	}
 }
@@ -91,35 +104,50 @@ func NewMessenger(
 ) (*Messenger, error) {
 	var messenger *Messenger
 
-	// Set default config fields.
-	c := config{
-		onNewInstallationsHandler: func(installations []*multidevice.Installation) {
-			for _, installation := range installations {
-				log.Printf(
-					"[onNewInstallationsHandler] received a new installation %s from %s",
-					installation.Identity, installation.ID,
-				)
-			}
-		},
-		onNewSharedSecretHandler: func(secrets []*sharedsecret.Secret) {
-			if err := messenger.handleSharedSecrets(secrets); err != nil {
-				log.Printf("[onNewSharedSecretHandler] failed to process secrets: %v", err)
-			}
-		},
-		onSendContactCodeHandler: func(messageSpec *encryption.ProtocolMessageSpec) {
-			log.Printf("[onSendContactCodeHandler] received a SendContactCode request")
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			_, err := messenger.adapter.SendContactCode(ctx, messageSpec)
-			if err != nil {
-				log.Printf("[onSendContactCodeHandler] failed to send a contact code: %v", err)
-			}
-		},
-	}
+	c := config{}
 
 	for _, opt := range opts {
 		if err := opt(&c); err != nil {
 			return nil, err
+		}
+	}
+
+	logger := c.logger
+	if c.logger == nil {
+		var err error
+		if logger, err = zap.NewDevelopment(); err != nil {
+			return nil, errors.Wrap(err, "failed to create a logger")
+		}
+	}
+
+	// Set default config fields.
+	if c.onNewInstallationsHandler == nil {
+		c.onNewInstallationsHandler = func(installations []*multidevice.Installation) {
+			sugar := logger.Sugar().With("site", "onNewInstallationsHandler")
+			for _, installation := range installations {
+				sugar.Infow(
+					"received a new installation",
+					"identity", installation.Identity,
+					"id", installation.ID)
+			}
+		}
+	}
+	if c.onNewSharedSecretHandler == nil {
+		c.onNewSharedSecretHandler = func(secrets []*sharedsecret.Secret) {
+			if err := messenger.handleSharedSecrets(secrets); err != nil {
+				slogger := logger.With(zap.String("site", "onNewSharedSecretHandler"))
+				slogger.Warn("failed to process secrets", zap.Error(err))
+			}
+		}
+	}
+	if c.onSendContactCodeHandler == nil {
+		c.onSendContactCodeHandler = func(messageSpec *encryption.ProtocolMessageSpec) {
+			slogger := logger.With(zap.String("site", "onSendContactCodeHandler"))
+			slogger.Info("received a SendContactCode request")
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_, err := messenger.adapter.SendContactCode(ctx, messageSpec)
+			slogger.Warn("failed to send a contact code", zap.Error(err))
 		}
 	}
 
@@ -130,13 +158,10 @@ func NewMessenger(
 		dataDir,
 		dbKey,
 		nil,
+		logger,
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create a WhisperServiceTransport")
-	}
-
-	if _, err := t.Init(c.publicChatNames, c.publicKeys); err != nil {
-		return nil, errors.Wrap(err, "failed to initialize WhisperServiceTransport")
 	}
 
 	encryptionProtocol, err := encryption.New(
@@ -146,12 +171,11 @@ func NewMessenger(
 		c.onNewInstallationsHandler,
 		c.onNewSharedSecretHandler,
 		c.onSendContactCodeHandler,
+		logger,
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create the encryption layer")
 	}
-	// TODO: consider removing identity as an argument to Start().
-	encryptionProtocol.Start(identity)
 
 	messagesDB, err := sqlite.Open(filepath.Join(dataDir, "messages.sql"), dbKey, sqlite.MigrationConfig{
 		AssetNames: migrations.AssetNames(),
@@ -166,12 +190,38 @@ func NewMessenger(
 	messenger = &Messenger{
 		identity:    identity,
 		persistence: &sqlitePersistence{db: messagesDB},
-		adapter:     newWhisperAdapter(identity, t, encryptionProtocol),
+		adapter:     newWhisperAdapter(identity, t, encryptionProtocol, c.featureFlags, logger),
 		encryptor:   encryptionProtocol,
 		ownMessages: make(map[string][]*protocol.Message),
+		featureFlags: c.featureFlags,
+		shutdownTasks: []func() error {
+			messenger.persistence.Close,
+			logger.Sync,
+		},
+		logger: logger,
+	}
+
+	// Start all services immediately.
+	// TODO: consider removing identity as an argument to Start().
+	if err := encryptionProtocol.Start(identity); err != nil {
+		return nil, err
 	}
 
 	return messenger, nil
+}
+
+// Shutdown takes care of ensuring a clean shutdown of Messenger
+func (m *Messenger) Shutdown() (err error) {
+	for _, task := range m.shutdownTasks {
+		if tErr := task(); tErr != nil {
+			if err == nil {
+				err = tErr
+			} else {
+				err = errors.Wrap(err, tErr.Error())
+			}
+		}
+	}
+	return
 }
 
 func (m *Messenger) handleSharedSecrets(secrets []*sharedsecret.Secret) error {
@@ -280,13 +330,16 @@ var (
 )
 
 func (m *Messenger) Retrieve(ctx context.Context, chat Chat, c RetrieveConfig) (messages []*protocol.Message, err error) {
-	var latest []*protocol.Message
+	var (
+		latest    []*protocol.Message
+		ownLatest []*protocol.Message
+	)
 
 	if chat.PublicKey() != nil {
 		latest, err = m.adapter.RetrievePrivateMessages(chat.PublicKey())
 		// Return any own messages for this chat as well.
 		if ownMessages, ok := m.ownMessages[chat.ID()]; ok {
-			latest = append(latest, ownMessages...)
+			ownLatest = ownMessages
 		}
 	} else if chat.PublicName() != "" {
 		latest, err = m.adapter.RetrievePublicMessages(chat.PublicName())
@@ -304,15 +357,21 @@ func (m *Messenger) Retrieve(ctx context.Context, chat Chat, c RetrieveConfig) (
 		return nil, errors.Wrap(err, "failed to save latest messages")
 	}
 
-	for _, message := range latest {
-		if err := m.encryptor.ConfirmMessageProcessed(message.ID); err != nil {
-			return nil, errors.Wrap(err, "failed to confirm message being processed")
+	// Confirm received and decrypted messages.
+	// TODO: this should be done only if persistence is enabled.
+	if chat.PublicKey() != nil {
+		for _, message := range latest {
+			// Confirm received and decrypted messages.
+			if err := m.encryptor.ConfirmMessageProcessed(message.ID); err != nil {
+				return nil, errors.Wrap(err, "failed to confirm message being processed")
+			}
 		}
 	}
 
+	// When our messages are returned, we can delete them.
 	delete(m.ownMessages, chat.ID())
 
-	return m.retrieveSaved(ctx, chat, c, latest)
+	return m.retrieveSaved(ctx, chat, c, append(latest, ownLatest...))
 }
 
 func (m *Messenger) retrieveSaved(ctx context.Context, chat Chat, c RetrieveConfig, latest []*protocol.Message) (messages []*protocol.Message, err error) {
@@ -329,16 +388,25 @@ func (m *Messenger) retrieveSaved(ctx context.Context, chat Chat, c RetrieveConf
 	return latest, nil
 }
 
-// LEGACY
-func (m *Messenger) RetrieveAllRaw() (map[filter.Chat][]*whisper.Message, error) {
-	return m.adapter.RetrieveAllRaw()
-}
-
 func (m *Messenger) Reset() error {
 	return m.adapter.transport.Reset()
 }
 
-// LEGACY
+// DEPRECATED
+func (m *Messenger) LoadFilters(chats []*filter.Chat) ([]*filter.Chat, error) {
+	return m.adapter.transport.LoadFilters(chats, m.featureFlags.genericDiscoveryTopicEnabled)
+}
+
+func (m *Messenger) RemoveFilters(chats []*filter.Chat) error {
+	return m.adapter.transport.RemoveFilters(chats)
+}
+
+// DEPRECATED
+func (m *Messenger) RetrieveAllRaw() (map[filter.Chat][]*whisper.Message, error) {
+	return m.adapter.RetrieveAllRaw()
+}
+
+// DEPRECATED
 func (m *Messenger) ConfirmMessagesProcessed(messageIDs [][]byte) error {
 	for _, id := range messageIDs {
 		if err := m.encryptor.ConfirmMessageProcessed(id); err != nil {

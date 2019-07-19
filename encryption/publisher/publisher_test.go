@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/zap"
 )
 
 func TestServiceTestSuite(t *testing.T) {
@@ -15,6 +16,7 @@ func TestServiceTestSuite(t *testing.T) {
 type PublisherTestSuite struct {
 	suite.Suite
 	publisher *Publisher
+	logger    *zap.Logger
 }
 
 func (p *PublisherTestSuite) SetupTest(installationID string) {
@@ -24,7 +26,15 @@ func (p *PublisherTestSuite) SetupTest(installationID string) {
 	db, err := sql.Open("sqlite3", dir)
 	p.Require().NoError(err)
 
-	p.publisher = New(db)
+	logger, err := zap.NewDevelopment()
+	p.Require().NoError(err)
+	p.logger = logger
+
+	p.publisher = New(db, logger)
+}
+
+func (p *PublisherTestSuite) TearDownTest() {
+	p.logger.Sync()
 }
 
 // TODO(adam): provide more tests

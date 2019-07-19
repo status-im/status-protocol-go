@@ -10,31 +10,11 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/zap"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	whisper "github.com/status-im/whisper/whisperv6"
-	"github.com/stretchr/testify/require"
 )
-
-func TestNewMessenger(t *testing.T) {
-	tmpDir, err := ioutil.TempDir("", "messenger-test")
-	require.NoError(t, err)
-	privateKey, err := crypto.GenerateKey()
-	require.NoError(t, err)
-
-	shh := whisper.New(nil)
-
-	_, err = NewMessenger(
-		privateKey,
-		nil,
-		shh,
-		tmpDir,
-		"some-key",
-		"installation-1",
-		WithChats([]string{"status"}, nil, nil),
-	)
-	require.NoError(t, err)
-}
 
 type testChat struct {
 	publicName string
@@ -67,10 +47,15 @@ type MessengerSuite struct {
 	m          *Messenger
 	tmpDir     string
 	privateKey *ecdsa.PrivateKey
+	logger     *zap.Logger
 }
 
 func (s *MessengerSuite) SetupTest() {
 	var err error
+
+	logger, err := zap.NewDevelopment()
+	s.Require().NoError(err)
+	s.logger = logger
 
 	s.tmpDir, err = ioutil.TempDir("", "messenger-test")
 	s.Require().NoError(err)
@@ -90,12 +75,14 @@ func (s *MessengerSuite) SetupTest() {
 		s.tmpDir,
 		"some-key",
 		"installation-1",
+		WithCustomLogger(logger),
 	)
 	s.Require().NoError(err)
 }
 
 func (s *MessengerSuite) TearDownTest() {
 	os.Remove(s.tmpDir)
+	s.logger.Sync()
 }
 
 func (s *MessengerSuite) TestSendPublic() {

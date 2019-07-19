@@ -12,6 +12,7 @@ import (
 	_ "github.com/mutecomm/go-sqlcipher"
 	whisper "github.com/status-im/whisper/whisperv6"
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/zap"
 
 	"github.com/status-im/status-protocol-go/sqlite"
 	migrations "github.com/status-im/status-protocol-go/transport/whisper/internal/sqlite"
@@ -26,6 +27,7 @@ type ChatsTestSuite struct {
 	chats  *ChatsManager
 	dbPath string
 	keys   []*testKey
+	logger *zap.Logger
 }
 
 type testKey struct {
@@ -50,6 +52,10 @@ func newTestKey(privateKey string, partitionedTopic int) (*testKey, error) {
 }
 
 func (s *ChatsTestSuite) SetupTest() {
+	logger, err := zap.NewDevelopment()
+	s.Require().NoError(err)
+	s.logger = logger
+
 	keyStrs := []string{
 		"c6cbd7d76bc5baca530c875663711b947efa6a86a900a9e8645ce32e5821484e",
 		"d51dd64ad19ea84968a308dca246012c00d2b2101d41bce740acd1c650acc509",
@@ -67,7 +73,7 @@ func (s *ChatsTestSuite) SetupTest() {
 	}
 
 	db, err := sqlite.Open(s.dbPath, "filter-key", sqlite.MigrationConfig{
-		AssetNames:migrations.AssetNames(),
+		AssetNames: migrations.AssetNames(),
 		AssetGetter: func(name string) ([]byte, error) {
 			return migrations.Asset(name)
 		},
@@ -76,20 +82,18 @@ func (s *ChatsTestSuite) SetupTest() {
 
 	whisper := whisper.New(nil)
 
-	s.chats, err = New(db, whisper, s.keys[0].privateKey)
+	s.chats, err = New(db, whisper, s.keys[0].privateKey, logger)
 	s.Require().NoError(err)
 }
 
 func (s *ChatsTestSuite) TearDownTest() {
 	os.Remove(s.dbPath)
+
+	s.logger.Sync()
 }
 
 func (s *ChatsTestSuite) TestDiscoveryAndPartitionedTopic() {
-	partitionedTopic := fmt.Sprintf("contact-discovery-%d", s.keys[0].partitionedTopic)
-	personalDiscoveryTopic := fmt.Sprintf("contact-discovery-%s", s.keys[0].publicKeyString())
-	contactCodeTopic := contactCodeTopic(&s.keys[0].privateKey.PublicKey)
-
-	_, err := s.chats.InitDeprecated(nil, nil)
+	_, err := s.chats.InitDeprecated(nil, true)
 	s.Require().NoError(err)
 
 	s.Require().Equal(4, len(s.chats.chats), "It creates four filters")
@@ -97,6 +101,26 @@ func (s *ChatsTestSuite) TestDiscoveryAndPartitionedTopic() {
 	discoveryFilter := s.chats.chats[DiscoveryTopic]
 	s.Require().NotNil(discoveryFilter, "It adds the discovery filter")
 	s.Require().True(discoveryFilter.Listen)
+
+	s.assertRequiredFilters()
+}
+
+func (s *ChatsTestSuite) TestPartitionedTopicWithDiscoveryDisabled() {
+	_, err := s.chats.InitDeprecated(nil, false)
+	s.Require().NoError(err)
+
+	s.Require().Equal(3, len(s.chats.chats), "It creates three filters")
+
+	discoveryFilter := s.chats.chats[DiscoveryTopic]
+	s.Require().Nil(discoveryFilter, "It does not add the discovery filter")
+
+	s.assertRequiredFilters()
+}
+
+func (s *ChatsTestSuite) assertRequiredFilters() {
+	partitionedTopic := fmt.Sprintf("contact-discovery-%d", s.keys[0].partitionedTopic)
+	personalDiscoveryTopic := fmt.Sprintf("contact-discovery-%s", s.keys[0].publicKeyString())
+	contactCodeTopic := contactCodeTopic(&s.keys[0].privateKey.PublicKey)
 
 	personalDiscoveryFilter := s.chats.chats[personalDiscoveryTopic]
 	s.Require().NotNil(personalDiscoveryFilter, "It adds the discovery filter")
