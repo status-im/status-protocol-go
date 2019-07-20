@@ -89,7 +89,7 @@ func (s *ChatsTestSuite) SetupTest() {
 func (s *ChatsTestSuite) TearDownTest() {
 	os.Remove(s.dbPath)
 
-	s.logger.Sync()
+	s.Require().NoError(s.logger.Sync())
 }
 
 func (s *ChatsTestSuite) TestDiscoveryAndPartitionedTopic() {

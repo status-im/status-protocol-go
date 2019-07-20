@@ -131,10 +131,7 @@ func NewMessenger(
 ) (*Messenger, error) {
 	var messenger *Messenger
 
-	c := config{
-		encryptionLayerFilePath: filepath.Join(dataDir, "sessions.sql"),
-		transportLayerFilePath:  filepath.Join(dataDir, "transport.sql"),
-	}
+	c := config{}
 
 	for _, opt := range opts {
 		if err := opt(&c); err != nil {
@@ -181,6 +178,14 @@ func NewMessenger(
 		}
 	}
 
+	// Set default database file paths.
+	if c.encryptionLayerFilePath == "" {
+		c.encryptionLayerFilePath = filepath.Join(dataDir, "sessions.sql")
+	}
+	if c.transportLayerFilePath == "" {
+		c.transportLayerFilePath = filepath.Join(dataDir, "transport.sql")
+	}
+
 	t, err := transport.NewWhisperServiceTransport(
 		server,
 		shh,
@@ -218,16 +223,19 @@ func NewMessenger(
 		return nil, errors.Wrap(err, "failed to initialize messages db")
 	}
 
+	persistence := &sqlitePersistence{db: applicationLayerPersistence}
+	adapter := newWhisperAdapter(identity, t, encryptionProtocol, c.featureFlags, logger)
 	messenger = &Messenger{
 		identity:                   identity,
-		persistence:                &sqlitePersistence{db: applicationLayerPersistence},
-		adapter:                    newWhisperAdapter(identity, t, encryptionProtocol, c.featureFlags, logger),
+		persistence:                persistence,
+		adapter:                    adapter,
 		encryptor:                  encryptionProtocol,
 		ownMessages:                make(map[string][]*protocol.Message),
 		featureFlags:               c.featureFlags,
 		messagesPersistenceEnabled: c.messagesPersistenceEnabled,
 		shutdownTasks: []func() error{
-			messenger.persistence.Close,
+			persistence.Close,
+			adapter.transport.Reset,
 			logger.Sync,
 		},
 		logger: logger,
@@ -416,8 +424,7 @@ func (m *Messenger) Retrieve(ctx context.Context, chat Chat, c RetrieveConfig) (
 	}
 
 	// Confirm received and decrypted messages.
-	// TODO: this should be done only if persistence is enabled.
-	if chat.PublicKey() != nil {
+	if m.messagesPersistenceEnabled && chat.PublicKey() != nil {
 		for _, message := range latest {
 			// Confirm received and decrypted messages.
 			if err := m.encryptor.ConfirmMessageProcessed(message.ID); err != nil {
@@ -478,8 +485,4 @@ func (m *Messenger) ConfirmMessagesProcessed(messageIDs [][]byte) error {
 		}
 	}
 	return nil
-}
-
-func (m *Messenger) Reset() error {
-	return m.adapter.transport.Reset()
 }

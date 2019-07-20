@@ -81,10 +81,16 @@ func New(db *sql.DB, w *whisper.Whisper, privateKey *ecdsa.PrivateKey, logger *z
 		return nil, err
 	}
 
+	keys, err := persistence.All()
+	if err != nil {
+		return nil, err
+	}
+
 	return &ChatsManager{
 		privateKey:  privateKey,
 		whisper:     w,
 		persistence: persistence,
+		keys:        keys,
 		chats:       make(map[string]*Chat),
 		logger:      logger.With(zap.Namespace("ChatsManager")),
 	}, nil
@@ -101,14 +107,8 @@ func (s *ChatsManager) Init(
 
 	s.genericDiscoveryTopicEnabled = genericDiscoveryTopicEnabled
 
-	keys, err := s.persistence.All()
-	if err != nil {
-		return nil, err
-	}
-	s.keys = keys
-
 	// Load our contact code.
-	_, err = s.LoadContactCode(&s.privateKey.PublicKey)
+	_, err := s.LoadContactCode(&s.privateKey.PublicKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to load contact code")
 	}

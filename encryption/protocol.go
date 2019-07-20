@@ -177,7 +177,7 @@ func (p *Protocol) addBundle(myIdentityKey *ecdsa.PrivateKey, msg *ProtocolMessa
 
 	logger.Info("adding bundle to the message",
 		zap.Any("installations", installations),
-		zap.Stringer("msg", msg))
+	)
 
 	bundle, err := p.encryptor.CreateBundle(myIdentityKey, installations)
 	if err != nil {
@@ -360,7 +360,7 @@ func (p *Protocol) recoverInstallationsFromBundle(myIdentityKey *ecdsa.PrivateKe
 	signedPreKeys := bundle.GetSignedPreKeys()
 
 	for installationID, signedPreKey := range signedPreKeys {
-		logger.Info("recovered installation %s", zap.String("installation-id", installationID))
+		logger.Info("recovered installation", zap.String("installation-id", installationID))
 		if installationID != p.multidevice.InstallationID() {
 			installations = append(installations, &multidevice.Installation{
 				Identity: theirIdentityStr,
