@@ -180,6 +180,17 @@ func (s *ChatsManager) ChatByID(chatID string) *Chat {
 	return s.chats[chatID]
 }
 
+func (s *ChatsManager) ChatByFilterID(filterID string) *Chat {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	for _, chat := range s.chats {
+		if chat.FilterID == filterID {
+			return chat
+		}
+	}
+	return nil
+}
+
 func (s *ChatsManager) ChatsByPublicKey(publicKey *ecdsa.PublicKey) (result []*Chat) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -529,7 +540,7 @@ func (s *ChatsManager) InitDeprecated(chats []*Chat, genericDiscoveryTopicEnable
 	return s.Init(chatIDs, publicKeys, genericDiscoveryTopicEnabled)
 }
 
-// LEGACY
+// DEPRECATED
 func (s *ChatsManager) Load(chat *Chat) ([]*Chat, error) {
 	if chat.ChatID != "" {
 		chat, err := s.LoadPublic(chat.ChatID)

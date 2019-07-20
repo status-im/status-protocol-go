@@ -21,6 +21,12 @@ import (
 	protocol "github.com/status-im/status-protocol-go/v1"
 )
 
+const (
+	// messagesDatabaseFileName is a name of the SQL file in which
+	// messages are stored.
+	messagesDatabaseFileName = "messages.sql"
+)
+
 var (
 	ErrChatIDEmpty    = errors.New("chat ID is empty")
 	ErrNotImplemented = errors.New("not implemented")
@@ -39,8 +45,9 @@ type Messenger struct {
 	adapter     *whisperAdapter
 	encryptor   *encryption.Protocol
 
-	ownMessages map[string][]*protocol.Message
-	featureFlags featureFlags
+	ownMessages                map[string][]*protocol.Message
+	featureFlags               featureFlags
+	messagesPersistenceEnabled bool
 
 	logger *zap.Logger
 
@@ -58,7 +65,11 @@ type config struct {
 	// DEPRECATED: no need to expose it
 	onSendContactCodeHandler func(*encryption.ProtocolMessageSpec)
 
-	featureFlags featureFlags
+	encryptionLayerFilePath string
+	transportLayerFilePath  string
+
+	messagesPersistenceEnabled bool
+	featureFlags               featureFlags
 
 	logger *zap.Logger
 }
@@ -93,6 +104,22 @@ func WithGenericDiscoveryTopicSupport() func(c *config) error {
 	}
 }
 
+func WithMessagesPersistenceEnabled() func(c *config) error {
+	return func(c *config) error {
+		c.messagesPersistenceEnabled = true
+		return nil
+	}
+}
+
+// TODO: use this config fileds.
+func WithDatabaseFilePaths(encryptionLayerFilePath, transportLayerFilePath string) func(c *config) error {
+	return func(c *config) error {
+		c.encryptionLayerFilePath = encryptionLayerFilePath
+		c.transportLayerFilePath = transportLayerFilePath
+		return nil
+	}
+}
+
 func NewMessenger(
 	identity *ecdsa.PrivateKey,
 	server transport.Server,
@@ -104,7 +131,10 @@ func NewMessenger(
 ) (*Messenger, error) {
 	var messenger *Messenger
 
-	c := config{}
+	c := config{
+		encryptionLayerFilePath: filepath.Join(dataDir, "sessions.sql"),
+		transportLayerFilePath:  filepath.Join(dataDir, "transport.sql"),
+	}
 
 	for _, opt := range opts {
 		if err := opt(&c); err != nil {
@@ -155,7 +185,7 @@ func NewMessenger(
 		server,
 		shh,
 		identity,
-		dataDir,
+		c.transportLayerFilePath,
 		dbKey,
 		nil,
 		logger,
@@ -165,7 +195,7 @@ func NewMessenger(
 	}
 
 	encryptionProtocol, err := encryption.New(
-		dataDir,
+		c.encryptionLayerFilePath,
 		dbKey,
 		installationID,
 		c.onNewInstallationsHandler,
@@ -177,7 +207,8 @@ func NewMessenger(
 		return nil, errors.Wrap(err, "failed to create the encryption layer")
 	}
 
-	messagesDB, err := sqlite.Open(filepath.Join(dataDir, "messages.sql"), dbKey, sqlite.MigrationConfig{
+	applicationLayerFilePath := filepath.Join(dataDir, messagesDatabaseFileName)
+	applicationLayerPersistence, err := sqlite.Open(applicationLayerFilePath, dbKey, sqlite.MigrationConfig{
 		AssetNames: migrations.AssetNames(),
 		AssetGetter: func(name string) ([]byte, error) {
 			return migrations.Asset(name)
@@ -188,13 +219,14 @@ func NewMessenger(
 	}
 
 	messenger = &Messenger{
-		identity:    identity,
-		persistence: &sqlitePersistence{db: messagesDB},
-		adapter:     newWhisperAdapter(identity, t, encryptionProtocol, c.featureFlags, logger),
-		encryptor:   encryptionProtocol,
-		ownMessages: make(map[string][]*protocol.Message),
-		featureFlags: c.featureFlags,
-		shutdownTasks: []func() error {
+		identity:                   identity,
+		persistence:                &sqlitePersistence{db: applicationLayerPersistence},
+		adapter:                    newWhisperAdapter(identity, t, encryptionProtocol, c.featureFlags, logger),
+		encryptor:                  encryptionProtocol,
+		ownMessages:                make(map[string][]*protocol.Message),
+		featureFlags:               c.featureFlags,
+		messagesPersistenceEnabled: c.messagesPersistenceEnabled,
+		shutdownTasks: []func() error{
 			messenger.persistence.Close,
 			logger.Sync,
 		},
@@ -207,6 +239,8 @@ func NewMessenger(
 		return nil, err
 	}
 
+	logger.Debug("messages persistence", zap.Bool("enabled", c.messagesPersistenceEnabled))
+
 	return messenger, nil
 }
 
@@ -215,8 +249,11 @@ func (m *Messenger) Shutdown() (err error) {
 	for _, task := range m.shutdownTasks {
 		if tErr := task(); tErr != nil {
 			if err == nil {
+				// First error appeared.
 				err = tErr
 			} else {
+				// We return all errors. They will be concatenated in the order of occurrence,
+				// however, they will also be returned as a single error.
 				err = errors.Wrap(err, tErr.Error())
 			}
 		}
@@ -244,22 +281,22 @@ func (m *Messenger) SetInstallationMetadata(id string, data *multidevice.Install
 	return m.encryptor.SetInstallationMetadata(&m.identity.PublicKey, id, data)
 }
 
-// NOT_IMPLEMENTED
+// NOT IMPLEMENTED
 func (m *Messenger) SelectMailserver(id string) error {
 	return ErrNotImplemented
 }
 
-// NOT_IMPLEMENTED
+// NOT IMPLEMENTED
 func (m *Messenger) AddMailserver(enode string) error {
 	return ErrNotImplemented
 }
 
-// NOT_IMPLEMENTED
+// NOT IMPLEMENTED
 func (m *Messenger) RemoveMailserver(id string) error {
 	return ErrNotImplemented
 }
 
-// NOT_IMPLEMENTED
+// NOT IMPLEMENTED
 func (m *Messenger) Mailservers() ([]string, error) {
 	return nil, ErrNotImplemented
 }
@@ -302,9 +339,12 @@ func (m *Messenger) Send(ctx context.Context, chat Chat, data []byte) ([]byte, e
 		// Save our message because it won't be received from the transport layer.
 		message.ID = hash // a Message need ID to be properly stored in the db
 		message.SigPubKey = &m.identity.PublicKey
-		_, err = m.persistence.SaveMessages(chat.ID(), []*protocol.Message{message})
-		if err != nil {
-			return nil, err
+
+		if m.messagesPersistenceEnabled {
+			_, err = m.persistence.SaveMessages(chat.ID(), []*protocol.Message{message})
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		// Cache it to be returned in Retrieve().
@@ -313,6 +353,22 @@ func (m *Messenger) Send(ctx context.Context, chat Chat, data []byte) ([]byte, e
 		return hash, nil
 	} else if chat.PublicName() != "" {
 		return m.adapter.SendPublic(ctx, chat.PublicName(), chat.ID(), data, clock)
+	}
+	return nil, errors.New("chat is neither public nor private")
+}
+
+// SendRaw takes encoded data, encrypts it and sends through the wire.
+// DEPRECATED
+func (m *Messenger) SendRaw(ctx context.Context, chat Chat, data []byte) ([]byte, error) {
+	chatID := chat.ID()
+	if chatID == "" {
+		return nil, ErrChatIDEmpty
+	}
+
+	if chat.PublicKey() != nil {
+		return m.adapter.SendPrivateRaw(ctx, chat.PublicKey(), chat.ID(), data)
+	} else if chat.PublicName() != "" {
+		return m.adapter.SendPublicRaw(ctx, chat.PublicName(), chat.ID(), data)
 	}
 	return nil, errors.New("chat is neither public nor private")
 }
@@ -352,9 +408,11 @@ func (m *Messenger) Retrieve(ctx context.Context, chat Chat, c RetrieveConfig) (
 		return
 	}
 
-	_, err = m.persistence.SaveMessages(chat.ID(), latest)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to save latest messages")
+	if m.messagesPersistenceEnabled {
+		_, err = m.persistence.SaveMessages(chat.ID(), latest)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to save latest messages")
+		}
 	}
 
 	// Confirm received and decrypted messages.
@@ -375,6 +433,10 @@ func (m *Messenger) Retrieve(ctx context.Context, chat Chat, c RetrieveConfig) (
 }
 
 func (m *Messenger) retrieveSaved(ctx context.Context, chat Chat, c RetrieveConfig, latest []*protocol.Message) (messages []*protocol.Message, err error) {
+	if !m.messagesPersistenceEnabled {
+		return latest, nil
+	}
+
 	if !c.latest {
 		return m.persistence.Messages(chat.ID(), c.From, c.To)
 	}
@@ -388,8 +450,14 @@ func (m *Messenger) retrieveSaved(ctx context.Context, chat Chat, c RetrieveConf
 	return latest, nil
 }
 
-func (m *Messenger) Reset() error {
-	return m.adapter.transport.Reset()
+// DEPRECATED
+func (m *Messenger) RetrieveRawAll() (map[filter.Chat][]*whisper.Message, error) {
+	return m.adapter.RetrieveRawAll()
+}
+
+// DEPRECATED
+func (m *Messenger) RetrieveRawWithFilter(filterID string) ([]*whisper.Message, error) {
+	return m.adapter.RetrieveRaw(filterID)
 }
 
 // DEPRECATED
@@ -397,13 +465,9 @@ func (m *Messenger) LoadFilters(chats []*filter.Chat) ([]*filter.Chat, error) {
 	return m.adapter.transport.LoadFilters(chats, m.featureFlags.genericDiscoveryTopicEnabled)
 }
 
+// DEPRECATED
 func (m *Messenger) RemoveFilters(chats []*filter.Chat) error {
 	return m.adapter.transport.RemoveFilters(chats)
-}
-
-// DEPRECATED
-func (m *Messenger) RetrieveAllRaw() (map[filter.Chat][]*whisper.Message, error) {
-	return m.adapter.RetrieveAllRaw()
 }
 
 // DEPRECATED
@@ -414,4 +478,8 @@ func (m *Messenger) ConfirmMessagesProcessed(messageIDs [][]byte) error {
 		}
 	}
 	return nil
+}
+
+func (m *Messenger) Reset() error {
+	return m.adapter.transport.Reset()
 }

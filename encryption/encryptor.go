@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -81,8 +80,7 @@ func defaultEncryptorConfig(installationID string, logger *zap.Logger) encryptor
 }
 
 // newEncryptor creates a new EncryptionService instance.
-func newEncryptor(dbDir, dbKey string, config encryptorConfig) (*encryptor, error) {
-	dbPath := filepath.Join(dbDir, "sessions.sql")
+func newEncryptor(dbPath, dbKey string, config encryptorConfig) (*encryptor, error) {
 	db, err := sqlite.Open(dbPath, dbKey, sqlite.MigrationConfig{
 		AssetNames: migrations.AssetNames(),
 		AssetGetter: func(name string) ([]byte, error) {

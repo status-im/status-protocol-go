@@ -3,7 +3,6 @@ package statusproto
 import (
 	"context"
 	"crypto/ecdsa"
-	"log"
 	"time"
 
 	"go.uber.org/zap"
@@ -167,13 +166,14 @@ func (a *whisperAdapter) RetrievePrivateMessages(publicKey *ecdsa.PublicKey) ([]
 	return decodedMessages, nil
 }
 
-// LEGACY
-func (a *whisperAdapter) RetrieveAllRaw() (map[filter.Chat][]*whisper.Message, error) {
-	chatWithMessages, err := a.transport.RetrieveAllRaw()
+// DEPRECATED
+func (a *whisperAdapter) RetrieveRawAll() (map[filter.Chat][]*whisper.Message, error) {
+	chatWithMessages, err := a.transport.RetrieveRawAll()
 	if err != nil {
 		return nil, err
 	}
 
+	logger := a.logger.With(zap.String("site", "RetrieveRawAll"))
 	result := make(map[filter.Chat][]*whisper.Message)
 
 	for chat, messages := range chatWithMessages {
@@ -181,10 +181,33 @@ func (a *whisperAdapter) RetrieveAllRaw() (map[filter.Chat][]*whisper.Message, e
 			shhMessage := whisper.ToWhisperMessage(message)
 			err := a.decryptMessage(context.Background(), shhMessage)
 			if err != nil {
-				log.Printf("[whisperAdapter::RetrievePrivateMessages] failed to decrypt a message %#x: %v", shhMessage.Hash, err)
+				logger.Warn("failed to decrypt a message", zap.Error(err), zap.Binary("messageID", shhMessage.Hash))
 			}
 			result[chat] = append(result[chat], shhMessage)
 		}
+	}
+
+	return result, nil
+}
+
+// DEPRECATED
+func (a *whisperAdapter) RetrieveRaw(filterID string) ([]*whisper.Message, error) {
+	messages, err := a.transport.RetrieveRaw(filterID)
+	if err != nil {
+		return nil, err
+	}
+
+	logger := a.logger.With(zap.String("site", "RetrieveRaw"))
+
+	var result []*whisper.Message
+
+	for _, message := range messages {
+		shhMessage := whisper.ToWhisperMessage(message)
+		err := a.decryptMessage(context.Background(), shhMessage)
+		if err != nil {
+			logger.Warn("failed to decrypt a message", zap.Error(err), zap.Binary("messageID", shhMessage.Hash))
+		}
+		result = append(result, shhMessage)
 	}
 
 	return result, nil
@@ -287,7 +310,18 @@ func (a *whisperAdapter) SendPublic(ctx context.Context, chatName, chatID string
 		PowTarget: whisperPoW,
 		PowTime:   whisperPoWTime,
 	}
+	return a.transport.SendPublic(ctx, newMessage, chatName)
+}
 
+// SendPublicRaw takes encoded data, encrypts it and sends through the wire.
+// DEPRECATED
+func (a *whisperAdapter) SendPublicRaw(ctx context.Context, chatName, chatID string, data []byte) ([]byte, error) {
+	newMessage := whisper.NewMessage{
+		TTL:       whisperTTL,
+		Payload:   data,
+		PowTarget: whisperPoW,
+		PowTime:   whisperPoWTime,
+	}
 	return a.transport.SendPublic(ctx, newMessage, chatName)
 }
 
@@ -330,6 +364,26 @@ func (a *whisperAdapter) SendPrivate(
 		return nil, nil, err
 	}
 	return hash, &message, nil
+}
+
+// SendPrivateRaw takes encoded data, encrypts it and sends through the wire.
+// DEPRECATED
+func (a *whisperAdapter) SendPrivateRaw(
+	ctx context.Context,
+	publicKey *ecdsa.PublicKey,
+	chatID string,
+	data []byte,
+) ([]byte, error) {
+	logger := a.logger.With(zap.String("site", "SendPrivateRaw"))
+
+	logger.Debug("sending a private message", zap.Binary("public-key", crypto.FromECDSAPub(publicKey)))
+
+	messageSpec, err := a.protocol.BuildDirectMessage(a.privateKey, publicKey, data)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to encrypt message")
+	}
+
+	return a.sendMessageSpec(ctx, publicKey, messageSpec)
 }
 
 func (a *whisperAdapter) sendMessageSpec(ctx context.Context, publicKey *ecdsa.PublicKey, messageSpec *encryption.ProtocolMessageSpec) ([]byte, error) {

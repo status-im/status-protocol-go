@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/big"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -28,6 +27,10 @@ import (
 const (
 	// defaultRequestTimeout is the default request timeout in seconds
 	defaultRequestTimeout = 10
+
+	// DatabaseFileName is a name of the SQL file in which
+	// persistent transport information is stored.
+	DatabaseFileName = "transport.sql"
 )
 
 var (
@@ -90,13 +93,12 @@ func NewWhisperServiceTransport(
 	node Server,
 	shh *whisper.Whisper,
 	privateKey *ecdsa.PrivateKey,
-	dataDir string,
+	dbPath string,
 	dbKey string,
 	mailservers []string,
 	logger *zap.Logger,
 ) (*WhisperServiceTransport, error) {
 	// DB is shared between this package and all sub-packages.
-	dbPath := filepath.Join(dataDir, "transport.sql")
 	db, err := sqlite.Open(dbPath, dbKey, sqlite.MigrationConfig{
 		AssetNames: migrations.AssetNames(),
 		AssetGetter: func(name string) ([]byte, error) {
@@ -130,7 +132,7 @@ func NewWhisperServiceTransport(
 // DEPRECATED
 func (a *WhisperServiceTransport) LoadFilters(chats []*filter.Chat, genericDiscoveryTopicEnabled bool) ([]*filter.Chat, error) {
 	var (
-		chatIDs []string
+		chatIDs    []string
 		publicKeys []*ecdsa.PublicKey
 	)
 
@@ -225,7 +227,7 @@ func (a *WhisperServiceTransport) RetrievePrivateMessages(publicKey *ecdsa.Publi
 }
 
 // DEPRECATED
-func (a *WhisperServiceTransport) RetrieveAllRaw() (map[filter.Chat][]*whisper.ReceivedMessage, error) {
+func (a *WhisperServiceTransport) RetrieveRawAll() (map[filter.Chat][]*whisper.ReceivedMessage, error) {
 	result := make(map[filter.Chat][]*whisper.ReceivedMessage)
 
 	allChats := a.chats.Chats()
@@ -238,6 +240,15 @@ func (a *WhisperServiceTransport) RetrieveAllRaw() (map[filter.Chat][]*whisper.R
 	}
 
 	return result, nil
+}
+
+// DEPRECATED
+func (a *WhisperServiceTransport) RetrieveRaw(filterID string) ([]*whisper.ReceivedMessage, error) {
+	f := a.shh.GetFilter(filterID)
+	if f == nil {
+		return nil, errors.New("failed to return a filter")
+	}
+	return f.Retrieve(), nil
 }
 
 // SendPublic sends a new message using the Whisper service.

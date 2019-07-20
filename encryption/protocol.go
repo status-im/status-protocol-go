@@ -83,7 +83,7 @@ var (
 
 // New creates a new ProtocolService instance
 func New(
-	dataDir string,
+	dbPath string,
 	dbKey string,
 	installationID string,
 	addedBundlesHandler func([]*multidevice.Installation),
@@ -92,7 +92,7 @@ func New(
 	logger *zap.Logger,
 ) (*Protocol, error) {
 	return NewWithEncryptorConfig(
-		dataDir,
+		dbPath,
 		dbKey,
 		installationID,
 		defaultEncryptorConfig(installationID, logger),
@@ -104,7 +104,7 @@ func New(
 }
 
 func NewWithEncryptorConfig(
-	dataDir string,
+	dbPath string,
 	dbKey string,
 	installationID string,
 	encryptorConfig encryptorConfig,
@@ -113,7 +113,7 @@ func NewWithEncryptorConfig(
 	onSendContactCodeHandler func(*ProtocolMessageSpec),
 	logger *zap.Logger,
 ) (*Protocol, error) {
-	encryptor, err := newEncryptor(dataDir, dbKey, encryptorConfig)
+	encryptor, err := newEncryptor(dbPath, dbKey, encryptorConfig)
 	if err != nil {
 		return nil, err
 	}
