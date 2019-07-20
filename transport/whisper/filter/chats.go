@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/ethereum/go-ethereum/common/hexutil"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/pkg/errors"
 	whisper "github.com/status-im/whisper/whisperv6"
@@ -148,6 +150,32 @@ func (s *ChatsManager) Init(
 		allChats = append(allChats, chat)
 	}
 	return allChats, nil
+}
+
+// DEPRECATED
+func (s *ChatsManager) InitWithChats(chats []*Chat, genericDiscoveryTopicEnabled bool) ([]*Chat, error) {
+	var (
+		chatIDs    []string
+		publicKeys []*ecdsa.PublicKey
+	)
+
+	for _, chat := range chats {
+		if chat.Identity != "" && chat.OneToOne {
+			publicKeyBytes, err := hexutil.Decode(chat.Identity)
+			if err != nil {
+				return nil, err
+			}
+			publicKey, err := crypto.UnmarshalPubkey(publicKeyBytes)
+			if err != nil {
+				return nil, err
+			}
+			publicKeys = append(publicKeys, publicKey)
+		} else if chat.ChatID != "" {
+			chatIDs = append(chatIDs, chat.ChatID)
+		}
+	}
+
+	return s.Init(chatIDs, publicKeys, genericDiscoveryTopicEnabled)
 }
 
 func (s *ChatsManager) Reset() error {
@@ -510,57 +538,6 @@ func (s *ChatsManager) GetNegotiated(identity *ecdsa.PublicKey) *Chat {
 	defer s.mutex.Unlock()
 
 	return s.chats[negotiatedTopic(identity)]
-}
-
-// DEPRECATED
-func (s *ChatsManager) InitDeprecated(chats []*Chat, genericDiscoveryTopicEnabled bool) ([]*Chat, error) {
-	var (
-		chatIDs    []string
-		publicKeys []*ecdsa.PublicKey
-	)
-
-	for _, chat := range chats {
-		if chat.ChatID != "" {
-			chatIDs = append(chatIDs, chat.ChatID)
-		} else if chat.Identity != "" {
-			publicKeyBytes, err := hex.DecodeString(chat.Identity)
-			if err != nil {
-				return nil, err
-			}
-
-			publicKey, err := crypto.UnmarshalPubkey(publicKeyBytes)
-			if err != nil {
-				return nil, err
-			}
-
-			publicKeys = append(publicKeys, publicKey)
-		}
-	}
-
-	return s.Init(chatIDs, publicKeys, genericDiscoveryTopicEnabled)
-}
-
-// DEPRECATED
-func (s *ChatsManager) Load(chat *Chat) ([]*Chat, error) {
-	if chat.ChatID != "" {
-		chat, err := s.LoadPublic(chat.ChatID)
-		return []*Chat{chat}, err
-	} else if chat.Identity != "" {
-		publicKeyBytes, err := hex.DecodeString(chat.Identity)
-		if err != nil {
-			return nil, err
-		}
-
-		publicKey, err := crypto.UnmarshalPubkey(publicKeyBytes)
-		if err != nil {
-			return nil, err
-		}
-
-		chat, err := s.LoadContactCode(publicKey)
-		return []*Chat{chat}, err
-	}
-
-	return nil, errors.New("invalid Chat to load")
 }
 
 // toTopic converts a string to a whisper topic.

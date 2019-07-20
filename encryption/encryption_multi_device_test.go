@@ -85,7 +85,7 @@ func (s *EncryptionServiceMultiDeviceSuite) SetupTest() {
 }
 
 func (s *EncryptionServiceMultiDeviceSuite) TearDownTest() {
-	s.Require().NoError(s.logger.Sync())
+	_ = s.logger.Sync()
 }
 
 func (s *EncryptionServiceMultiDeviceSuite) TestProcessPublicBundle() {

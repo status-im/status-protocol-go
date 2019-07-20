@@ -70,8 +70,7 @@ func (s *ProtocolServiceTestSuite) SetupTest() {
 func (s *ProtocolServiceTestSuite) TearDownTest() {
 	os.Remove(s.aliceDBPath.Name())
 	os.Remove(s.bobDBPath.Name())
-
-	s.Require().NoError(s.logger.Sync())
+	_ = s.logger.Sync()
 }
 
 func (s *ProtocolServiceTestSuite) TestBuildPublicMessage() {

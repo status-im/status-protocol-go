@@ -27,10 +27,6 @@ import (
 const (
 	// defaultRequestTimeout is the default request timeout in seconds
 	defaultRequestTimeout = 10
-
-	// DatabaseFileName is a name of the SQL file in which
-	// persistent transport information is stored.
-	DatabaseFileName = "transport.sql"
 )
 
 var (
@@ -131,28 +127,7 @@ func NewWhisperServiceTransport(
 
 // DEPRECATED
 func (a *WhisperServiceTransport) LoadFilters(chats []*filter.Chat, genericDiscoveryTopicEnabled bool) ([]*filter.Chat, error) {
-	var (
-		chatIDs    []string
-		publicKeys []*ecdsa.PublicKey
-	)
-
-	for _, chat := range chats {
-		if chat.Identity != "" && chat.OneToOne {
-			publicKeyBytes, err := hexutil.Decode(chat.Identity)
-			if err != nil {
-				return nil, err
-			}
-			publicKey, err := crypto.UnmarshalPubkey(publicKeyBytes)
-			if err != nil {
-				return nil, err
-			}
-			publicKeys = append(publicKeys, publicKey)
-		} else if chat.ChatID != "" {
-			chatIDs = append(chatIDs, chat.ChatID)
-		}
-	}
-
-	return a.chats.Init(chatIDs, publicKeys, genericDiscoveryTopicEnabled)
+	return a.chats.InitWithChats(chats, genericDiscoveryTopicEnabled)
 }
 
 // DEPRECATED

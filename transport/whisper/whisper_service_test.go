@@ -26,7 +26,7 @@ func TestNewWhisperServiceTransport(t *testing.T) {
 
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
-	defer require.NoError(t, logger.Sync())
+	defer func() { _ = logger.Sync() }()
 
 	_, err = NewWhisperServiceTransport(nil, nil, nil, dbPath.Name(), "some-key", nil, logger)
 	require.NoError(t, err)
