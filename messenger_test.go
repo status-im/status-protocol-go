@@ -83,7 +83,7 @@ func (s *MessengerSuite) SetupTest() {
 func (s *MessengerSuite) TearDownTest() {
 	os.Remove(s.tmpDir)
 
-	s.logger.Sync()
+	_ = s.logger.Sync()
 }
 
 func (s *MessengerSuite) TestSendPublic() {

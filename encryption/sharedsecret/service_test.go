@@ -46,7 +46,7 @@ func (s *SharedSecretTestSuite) SetupTest() {
 func (s *SharedSecretTestSuite) TearDownTest() {
 	os.Remove(s.path)
 
-	s.logger.Sync()
+	_ = s.logger.Sync()
 }
 
 func (s *SharedSecretTestSuite) TestSingleInstallationID() {

@@ -71,7 +71,7 @@ func (s *ProtocolServiceTestSuite) TearDownTest() {
 	os.Remove(s.aliceDir)
 	os.Remove(s.bobDir)
 
-	s.logger.Sync()
+	_ = s.logger.Sync()
 }
 
 func (s *ProtocolServiceTestSuite) TestBuildPublicMessage() {

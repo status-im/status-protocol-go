@@ -86,7 +86,7 @@ func (s *EncryptionServiceTestSuite) TearDownTest() {
 	os.Remove(s.aliceDir)
 	os.Remove(s.bobDir)
 
-	s.logger.Sync()
+	_ = s.logger.Sync()
 }
 
 func (s *EncryptionServiceTestSuite) TestGetBundle() {

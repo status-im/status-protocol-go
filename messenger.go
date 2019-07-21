@@ -3,6 +3,7 @@ package statusproto
 import (
 	"context"
 	"crypto/ecdsa"
+	"log"
 	"path/filepath"
 	"time"
 
@@ -223,7 +224,11 @@ func NewMessenger(
 		ownMessages: make(map[string][]*protocol.Message),
 		shutdownTasks: []func(){
 			func() { messenger.persistence.Close() },
-			func() { logger.Sync() },
+			func() {
+				if err := logger.Sync(); err != nil {
+					log.Printf("failed to initialize log on shutdown")
+				}
+			},
 		},
 	}
 
