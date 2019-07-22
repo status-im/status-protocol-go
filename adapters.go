@@ -315,14 +315,15 @@ func (a *whisperAdapter) SendPublic(ctx context.Context, chatName, chatID string
 
 // SendPublicRaw takes encoded data, encrypts it and sends through the wire.
 // DEPRECATED
-func (a *whisperAdapter) SendPublicRaw(ctx context.Context, chatName string, data []byte) ([]byte, error) {
+func (a *whisperAdapter) SendPublicRaw(ctx context.Context, chatName string, data []byte) ([]byte, *whisper.NewMessage, error) {
 	newMessage := whisper.NewMessage{
 		TTL:       whisperTTL,
 		Payload:   data,
 		PowTarget: whisperPoW,
 		PowTime:   whisperPoWTime,
 	}
-	return a.transport.SendPublic(ctx, newMessage, chatName)
+	hash, err := a.transport.SendPublic(ctx, newMessage, chatName)
+	return hash, &newMessage, err
 }
 
 func (a *whisperAdapter) SendContactCode(ctx context.Context, messageSpec *encryption.ProtocolMessageSpec) ([]byte, error) {
@@ -372,17 +373,25 @@ func (a *whisperAdapter) SendPrivateRaw(
 	ctx context.Context,
 	publicKey *ecdsa.PublicKey,
 	data []byte,
-) ([]byte, error) {
-	logger := a.logger.With(zap.String("site", "SendPrivateRaw"))
-
-	logger.Debug("sending a private message", zap.Binary("public-key", crypto.FromECDSAPub(publicKey)))
+) ([]byte, *whisper.NewMessage, error) {
+	a.logger.Debug(
+		"sending a private message",
+		zap.Binary("public-key", crypto.FromECDSAPub(publicKey)),
+		zap.String("site", "SendPrivateRaw"),
+	)
 
 	messageSpec, err := a.protocol.BuildDirectMessage(a.privateKey, publicKey, data)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to encrypt message")
+		return nil, nil, errors.Wrap(err, "failed to encrypt message")
 	}
 
-	return a.sendMessageSpec(ctx, publicKey, messageSpec)
+	newMessage, err := a.messageSpecToWhisper(messageSpec)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	hash, err := a.sendMessageSpec(ctx, publicKey, messageSpec)
+	return hash, newMessage, err
 }
 
 func (a *whisperAdapter) sendMessageSpec(ctx context.Context, publicKey *ecdsa.PublicKey, messageSpec *encryption.ProtocolMessageSpec) ([]byte, error) {
