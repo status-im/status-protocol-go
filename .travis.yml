@@ -21,6 +21,12 @@ stages:
 jobs:
   include:
     - stage: lint
+      go:
+        - "1.12"
+        - "master"
       script: make lint
     - stage: test
+      go:
+        - "1.12"
+        - "master"
       script: make test
