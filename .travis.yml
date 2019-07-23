@@ -7,10 +7,6 @@ go:
   - "1.x"
 install: true
 
-env:
-- GO111MODULE=on
-- GOFLAGS=-mod=vendor
-
 before_script:
 - make install-linter
 
@@ -18,5 +14,11 @@ jobs:
   include:
     - stage: lint
       script: make lint
+      env:
+        - GO111MODULE=on
+        - GOFLAGS=-mod=vendor
     - stage: test
       script: make test
+      env:
+        - GO111MODULE=on
+        - GOFLAGS=-mod=vendor
