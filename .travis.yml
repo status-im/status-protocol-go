@@ -4,9 +4,9 @@ notifications:
 language: go
 go:
   - "1.12"
-  - "1.13"
+  - "master"
 
-install: false
+install: true
 
 env:
   - GO111MODULE=on GOFLAGS=-mod=vendor
