@@ -2,10 +2,18 @@ notifications:
   email: false
 
 language: go
-go:
-  - "1.12"
-  - "1.x"
-install: true
+install: false
+
+matrix:
+  include:
+    - go: "1.12"
+      env:
+        - GO111MODULE=on
+        - GOFLAGS=-mod=vendor
+    - go: "1.13"
+      env:
+        - GO111MODULE=on
+        - GOFLAGS=-mod=vendor
 
 before_script:
 - make install-linter
@@ -14,11 +22,5 @@ jobs:
   include:
     - stage: lint
       script: make lint
-      env:
-        - GO111MODULE=on
-        - GOFLAGS=-mod=vendor
     - stage: test
       script: make test
-      env:
-        - GO111MODULE=on
-        - GOFLAGS=-mod=vendor
