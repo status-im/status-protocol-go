@@ -11,6 +11,10 @@ install: true
 env:
   - GO111MODULE=on GOFLAGS=-mod=vendor
 
+matrix:
+  allow_failures:
+    - go: "master"
+
 before_script:
   - make install-linter
 
