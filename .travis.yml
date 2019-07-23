@@ -3,8 +3,8 @@ notifications:
 
 language: go
 go:
-  - "1.12"
-  - "master"
+  - "1.12.x"
+  - "1.13beta1"
 
 install: true
 
