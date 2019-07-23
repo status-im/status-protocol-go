@@ -14,9 +14,6 @@ env:
 before_script:
 - make install-linter
 
-jobs:
-  include:
-    - stage: lint
-      script: make lint
-    - stage: test
-      script: make test
+script:
+  - make lint
+  - make test
