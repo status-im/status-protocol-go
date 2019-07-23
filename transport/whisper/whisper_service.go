@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/big"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -85,20 +84,17 @@ type WhisperServiceTransport struct {
 	selectedMailServerEnode string
 }
 
-var _ WhisperTransport = (*WhisperServiceTransport)(nil)
-
 // NewWhisperService returns a new WhisperServiceTransport.
 func NewWhisperServiceTransport(
 	node Server,
 	shh *whisper.Whisper,
 	privateKey *ecdsa.PrivateKey,
-	dataDir string,
+	dbPath string,
 	dbKey string,
 	mailservers []string,
 	logger *zap.Logger,
 ) (*WhisperServiceTransport, error) {
 	// DB is shared between this package and all sub-packages.
-	dbPath := filepath.Join(dataDir, "transport.sql")
 	db, err := sqlite.Open(dbPath, dbKey, sqlite.MigrationConfig{
 		AssetNames: migrations.AssetNames(),
 		AssetGetter: func(name string) ([]byte, error) {
@@ -128,13 +124,19 @@ func NewWhisperServiceTransport(
 		logger:      logger.With(zap.Namespace("WhisperServiceTransport")),
 	}, nil
 }
-func (a *WhisperServiceTransport) Init(
-	chatIDs []string,
-	publicKeys []*ecdsa.PublicKey,
-	negotiated []filter.NegotiatedSecret,
-	genericDiscoveryTopicEnabled bool,
-) ([]*filter.Chat, error) {
-	return a.chats.Init(chatIDs, publicKeys, negotiated, genericDiscoveryTopicEnabled)
+
+// DEPRECATED
+func (a *WhisperServiceTransport) LoadFilters(chats []*filter.Chat, genericDiscoveryTopicEnabled bool) ([]*filter.Chat, error) {
+	return a.chats.InitWithChats(chats, genericDiscoveryTopicEnabled)
+}
+
+// DEPRECATED
+func (a *WhisperServiceTransport) RemoveFilters(chats []*filter.Chat) error {
+	return a.chats.Remove(chats...)
+}
+
+func (a *WhisperServiceTransport) Reset() error {
+	return a.chats.Reset()
 }
 
 func (a *WhisperServiceTransport) ProcessNegotiatedSecret(secret filter.NegotiatedSecret) error {
@@ -197,6 +199,31 @@ func (a *WhisperServiceTransport) RetrievePrivateMessages(publicKey *ecdsa.Publi
 	}
 
 	return result, nil
+}
+
+// DEPRECATED
+func (a *WhisperServiceTransport) RetrieveRawAll() (map[filter.Chat][]*whisper.ReceivedMessage, error) {
+	result := make(map[filter.Chat][]*whisper.ReceivedMessage)
+
+	allChats := a.chats.Chats()
+	for _, chat := range allChats {
+		f := a.shh.GetFilter(chat.FilterID)
+		if f == nil {
+			return nil, errors.New("failed to return a filter")
+		}
+		result[*chat] = append(result[*chat], f.Retrieve()...)
+	}
+
+	return result, nil
+}
+
+// DEPRECATED
+func (a *WhisperServiceTransport) RetrieveRaw(filterID string) ([]*whisper.ReceivedMessage, error) {
+	f := a.shh.GetFilter(filterID)
+	if f == nil {
+		return nil, errors.New("failed to return a filter")
+	}
+	return f.Retrieve(), nil
 }
 
 // SendPublic sends a new message using the Whisper service.

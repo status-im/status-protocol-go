@@ -21,7 +21,7 @@ type Secret struct {
 // SharedSecret generates and manages negotiated secrets.
 // Identities (public keys) stored by SharedSecret
 // are compressed.
-// TODO: make it a part of sqlitePersistence instead of SharedSecret.
+// TODO: make compression of public keys a responsibility  of sqlitePersistence instead of SharedSecret.
 type SharedSecret struct {
 	persistence *sqlitePersistence
 	logger      *zap.Logger
