@@ -12,21 +12,8 @@ env:
   - GO111MODULE=on GOFLAGS=-mod=vendor
 
 before_script:
-- make install-linter
+  - make install-linter
 
-stages:
-  - lint
-  - test
-
-jobs:
-  include:
-    - stage: lint
-      go:
-        - "1.12"
-        - "master"
-      script: make lint
-    - stage: test
-      go:
-        - "1.12"
-        - "master"
-      script: make test
+script:
+  - make lint
+  - make test
