@@ -88,12 +88,11 @@ func (s *ChatsTestSuite) SetupTest() {
 
 func (s *ChatsTestSuite) TearDownTest() {
 	os.Remove(s.dbPath)
-
 	_ = s.logger.Sync()
 }
 
 func (s *ChatsTestSuite) TestDiscoveryAndPartitionedTopic() {
-	_, err := s.chats.InitDeprecated(nil, nil, true)
+	_, err := s.chats.Init(nil, nil, true)
 	s.Require().NoError(err)
 
 	s.Require().Equal(4, len(s.chats.chats), "It creates four filters")
@@ -106,7 +105,7 @@ func (s *ChatsTestSuite) TestDiscoveryAndPartitionedTopic() {
 }
 
 func (s *ChatsTestSuite) TestPartitionedTopicWithDiscoveryDisabled() {
-	_, err := s.chats.InitDeprecated(nil, nil, false)
+	_, err := s.chats.Init(nil, nil, false)
 	s.Require().NoError(err)
 
 	s.Require().Equal(3, len(s.chats.chats), "It creates three filters")

@@ -45,7 +45,6 @@ func (s *SharedSecretTestSuite) SetupTest() {
 
 func (s *SharedSecretTestSuite) TearDownTest() {
 	os.Remove(s.path)
-
 	_ = s.logger.Sync()
 }
 

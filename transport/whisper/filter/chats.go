@@ -35,6 +35,7 @@ type NegotiatedSecret struct {
 	Key       []byte
 }
 
+// TODO: revise fields encoding/decoding. Some are encoded using hexutil and some using encoding/hex.
 type Chat struct {
 	// ChatID is the identifier of the chat
 	ChatID string `json:"chatId"`
@@ -81,30 +82,34 @@ func New(db *sql.DB, w *whisper.Whisper, privateKey *ecdsa.PrivateKey, logger *z
 		return nil, err
 	}
 
+	keys, err := persistence.All()
+	if err != nil {
+		return nil, err
+	}
+
 	return &ChatsManager{
 		privateKey:  privateKey,
 		whisper:     w,
 		persistence: persistence,
+		keys:        keys,
 		chats:       make(map[string]*Chat),
 		logger:      logger.With(zap.Namespace("ChatsManager")),
 	}, nil
 }
 
-func (s *ChatsManager) Init(chatIDs []string, publicKeys []*ecdsa.PublicKey, negotiated []NegotiatedSecret, genericDiscoveryTopicEnabled bool) ([]*Chat, error) {
+func (s *ChatsManager) Init(
+	chatIDs []string,
+	publicKeys []*ecdsa.PublicKey,
+	genericDiscoveryTopicEnabled bool,
+) ([]*Chat, error) {
 	logger := s.logger.With(zap.String("site", "Init"))
 
 	logger.Info("initializing")
 
 	s.genericDiscoveryTopicEnabled = genericDiscoveryTopicEnabled
 
-	keys, err := s.persistence.All()
-	if err != nil {
-		return nil, err
-	}
-	s.keys = keys
-
 	// Load our contact code.
-	_, err = s.LoadContactCode(&s.privateKey.PublicKey)
+	_, err := s.LoadContactCode(&s.privateKey.PublicKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to load contact code")
 	}
@@ -136,12 +141,6 @@ func (s *ChatsManager) Init(chatIDs []string, publicKeys []*ecdsa.PublicKey, neg
 		}
 	}
 
-	for _, secret := range negotiated {
-		if _, err := s.LoadNegotiated(secret); err != nil {
-			return nil, err
-		}
-	}
-
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -152,7 +151,29 @@ func (s *ChatsManager) Init(chatIDs []string, publicKeys []*ecdsa.PublicKey, neg
 	return allChats, nil
 }
 
-func (s *ChatsManager) Uninitialize() error {
+// DEPRECATED
+func (s *ChatsManager) InitWithChats(chats []*Chat, genericDiscoveryTopicEnabled bool) ([]*Chat, error) {
+	var (
+		chatIDs    []string
+		publicKeys []*ecdsa.PublicKey
+	)
+
+	for _, chat := range chats {
+		if chat.Identity != "" && chat.OneToOne {
+			publicKey, err := strToPublicKey(chat.Identity)
+			if err != nil {
+				return nil, err
+			}
+			publicKeys = append(publicKeys, publicKey)
+		} else if chat.ChatID != "" {
+			chatIDs = append(chatIDs, chat.ChatID)
+		}
+	}
+
+	return s.Init(chatIDs, publicKeys, genericDiscoveryTopicEnabled)
+}
+
+func (s *ChatsManager) Reset() error {
 	var chats []*Chat
 
 	s.mutex.Lock()
@@ -180,6 +201,17 @@ func (s *ChatsManager) ChatByID(chatID string) *Chat {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	return s.chats[chatID]
+}
+
+func (s *ChatsManager) ChatByFilterID(filterID string) *Chat {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	for _, chat := range s.chats {
+		if chat.FilterID == filterID {
+			return chat
+		}
+	}
+	return nil
 }
 
 func (s *ChatsManager) ChatsByPublicKey(publicKey *ecdsa.PublicKey) (result []*Chat) {
@@ -503,57 +535,6 @@ func (s *ChatsManager) GetNegotiated(identity *ecdsa.PublicKey) *Chat {
 	return s.chats[negotiatedTopic(identity)]
 }
 
-// DEPRECATED
-func (s *ChatsManager) InitDeprecated(chats []*Chat, secrets []NegotiatedSecret, genericDiscoveryTopicEnabled bool) ([]*Chat, error) {
-	var (
-		chatIDs    []string
-		publicKeys []*ecdsa.PublicKey
-	)
-
-	for _, chat := range chats {
-		if chat.ChatID != "" {
-			chatIDs = append(chatIDs, chat.ChatID)
-		} else if chat.Identity != "" {
-			publicKeyBytes, err := hex.DecodeString(chat.Identity)
-			if err != nil {
-				return nil, err
-			}
-
-			publicKey, err := crypto.UnmarshalPubkey(publicKeyBytes)
-			if err != nil {
-				return nil, err
-			}
-
-			publicKeys = append(publicKeys, publicKey)
-		}
-	}
-
-	return s.Init(chatIDs, publicKeys, secrets, genericDiscoveryTopicEnabled)
-}
-
-// DEPRECATED
-func (s *ChatsManager) Load(chat *Chat) ([]*Chat, error) {
-	if chat.ChatID != "" {
-		chat, err := s.LoadPublic(chat.ChatID)
-		return []*Chat{chat}, err
-	} else if chat.Identity != "" {
-		publicKeyBytes, err := hex.DecodeString(chat.Identity)
-		if err != nil {
-			return nil, err
-		}
-
-		publicKey, err := crypto.UnmarshalPubkey(publicKeyBytes)
-		if err != nil {
-			return nil, err
-		}
-
-		chat, err := s.LoadContactCode(publicKey)
-		return []*Chat{chat}, err
-	}
-
-	return nil, errors.New("invalid Chat to load")
-}
-
 // toTopic converts a string to a whisper topic.
 func toTopic(s string) []byte {
 	return crypto.Keccak256([]byte(s))[:whisper.TopicLength]
@@ -561,6 +542,14 @@ func toTopic(s string) []byte {
 
 func ToTopic(s string) []byte {
 	return toTopic(s)
+}
+
+func strToPublicKey(str string) (*ecdsa.PublicKey, error) {
+	publicKeyBytes, err := hex.DecodeString(str)
+	if err != nil {
+		return nil, err
+	}
+	return crypto.UnmarshalPubkey(publicKeyBytes)
 }
 
 func publicKeyToStr(publicKey *ecdsa.PublicKey) string {
