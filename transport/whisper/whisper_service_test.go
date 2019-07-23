@@ -14,9 +14,11 @@ func TestSelectAndAddNoMailservers(t *testing.T) {
 	svc := &WhisperServiceTransport{
 		logger: logger,
 	}
+
 	rst, err := svc.selectAndAddMailServer()
 	require.Empty(t, rst)
 	require.EqualError(t, ErrNoMailservers, err.Error())
+	_ = logger.Sync()
 }
 
 func TestNewWhisperServiceTransport(t *testing.T) {
