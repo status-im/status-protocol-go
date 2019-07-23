@@ -291,6 +291,10 @@ func (a *whisperAdapter) handleErrDeviceNotFound(ctx context.Context, publicKey 
 	return nil
 }
 
+// SendPublic sends a public message passing chat name to the transport layer.
+//
+// Be aware that this method returns a message ID using protocol.MessageID
+// instead of Whisper message hash.
 func (a *whisperAdapter) SendPublic(ctx context.Context, chatName, chatID string, data []byte, clock int64) ([]byte, error) {
 	logger := a.logger.With(zap.String("site", "SendPublic"))
 
@@ -358,7 +362,14 @@ func (a *whisperAdapter) encodeMessage(message protocol.Message) ([]byte, error)
 }
 
 // SendPrivate sends a one-to-one message. It needs to return it
-// because the registered Whisper filter handles only incoming messages.
+// because the registered Whisper filter handles only incoming messages
+// and our own messages need to be handled manually.
+//
+// This might be not true if a shared secret is used because it relies on
+// symmetric encryption.
+//
+// Be aware that this method returns a message ID using protocol.MessageID
+// instead of Whisper message hash.
 func (a *whisperAdapter) SendPrivate(
 	ctx context.Context,
 	publicKey *ecdsa.PublicKey,
