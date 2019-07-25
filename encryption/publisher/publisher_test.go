@@ -34,7 +34,7 @@ func (p *PublisherTestSuite) SetupTest(installationID string) {
 }
 
 func (p *PublisherTestSuite) TearDownTest() {
-	p.logger.Sync()
+	_ = p.logger.Sync()
 }
 
 // TODO(adam): provide more tests

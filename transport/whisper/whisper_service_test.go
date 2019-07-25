@@ -10,21 +10,26 @@ import (
 )
 
 func TestSelectAndAddNoMailservers(t *testing.T) {
-	svc := &WhisperServiceTransport{}
+	logger := zap.NewNop()
+	svc := &WhisperServiceTransport{
+		logger: logger,
+	}
+
 	rst, err := svc.selectAndAddMailServer()
 	require.Empty(t, rst)
 	require.EqualError(t, ErrNoMailservers, err.Error())
+	_ = logger.Sync()
 }
 
 func TestNewWhisperServiceTransport(t *testing.T) {
-	dbDir, err := ioutil.TempDir("", "transport")
+	dbPath, err := ioutil.TempFile("", "transport.sql")
 	require.NoError(t, err)
-	defer os.Remove(dbDir)
+	defer os.Remove(dbPath.Name())
 
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
-	defer logger.Sync()
+	defer func() { _ = logger.Sync() }()
 
-	_, err = NewWhisperServiceTransport(nil, nil, nil, dbDir, "some-key", nil, logger)
+	_, err = NewWhisperServiceTransport(nil, nil, nil, dbPath.Name(), "some-key", nil, logger)
 	require.NoError(t, err)
 }

@@ -76,14 +76,14 @@ func (s *MessengerSuite) SetupTest() {
 		"some-key",
 		"installation-1",
 		WithCustomLogger(logger),
+		WithMessagesPersistenceEnabled(),
 	)
 	s.Require().NoError(err)
 }
 
 func (s *MessengerSuite) TearDownTest() {
 	os.Remove(s.tmpDir)
-
-	s.logger.Sync()
+	_ = s.logger.Sync()
 }
 
 func (s *MessengerSuite) TestSendPublic() {

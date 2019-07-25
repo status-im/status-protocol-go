@@ -19,11 +19,11 @@ func TestProtocolServiceTestSuite(t *testing.T) {
 
 type ProtocolServiceTestSuite struct {
 	suite.Suite
-	aliceDir string
-	bobDir   string
-	alice    *Protocol
-	bob      *Protocol
-	logger   *zap.Logger
+	aliceDBPath *os.File
+	bobDBPath   *os.File
+	alice       *Protocol
+	bob         *Protocol
+	logger      *zap.Logger
 }
 
 func (s *ProtocolServiceTestSuite) SetupTest() {
@@ -33,11 +33,11 @@ func (s *ProtocolServiceTestSuite) SetupTest() {
 	s.Require().NoError(err)
 	s.logger = logger
 
-	s.aliceDir, err = ioutil.TempDir("", "alice.db")
+	s.aliceDBPath, err = ioutil.TempFile("", "alice.db.sql")
 	s.Require().NoError(err)
 	aliceDBKey := "alice"
 
-	s.bobDir, err = ioutil.TempDir("", "bob.db")
+	s.bobDBPath, err = ioutil.TempFile("", "bob.db.sql")
 	s.Require().NoError(err)
 	bobDBKey := "bob"
 
@@ -45,7 +45,7 @@ func (s *ProtocolServiceTestSuite) SetupTest() {
 	onNewSharedSecretHandler := func(secret []*sharedsecret.Secret) {}
 
 	s.alice, err = New(
-		s.aliceDir,
+		s.aliceDBPath.Name(),
 		aliceDBKey,
 		"1",
 		addedBundlesHandler,
@@ -56,7 +56,7 @@ func (s *ProtocolServiceTestSuite) SetupTest() {
 	s.Require().NoError(err)
 
 	s.bob, err = New(
-		s.bobDir,
+		s.bobDBPath.Name(),
 		bobDBKey,
 		"2",
 		addedBundlesHandler,
@@ -68,10 +68,9 @@ func (s *ProtocolServiceTestSuite) SetupTest() {
 }
 
 func (s *ProtocolServiceTestSuite) TearDownTest() {
-	os.Remove(s.aliceDir)
-	os.Remove(s.bobDir)
-
-	s.logger.Sync()
+	os.Remove(s.aliceDBPath.Name())
+	os.Remove(s.bobDBPath.Name())
+	_ = s.logger.Sync()
 }
 
 func (s *ProtocolServiceTestSuite) TestBuildPublicMessage() {

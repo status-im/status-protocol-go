@@ -31,25 +31,25 @@ func TestEncryptionServiceTestSuite(t *testing.T) {
 
 type EncryptionServiceTestSuite struct {
 	suite.Suite
-	logger   *zap.Logger
-	alice    *Protocol
-	bob      *Protocol
-	aliceDir string
-	bobDir   string
+	logger      *zap.Logger
+	alice       *Protocol
+	bob         *Protocol
+	aliceDBPath *os.File
+	bobDBPath   *os.File
 }
 
 func (s *EncryptionServiceTestSuite) initDatabases(config encryptorConfig) {
 	var err error
 
-	s.aliceDir, err = ioutil.TempDir("", "alice-dir")
+	s.aliceDBPath, err = ioutil.TempFile("", "alice.db.sql")
 	s.Require().NoError(err)
 
-	s.bobDir, err = ioutil.TempDir("", "bob-dir")
+	s.bobDBPath, err = ioutil.TempFile("", "bob.db.sql")
 	s.Require().NoError(err)
 
 	config.InstallationID = aliceInstallationID
 	s.alice, err = NewWithEncryptorConfig(
-		s.aliceDir,
+		s.aliceDBPath.Name(),
 		"alice-key",
 		aliceInstallationID,
 		config,
@@ -62,7 +62,7 @@ func (s *EncryptionServiceTestSuite) initDatabases(config encryptorConfig) {
 
 	config.InstallationID = bobInstallationID
 	s.bob, err = NewWithEncryptorConfig(
-		s.bobDir,
+		s.bobDBPath.Name(),
 		"bob-key",
 		bobInstallationID,
 		config,
@@ -75,18 +75,14 @@ func (s *EncryptionServiceTestSuite) initDatabases(config encryptorConfig) {
 }
 
 func (s *EncryptionServiceTestSuite) SetupTest() {
-	logger, err := zap.NewDevelopment()
-	s.Require().NoError(err)
-	s.logger = logger
-
+	s.logger = zap.NewNop()
 	s.initDatabases(defaultEncryptorConfig("none", s.logger))
 }
 
 func (s *EncryptionServiceTestSuite) TearDownTest() {
-	os.Remove(s.aliceDir)
-	os.Remove(s.bobDir)
-
-	s.logger.Sync()
+	os.Remove(s.aliceDBPath.Name())
+	os.Remove(s.bobDBPath.Name())
+	_ = s.logger.Sync()
 }
 
 func (s *EncryptionServiceTestSuite) TestGetBundle() {
@@ -457,7 +453,7 @@ func (s *EncryptionServiceTestSuite) TestMaxSkipKeysError() {
 }
 
 func (s *EncryptionServiceTestSuite) TestMaxMessageKeysPerSession() {
-	config := defaultEncryptorConfig("none", s.logger)
+	config := defaultEncryptorConfig("none", zap.NewNop())
 	// Set MaxKeep and MaxSkip to an high value so it does not interfere
 	config.MaxKeep = 100000
 	config.MaxSkip = 100000
@@ -577,8 +573,7 @@ func (s *EncryptionServiceTestSuite) TestMaxKeep() {
 // Alice sends a message to Bob
 // Bob receives alice message
 // Alice receives Bob message
-// Bob sends another message to alice and viceversa
-
+// Bob sends another message to alice and vice-versa.
 func (s *EncryptionServiceTestSuite) TestConcurrentBundles() {
 	bobText1 := []byte("bob text 1")
 	bobText2 := []byte("bob text 2")
