@@ -20,24 +20,14 @@ var (
 	}
 )
 
-func TestDecodeMessage(t *testing.T) {
-	key, err := crypto.GenerateKey()
+func TestDecodeTransitMessage(t *testing.T) {
+	val, err := decodeTransitMessage(testMessageBytes)
 	require.NoError(t, err)
-
-	val, err := DecodeMessage(&key.PublicKey, testMessageBytes)
-	require.NoError(t, err)
-	require.EqualValues(t, StatusMessage{
-		Message:   testMessageStruct,
-		SigPubKey: &key.PublicKey,
-		ID:        MessageID(&key.PublicKey, testMessageBytes),
-	}, val)
+	require.EqualValues(t, testMessageStruct, val)
 }
 
-func BenchmarkDecodeMessage(b *testing.B) {
-	key, err := crypto.GenerateKey()
-	require.NoError(b, err)
-
-	_, err = DecodeMessage(&key.PublicKey, testMessageBytes)
+func BenchmarkDecodeTransitMessage(b *testing.B) {
+	_, err := decodeTransitMessage(testMessageBytes)
 	if err != nil {
 		b.Fatalf("failed to decode message: %v", err)
 	}
@@ -45,67 +35,16 @@ func BenchmarkDecodeMessage(b *testing.B) {
 	b.ResetTimer()
 
 	for n := 0; n < b.N; n++ {
-		_, _ = DecodeMessage(&key.PublicKey, testMessageBytes)
+		_, _ = decodeTransitMessage(testMessageBytes)
 	}
-}
-
-func TestEncodeMessage(t *testing.T) {
-	key, err := crypto.GenerateKey()
-	require.NoError(t, err)
 
 	data, err := EncodeMessage(testMessageStruct)
-	require.NoError(t, err)
+	require.NoError(b, err)
 	// Decode it back to a struct because, for example, map encoding is non-deterministic
 	// and it is not possible to compare bytes.
-	val, err := DecodeMessage(&key.PublicKey, data)
-	require.NoError(t, err)
-	require.EqualValues(t, StatusMessage{
-		Message:   testMessageStruct,
-		SigPubKey: &key.PublicKey,
-		ID:        MessageID(&key.PublicKey, data),
-	}, val)
-}
-
-func TestWrappedMessageWithSignature(t *testing.T) {
-	key, err := crypto.GenerateKey()
-	require.NoError(t, err)
-
-	transportKey, err := crypto.GenerateKey()
-	require.NoError(t, err)
-
-	data, err := EncodeMessage(testMessageStruct)
-	require.NoError(t, err)
-	wrappedMessage, err := WrapMessageV1(data, key)
-	require.NoError(t, err)
-	// Decode it back to a struct because, for example, map encoding is non-deterministic
-	// and it is not possible to compare bytes.
-	val, err := DecodeMessage(&transportKey.PublicKey, wrappedMessage)
-	require.NoError(t, err)
-	require.EqualValues(t, StatusMessage{
-		Message:   testMessageStruct,
-		ID:        MessageID(&key.PublicKey, data),
-		SigPubKey: &key.PublicKey,
-	}, val)
-}
-
-func TestWrappedMessageWithoutSignature(t *testing.T) {
-	key, err := crypto.GenerateKey()
-	require.NoError(t, err)
-
-	data, err := EncodeMessage(testMessageStruct)
-	require.NoError(t, err)
-	wrappedMessage, err := WrapMessageV1(data, nil)
-	require.NoError(t, err)
-	// Decode it back to a struct because, for example, map encoding is non-deterministic
-	// and it is not possible to compare bytes.
-	val, err := DecodeMessage(&key.PublicKey, wrappedMessage)
-	require.NoError(t, err)
-
-	require.EqualValues(t, StatusMessage{
-		Message:   testMessageStruct,
-		SigPubKey: &key.PublicKey,
-		ID:        MessageID(&key.PublicKey, data),
-	}, val)
+	val, err := decodeTransitMessage(data)
+	require.NoError(b, err)
+	require.EqualValues(b, testMessageStruct, val)
 }
 
 func TestMessageID(t *testing.T) {
@@ -117,24 +56,6 @@ func TestMessageID(t *testing.T) {
 	data := []byte("test")
 	expectedID := crypto.Keccak256(append(compressedKey, data...))
 	require.Equal(t, expectedID, MessageID(&key.PublicKey, data))
-}
-
-func TestMessageWrongPublicKey(t *testing.T) {
-	key, err := crypto.GenerateKey()
-	require.NoError(t, err)
-
-	wrongKey, err := crypto.GenerateKey()
-	require.NoError(t, err)
-
-	data, err := EncodeMessage(testMessageStruct)
-	require.NoError(t, err)
-	wrappedMessage, err := WrapMessageV1(data, key)
-	require.NoError(t, err)
-	// Decode it back to a struct because, for example, map encoding is non-deterministic
-	// and it is not possible to compare bytes.
-	val, err := DecodeMessage(&key.PublicKey, wrappedMessage)
-	require.NoError(t, err)
-	require.NotEqual(t, val.ID, MessageID(&wrongKey.PublicKey, data), val)
 }
 
 func TestTimestampInMs(t *testing.T) {

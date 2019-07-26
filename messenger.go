@@ -269,10 +269,7 @@ func NewMessenger(
 		datasyncnode.BATCH,
 		datasyncpeers.NewMemoryPersistence(),
 	)
-	datasync := &datasync.DataSync{
-		Node:                  dataSyncNode,
-		DataSyncNodeTransport: dataSyncTransport,
-	}
+	datasync := datasync.New(dataSyncNode, dataSyncTransport, c.featureFlags.datasync, logger)
 
 	adapter := newWhisperAdapter(identity, t, encryptionProtocol, datasync, c.featureFlags, logger)
 
@@ -287,7 +284,7 @@ func NewMessenger(
 		shutdownTasks: []func() error{
 			database.Close,
 			adapter.transport.Reset,
-			func() error { datasync.Node.Stop(); return nil },
+			func() error { datasync.Stop(); return nil },
 			// Currently this often fails, seems like it's safe to ignore them
 			// https://github.com/uber-go/zap/issues/328
 			func() error { _ = logger.Sync; return nil },
@@ -557,13 +554,8 @@ func (m *Messenger) retrieveSaved(ctx context.Context, chatID string, c Retrieve
 }
 
 // DEPRECATED
-func (m *Messenger) RetrieveRawAll() (map[filter.Chat][]*whisper.Message, error) {
+func (m *Messenger) RetrieveRawAll() (map[filter.Chat][]*protocol.StatusMessage, error) {
 	return m.adapter.RetrieveRawAll()
-}
-
-// DEPRECATED
-func (m *Messenger) RetrieveRawWithFilter(filterID string) ([]*whisper.Message, error) {
-	return m.adapter.RetrieveRaw(filterID)
 }
 
 // DEPRECATED

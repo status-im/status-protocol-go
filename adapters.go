@@ -22,8 +22,6 @@ import (
 
 	"github.com/status-im/status-protocol-go/datasync"
 	datasyncpeer "github.com/status-im/status-protocol-go/datasync/peer"
-	datasyncproto "github.com/vacp2p/mvds/protobuf"
-	datasynctransport "github.com/vacp2p/mvds/transport"
 )
 
 // Whisper message properties.
@@ -149,28 +147,22 @@ func (a *whisperAdapter) handleRetrievedMessages(messages []*whisper.ReceivedMes
 		shhMessage := whisper.ToWhisperMessage(item)
 
 		hlogger := logger.With(zap.Binary("hash", shhMessage.Hash))
-
 		hlogger.Debug("handling a received message")
 
-		err := a.handleMessageEncryption(context.Background(), shhMessage)
-		if err != nil {
-			hlogger.Debug("failed to handle an encryption message", zap.Error(err))
-		}
-
-		statusMessages, err := a.handleDecodedMessages(shhMessage)
+		statusMessages, err := a.handleMessages(shhMessage, true)
 		if err != nil {
 			hlogger.Info("failed to decode messages", zap.Error(err))
 			continue
 		}
 
 		for _, statusMessage := range statusMessages {
-			switch m := statusMessage.Message.(type) {
+			switch m := statusMessage.ParsedMessage.(type) {
 			case protocol.Message:
 				m.ID = statusMessage.ID
-				m.SigPubKey = statusMessage.SigPubKey
+				m.SigPubKey = statusMessage.SigPubKey()
 				decodedMessages = append(decodedMessages, &m)
 			case protocol.PairMessage:
-				fromOurDevice := isPubKeyEqual(statusMessage.SigPubKey, &a.privateKey.PublicKey)
+				fromOurDevice := isPubKeyEqual(statusMessage.SigPubKey(), &a.privateKey.PublicKey)
 				if !fromOurDevice {
 					hlogger.Debug("received PairMessage from not our device, skipping")
 					break
@@ -194,136 +186,81 @@ func (a *whisperAdapter) handleRetrievedMessages(messages []*whisper.ReceivedMes
 }
 
 // DEPRECATED
-func (a *whisperAdapter) RetrieveRawAll() (map[filter.Chat][]*whisper.Message, error) {
+func (a *whisperAdapter) RetrieveRawAll() (map[filter.Chat][]*protocol.StatusMessage, error) {
 	chatWithMessages, err := a.transport.RetrieveRawAll()
 	if err != nil {
 		return nil, err
 	}
 
 	logger := a.logger.With(zap.String("site", "RetrieveRawAll"))
-	result := make(map[filter.Chat][]*whisper.Message)
+	result := make(map[filter.Chat][]*protocol.StatusMessage)
 
 	for chat, messages := range chatWithMessages {
 		for _, message := range messages {
 			shhMessage := whisper.ToWhisperMessage(message)
-			err := a.handleMessageEncryption(context.Background(), shhMessage)
+			statusMessages, err := a.handleMessages(shhMessage, false)
 			if err != nil {
-				logger.Warn("failed to handle an encryption message", zap.Error(err), zap.Binary("messageID", shhMessage.Hash))
-			}
-			result[chat] = append(result[chat], shhMessage)
-		}
-	}
-
-	return result, nil
-}
-
-// DEPRECATED
-func (a *whisperAdapter) RetrieveRaw(filterID string) ([]*whisper.Message, error) {
-	messages, err := a.transport.RetrieveRaw(filterID)
-	if err != nil {
-		return nil, err
-	}
-
-	logger := a.logger.With(zap.String("site", "RetrieveRaw"))
-
-	var result []*whisper.Message
-
-	for _, message := range messages {
-		shhMessage := whisper.ToWhisperMessage(message)
-		err := a.handleMessageEncryption(context.Background(), shhMessage)
-		if err != nil {
-			logger.Warn("failed to handle an encryption message", zap.Error(err), zap.Binary("messageID", shhMessage.Hash))
-		}
-		result = append(result, shhMessage)
-	}
-
-	return result, nil
-}
-
-func (a *whisperAdapter) addDatasyncPacket(publicKey *ecdsa.PublicKey, datasyncMessage datasyncproto.Payload) {
-	packet := datasynctransport.Packet{
-		Sender:  datasyncpeer.PublicKeyToPeerID(*publicKey),
-		Payload: datasyncMessage,
-	}
-	a.datasync.AddPacket(packet)
-}
-
-// handleDecodedMessages expects an unencrypted whisper message as it's argument.
-// 1) Check if it's a datasync message
-// 2) If it's a datasync message it will handle each transmitted message separately
-// 3) if it's not a datasync message a single message will be handled
-// Fingerprinting datasync messages is a bit tricky, as they might unmarshal fine
-// because they are wrapped messages, so we need to check whether anything is
-// poulated in the fields.
-func (a *whisperAdapter) handleDecodedMessages(message *whisper.Message) ([]*protocol.StatusMessage, error) {
-	var decodedMessages []*protocol.StatusMessage
-
-	logger := a.logger.With(zap.String("site", "decodeMessages"))
-	hlogger := logger.With(zap.Binary("hash", message.Hash))
-
-	publicKey, err := crypto.UnmarshalPubkey(message.Sig)
-	if err != nil {
-		return nil, err
-	}
-
-	// Try first with datasync
-	datasyncMessage, err := protocol.UnwrapDatasync(message.Payload)
-
-	// If it failed to decode is not a protobuf message, if it successfully decoded but body is empty, is likedly a protobuf wrapped message
-	if err != nil || !datasyncMessage.IsValid() {
-		hlogger.Debug("Handling non-datasync message")
-		// Not a datasync message
-		decodedMessage, err := protocol.DecodeMessage(publicKey, message.Payload)
-		if err != nil {
-			return nil, err
-		}
-
-		decodedMessages = append(decodedMessages, &decodedMessage)
-
-	} else {
-		hlogger.Debug("Handling datasync message")
-		// datasync message
-		for _, message := range datasyncMessage.Messages {
-			decodedMessage, err := protocol.DecodeMessage(publicKey, message.Body)
-			if err != nil {
-				hlogger.Error("failed to decode messages", zap.Error(err))
-				// Log and continue
+				logger.Info("failed to decode messages", zap.Error(err))
 				continue
 			}
-			// Addpacket to datasync if enabled
 
-			decodedMessages = append(decodedMessages, &decodedMessage)
-		}
-		if a.featureFlags.datasync {
-			a.addDatasyncPacket(publicKey, datasyncMessage)
-		}
+			result[chat] = append(result[chat], statusMessages...)
 
+		}
 	}
 
-	return decodedMessages, nil
+	return result, nil
 }
 
-func (a *whisperAdapter) handleMessageEncryption(ctx context.Context, message *whisper.Message) error {
-	publicKey, err := crypto.UnmarshalPubkey(message.Sig)
+// handleMessages expects a whisper message as input, and it will go through
+// a series of transformations until the message is parsed into an application
+// layer message, or in case of Raw methods, the processing stops at the layer
+// before
+func (a *whisperAdapter) handleMessages(shhMessage *whisper.Message, applicationLayer bool) ([]*protocol.StatusMessage, error) {
+	logger := a.logger.With(zap.String("site", "handleMessages"))
+	hlogger := logger.With(zap.Binary("hash", shhMessage.Hash))
+	var statusMessage protocol.StatusMessage
+
+	err := statusMessage.HandleTransport(shhMessage)
 	if err != nil {
-		return errors.Wrap(err, "failed to get signature")
+		hlogger.Error("failed to handle transport layer message", zap.Error(err))
+		return nil, err
 	}
 
-	var protocolMessage encryption.ProtocolMessage
-
-	err = proto.Unmarshal(message.Payload, &protocolMessage)
+	err = a.handleEncryptionLayer(context.Background(), &statusMessage)
 	if err != nil {
-		return errors.Wrap(err, "failed to unmarshal ProtocolMessage")
+		hlogger.Debug("failed to handle an encryption message", zap.Error(err))
 	}
 
-	logger := a.logger.With(zap.String("site", "decryptMessage"))
+	statusMessages, err := statusMessage.HandleDatasync(a.datasync)
+	if err != nil {
+		hlogger.Debug("failed to handle datasync message", zap.Error(err))
 
-	payload, err := a.protocol.HandleMessage(
-		a.privateKey,
-		publicKey,
-		&protocolMessage,
-		message.Hash,
-	)
+	}
+
+	for _, statusMessage := range statusMessages {
+		err := statusMessage.HandleApplicationMetadata()
+		if err != nil {
+			hlogger.Error("failed to handle application metadata layer message", zap.Error(err))
+		}
+
+		if applicationLayer {
+			err = statusMessage.HandleApplication()
+			if err != nil {
+				hlogger.Error("failed to handle application layer message")
+			}
+		}
+	}
+
+	return statusMessages, nil
+}
+
+func (a *whisperAdapter) handleEncryptionLayer(ctx context.Context, message *protocol.StatusMessage) error {
+	publicKey := message.SigPubKey()
+
+	logger := a.logger.With(zap.String("site", "handleEncryptionLayer"))
+
+	err := message.HandleEncryption(a.privateKey, publicKey, a.protocol)
 	if err == encryption.ErrDeviceNotFound {
 		handleErr := a.handleErrDeviceNotFound(ctx, publicKey)
 		if handleErr != nil {
@@ -334,9 +271,7 @@ func (a *whisperAdapter) handleMessageEncryption(ctx context.Context, message *w
 		return errors.Wrap(err, "failed to process an encrypted message")
 	}
 
-	message.Payload = payload
 	return nil
-
 }
 
 func (a *whisperAdapter) handleErrDeviceNotFound(ctx context.Context, publicKey *ecdsa.PublicKey) error {
