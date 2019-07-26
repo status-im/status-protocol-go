@@ -6,7 +6,7 @@ import (
 	"io/ioutil"
 	"testing"
 
-	migrations "github.com/status-im/status-protocol-go/encryption/migrations"
+	"github.com/status-im/status-protocol-go/encryption/migrations"
 	"github.com/status-im/status-protocol-go/sqlite"
 
 	"github.com/ethereum/go-ethereum/crypto"
