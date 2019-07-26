@@ -20,12 +20,6 @@ import (
 	protocol "github.com/status-im/status-protocol-go/v1"
 )
 
-const (
-	// messagesDatabaseFileName is a name of the SQL file in which
-	// messages are stored.
-	messagesDatabaseFileName = "messages.sql"
-)
-
 var (
 	ErrChatIDEmpty    = errors.New("chat ID is empty")
 	ErrNotImplemented = errors.New("not implemented")
@@ -214,7 +208,7 @@ func NewMessenger(
 	}
 
 	// Apply migrations for all components.
-	migrationNames, migrationGetter, err := prepareMigrations()
+	migrationNames, migrationGetter, err := prepareMigrations(defaultMigrations)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to prepare migrations")
 	}
