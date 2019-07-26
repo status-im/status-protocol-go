@@ -5,7 +5,7 @@ BUILD_FLAGS ?= $(shell echo "-ldflags '\
 	-X github.com/status-im/status-protocol-go/vendor/github.com/ethereum/go-ethereum/metrics.EnabledStr=$(ENABLE_METRICS)'")
 
 test:
-	go test -timeout 60s ./...
+	go test ./...
 .PHONY: test
 
 test-race:
