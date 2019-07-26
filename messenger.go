@@ -44,14 +44,12 @@ type Messenger struct {
 	persistence persistence
 	adapter     *whisperAdapter
 	encryptor   *encryption.Protocol
+	logger      *zap.Logger
 
 	ownMessages                map[string][]*protocol.Message
 	featureFlags               featureFlags
 	messagesPersistenceEnabled bool
-
-	logger *zap.Logger
-
-	shutdownTasks []func() error
+	shutdownTasks              []func() error
 }
 
 type featureFlags struct {
@@ -404,6 +402,47 @@ var (
 	RetrieveLastDay = RetrieveConfig{latest: true, last24Hours: true}
 )
 
+// RetrieveAll retrieves all previously fetched messages
+func (m *Messenger) RetrieveAll(ctx context.Context, c RetrieveConfig) (allMessages []*protocol.Message, err error) {
+	latest, err := m.adapter.RetrieveAllMessages()
+	if err != nil {
+		err = errors.Wrap(err, "failed to retrieve messages")
+		return
+	}
+
+	for _, messages := range latest {
+		chatID := messages.ChatID
+
+		_, err = m.persistence.SaveMessages(chatID, messages.Messages)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to save messages")
+		}
+
+		if !messages.Public {
+			// Return any own messages for this chat as well.
+			if ownMessages, ok := m.ownMessages[chatID]; ok {
+				messages.Messages = append(messages.Messages, ownMessages...)
+			}
+		}
+
+		retrievedMessages, err := m.retrieveSaved(ctx, chatID, c, messages.Messages)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to get saved messages")
+		}
+
+		allMessages = append(allMessages, retrievedMessages...)
+	}
+
+	// Delete own messages as they were added to the result.
+	for _, messages := range latest {
+		if !messages.Public {
+			delete(m.ownMessages, messages.ChatID)
+		}
+	}
+
+	return
+}
+
 func (m *Messenger) Retrieve(ctx context.Context, chat Chat, c RetrieveConfig) (messages []*protocol.Message, err error) {
 	var (
 		latest    []*protocol.Message
@@ -444,25 +483,31 @@ func (m *Messenger) Retrieve(ctx context.Context, chat Chat, c RetrieveConfig) (
 		}
 	}
 
+	// We may need to add more messages from the past.
+	result, err := m.retrieveSaved(ctx, chat.ID(), c, append(latest, ownLatest...))
+	if err != nil {
+		return nil, err
+	}
+
 	// When our messages are returned, we can delete them.
 	delete(m.ownMessages, chat.ID())
 
-	return m.retrieveSaved(ctx, chat, c, append(latest, ownLatest...))
+	return result, nil
 }
 
-func (m *Messenger) retrieveSaved(ctx context.Context, chat Chat, c RetrieveConfig, latest []*protocol.Message) (messages []*protocol.Message, err error) {
+func (m *Messenger) retrieveSaved(ctx context.Context, chatID string, c RetrieveConfig, latest []*protocol.Message) (messages []*protocol.Message, err error) {
 	if !m.messagesPersistenceEnabled {
 		return latest, nil
 	}
 
 	if !c.latest {
-		return m.persistence.Messages(chat.ID(), c.From, c.To)
+		return m.persistence.Messages(chatID, c.From, c.To)
 	}
 
 	if c.last24Hours {
 		to := time.Now()
 		from := to.Add(-time.Hour * 24)
-		return m.persistence.Messages(chat.ID(), from, to)
+		return m.persistence.Messages(chatID, from, to)
 	}
 
 	return latest, nil

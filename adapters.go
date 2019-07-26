@@ -75,6 +75,34 @@ func (a *whisperAdapter) LeavePrivate(publicKey *ecdsa.PublicKey) error {
 	return a.transport.LeavePrivate(publicKey)
 }
 
+type ChatMessages struct {
+	Messages []*protocol.Message
+	Public   bool
+	ChatID   string
+}
+
+func (a *whisperAdapter) RetrieveAllMessages() ([]ChatMessages, error) {
+	chatMessages, err := a.transport.RetrieveAllMessages()
+	if err != nil {
+		return nil, err
+	}
+
+	var result []ChatMessages
+	for _, messages := range chatMessages {
+		protoMessages, err := a.handleRetrievedMessages(messages.Messages)
+		if err != nil {
+			return nil, err
+		}
+
+		result = append(result, ChatMessages{
+			Messages: protoMessages,
+			Public:   messages.Public,
+			ChatID:   messages.ChatID,
+		})
+	}
+	return result, nil
+}
+
 // RetrievePublicMessages retrieves the collected public messages.
 // It implies joining a chat if it has not been joined yet.
 func (a *whisperAdapter) RetrievePublicMessages(chatID string) ([]*protocol.Message, error) {
@@ -83,32 +111,7 @@ func (a *whisperAdapter) RetrievePublicMessages(chatID string) ([]*protocol.Mess
 		return nil, err
 	}
 
-	logger := a.logger.With(zap.String("site", "RetrievePublicMessages"))
-
-	decodedMessages := make([]*protocol.Message, 0, len(messages))
-	for _, item := range messages {
-		shhMessage := whisper.ToWhisperMessage(item)
-
-		hlogger := logger.With(zap.Binary("hash", shhMessage.Hash))
-
-		hlogger.Debug("received a public message")
-
-		statusMessage, err := a.decodeMessage(shhMessage)
-		if err != nil {
-			hlogger.Error("failed to decode message", zap.Error(err))
-			continue
-		}
-
-		switch m := statusMessage.Message.(type) {
-		case protocol.Message:
-			m.ID = statusMessage.ID
-			m.SigPubKey = statusMessage.SigPubKey
-			decodedMessages = append(decodedMessages, &m)
-		default:
-			hlogger.Error("skipped a public message of unsupported type")
-		}
-	}
-	return decodedMessages, nil
+	return a.handleRetrievedMessages(messages)
 }
 
 // RetrievePrivateMessages retrieves the collected private messages.
@@ -119,7 +122,11 @@ func (a *whisperAdapter) RetrievePrivateMessages(publicKey *ecdsa.PublicKey) ([]
 		return nil, err
 	}
 
-	logger := a.logger.With(zap.String("site", "RetrievePrivateMessages"))
+	return a.handleRetrievedMessages(messages)
+}
+
+func (a *whisperAdapter) handleRetrievedMessages(messages []*whisper.ReceivedMessage) ([]*protocol.Message, error) {
+	logger := a.logger.With(zap.String("site", "handleRetrievedMessages"))
 
 	decodedMessages := make([]*protocol.Message, 0, len(messages))
 	for _, item := range messages {
@@ -127,7 +134,7 @@ func (a *whisperAdapter) RetrievePrivateMessages(publicKey *ecdsa.PublicKey) ([]
 
 		hlogger := logger.With(zap.Binary("hash", shhMessage.Hash))
 
-		hlogger.Debug("received a private message")
+		hlogger.Debug("handling a received message")
 
 		err := a.decryptMessage(context.Background(), shhMessage)
 		if err != nil {
@@ -161,6 +168,8 @@ func (a *whisperAdapter) RetrievePrivateMessages(publicKey *ecdsa.PublicKey) ([]
 			if err != nil {
 				return nil, err
 			}
+		default:
+			hlogger.Debug("skipped a message of unsupported type")
 		}
 	}
 	return decodedMessages, nil
