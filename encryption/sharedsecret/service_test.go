@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/crypto"
-	migrations "github.com/status-im/status-protocol-go/encryption/internal/sqlite"
+	migrations "github.com/status-im/status-protocol-go/encryption/migrations"
 	"github.com/status-im/status-protocol-go/sqlite"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
