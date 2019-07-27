@@ -15,7 +15,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/status-im/status-protocol-go/sqlite"
-	migrations "github.com/status-im/status-protocol-go/transport/whisper/internal/sqlite"
+	migrations "github.com/status-im/status-protocol-go/transport/whisper/migrations"
 )
 
 func TestServiceTestSuite(t *testing.T) {

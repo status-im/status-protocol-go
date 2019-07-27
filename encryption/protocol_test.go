@@ -5,6 +5,9 @@ import (
 	"os"
 	"testing"
 
+	migrations "github.com/status-im/status-protocol-go/encryption/migrations"
+	"github.com/status-im/status-protocol-go/sqlite"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
@@ -44,27 +47,33 @@ func (s *ProtocolServiceTestSuite) SetupTest() {
 	addedBundlesHandler := func(addedBundles []*multidevice.Installation) {}
 	onNewSharedSecretHandler := func(secret []*sharedsecret.Secret) {}
 
-	s.alice, err = New(
-		s.aliceDBPath.Name(),
-		aliceDBKey,
+	db, err := sqlite.Open(s.aliceDBPath.Name(), aliceDBKey, sqlite.MigrationConfig{
+		AssetNames:  migrations.AssetNames(),
+		AssetGetter: migrations.Asset,
+	})
+	s.Require().NoError(err)
+	s.alice = New(
+		db,
 		"1",
 		addedBundlesHandler,
 		onNewSharedSecretHandler,
 		func(*ProtocolMessageSpec) {},
 		logger.With(zap.String("user", "alice")),
 	)
-	s.Require().NoError(err)
 
-	s.bob, err = New(
-		s.bobDBPath.Name(),
-		bobDBKey,
+	db, err = sqlite.Open(s.bobDBPath.Name(), bobDBKey, sqlite.MigrationConfig{
+		AssetNames:  migrations.AssetNames(),
+		AssetGetter: migrations.Asset,
+	})
+	s.Require().NoError(err)
+	s.bob = New(
+		db,
 		"2",
 		addedBundlesHandler,
 		onNewSharedSecretHandler,
 		func(*ProtocolMessageSpec) {},
 		logger.With(zap.String("user", "bob")),
 	)
-	s.Require().NoError(err)
 }
 
 func (s *ProtocolServiceTestSuite) TearDownTest() {

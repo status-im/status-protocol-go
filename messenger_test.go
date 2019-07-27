@@ -45,7 +45,7 @@ type MessengerSuite struct {
 	suite.Suite
 
 	m          *Messenger
-	tmpDir     string
+	tmpFile    *os.File
 	privateKey *ecdsa.PrivateKey
 	logger     *zap.Logger
 }
@@ -57,7 +57,7 @@ func (s *MessengerSuite) SetupTest() {
 	s.Require().NoError(err)
 	s.logger = logger
 
-	s.tmpDir, err = ioutil.TempDir("", "messenger-test")
+	s.tmpFile, err = ioutil.TempFile("", "messenger-test.sql")
 	s.Require().NoError(err)
 
 	s.privateKey, err = crypto.GenerateKey()
@@ -72,17 +72,17 @@ func (s *MessengerSuite) SetupTest() {
 		s.privateKey,
 		nil,
 		shh,
-		s.tmpDir,
-		"some-key",
 		"installation-1",
 		WithCustomLogger(logger),
 		WithMessagesPersistenceEnabled(),
+		WithDatabaseConfig(s.tmpFile.Name(), "some-key"),
 	)
 	s.Require().NoError(err)
 }
 
 func (s *MessengerSuite) TearDownTest() {
-	os.Remove(s.tmpDir)
+	s.Require().NoError(s.m.Shutdown())
+	_ = os.Remove(s.tmpFile.Name())
 	_ = s.logger.Sync()
 }
 

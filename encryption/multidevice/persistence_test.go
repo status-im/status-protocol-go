@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	migrations "github.com/status-im/status-protocol-go/encryption/internal/sqlite"
+	migrations "github.com/status-im/status-protocol-go/encryption/migrations"
 	"github.com/status-im/status-protocol-go/sqlite"
 	"github.com/stretchr/testify/suite"
 )
