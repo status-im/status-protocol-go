@@ -11,6 +11,8 @@ import (
 	"github.com/pkg/errors"
 	whisper "github.com/status-im/whisper/whisperv6"
 
+	"github.com/status-im/status-protocol-go/datasync"
+	datasyncpeer "github.com/status-im/status-protocol-go/datasync/peer"
 	"github.com/status-im/status-protocol-go/encryption"
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
 	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
@@ -18,6 +20,10 @@ import (
 	transport "github.com/status-im/status-protocol-go/transport/whisper"
 	"github.com/status-im/status-protocol-go/transport/whisper/filter"
 	protocol "github.com/status-im/status-protocol-go/v1"
+	datasyncnode "github.com/vacp2p/mvds/node"
+	datasyncpeers "github.com/vacp2p/mvds/peers"
+	datasyncstate "github.com/vacp2p/mvds/state"
+	datasyncstore "github.com/vacp2p/mvds/store"
 )
 
 var (
@@ -52,6 +58,9 @@ type featureFlags struct {
 	// V1 messages adds additional wrapping
 	// which contains a signature and payload.
 	sendV1Messages bool
+
+	// datasync indicates whether messages should be sent using datasync, breaking change for non-v1 clients
+	datasync bool
 }
 
 type dbConfig struct {
@@ -131,6 +140,13 @@ func WithDatabase(db *sql.DB) Option {
 func WithSendV1Messages() Option {
 	return func(c *config) error {
 		c.featureFlags.sendV1Messages = true
+		return nil
+	}
+}
+
+func WithDatasync() func(c *config) error {
+	return func(c *config) error {
+		c.featureFlags.datasync = true
 		return nil
 	}
 }
@@ -240,11 +256,29 @@ func NewMessenger(
 		logger,
 	)
 
-	persistence := &sqlitePersistence{db: database}
-	adapter := newWhisperAdapter(identity, t, encryptionProtocol, c.featureFlags, logger)
+	// Initialize data sync.
+	dataSyncTransport := datasync.NewDataSyncNodeTransport()
+	dataSyncStore := datasyncstore.NewDummyStore()
+	dataSyncNode := datasyncnode.NewNode(
+		&dataSyncStore,
+		dataSyncTransport,
+		datasyncstate.NewSyncState(), // @todo sqlite syncstate
+		datasync.CalculateSendTime,
+		0,
+		datasyncpeer.PublicKeyToPeerID(identity.PublicKey),
+		datasyncnode.BATCH,
+		datasyncpeers.NewMemoryPersistence(),
+	)
+	datasync := &datasync.DataSync{
+		Node:                  dataSyncNode,
+		DataSyncNodeTransport: dataSyncTransport,
+	}
+
+	adapter := newWhisperAdapter(identity, t, encryptionProtocol, datasync, c.featureFlags, logger)
+
 	messenger = &Messenger{
 		identity:                   identity,
-		persistence:                persistence,
+		persistence:                &sqlitePersistence{db: database},
 		adapter:                    adapter,
 		encryptor:                  encryptionProtocol,
 		ownMessages:                make(map[string][]*protocol.Message),
@@ -253,6 +287,7 @@ func NewMessenger(
 		shutdownTasks: []func() error{
 			database.Close,
 			adapter.transport.Reset,
+			func() error { datasync.Node.Stop(); return nil },
 			// Currently this often fails, seems like it's safe to ignore them
 			// https://github.com/uber-go/zap/issues/328
 			func() error { _ = logger.Sync; return nil },
@@ -264,6 +299,9 @@ func NewMessenger(
 	// TODO: consider removing identity as an argument to Start().
 	if err := encryptionProtocol.Start(identity); err != nil {
 		return nil, err
+	}
+	if c.featureFlags.datasync {
+		dataSyncNode.Start(300 * time.Millisecond)
 	}
 
 	logger.Debug("messages persistence", zap.Bool("enabled", c.messagesPersistenceEnabled))

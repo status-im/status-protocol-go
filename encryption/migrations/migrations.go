@@ -12,7 +12,7 @@
 // 1558084410_add_secret.up.sql (301B)
 // 1558588866_add_version.down.sql (47B)
 // 1558588866_add_version.up.sql (57B)
-// 1559627659_add_contact_codwe.down.sql (32B)
+// 1559627659_add_contact_code.down.sql (32B)
 // 1559627659_add_contact_code.up.sql (198B)
 // 1561368210_add_installation_metadata.down.sql (35B)
 // 1561368210_add_installation_metadata.up.sql (267B)
