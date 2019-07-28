@@ -3,8 +3,6 @@ package zaputil
 import (
 	"encoding/hex"
 
-	"go.uber.org/zap/buffer"
-
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -31,10 +29,6 @@ func (enc *jsonHexEncoder) AddBinary(key string, val []byte) {
 func (enc *jsonHexEncoder) Clone() zapcore.Encoder {
 	encoderClone := enc.Encoder.Clone()
 	return &jsonHexEncoder{Encoder: encoderClone}
-}
-
-func (enc *jsonHexEncoder) EncodeEntry(ent zapcore.Entry, fields []zapcore.Field) (*buffer.Buffer, error) {
-
 }
 
 // RegisterJSONHexEncoder registers a jsonHexEncoder under "json-hex" name.

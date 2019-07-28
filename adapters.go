@@ -495,7 +495,7 @@ func (a *whisperAdapter) SendPrivate(
 			return nil, nil, errors.Wrap(err, "failed to send message with datasync")
 		}
 	} else {
-		err = a.encryptAndSend(ctx, publicKey, wrappesdMessage)
+		err = a.encryptAndSend(ctx, publicKey, wrappedMessage)
 		if err != nil {
 			return nil, nil, err
 		}
