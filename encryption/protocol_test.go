@@ -5,6 +5,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/status-im/status-protocol-go/tt"
+
 	migrations "github.com/status-im/status-protocol-go/encryption/migrations"
 	"github.com/status-im/status-protocol-go/sqlite"
 
@@ -32,9 +34,7 @@ type ProtocolServiceTestSuite struct {
 func (s *ProtocolServiceTestSuite) SetupTest() {
 	var err error
 
-	logger, err := zap.NewDevelopment()
-	s.Require().NoError(err)
-	s.logger = logger
+	s.logger = tt.MustCreateTestLogger()
 
 	s.aliceDBPath, err = ioutil.TempFile("", "alice.db.sql")
 	s.Require().NoError(err)
@@ -58,7 +58,7 @@ func (s *ProtocolServiceTestSuite) SetupTest() {
 		addedBundlesHandler,
 		onNewSharedSecretHandler,
 		func(*ProtocolMessageSpec) {},
-		logger.With(zap.String("user", "alice")),
+		s.logger.With(zap.String("user", "alice")),
 	)
 
 	db, err = sqlite.Open(s.bobDBPath.Name(), bobDBKey, sqlite.MigrationConfig{
@@ -72,7 +72,7 @@ func (s *ProtocolServiceTestSuite) SetupTest() {
 		addedBundlesHandler,
 		onNewSharedSecretHandler,
 		func(*ProtocolMessageSpec) {},
-		logger.With(zap.String("user", "bob")),
+		s.logger.With(zap.String("user", "bob")),
 	)
 }
 

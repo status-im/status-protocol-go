@@ -1,7 +1,9 @@
-package statusproto
+package zaputil
 
 import (
 	"encoding/hex"
+
+	"go.uber.org/zap/buffer"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -26,11 +28,46 @@ func (enc *jsonHexEncoder) AddBinary(key string, val []byte) {
 	enc.AddString(key, "0x"+hex.EncodeToString(val))
 }
 
+func (enc *jsonHexEncoder) Clone() zapcore.Encoder {
+	encoderClone := enc.Encoder.Clone()
+	return &jsonHexEncoder{Encoder: encoderClone}
+}
+
+func (enc *jsonHexEncoder) EncodeEntry(ent zapcore.Entry, fields []zapcore.Field) (*buffer.Buffer, error) {
+
+}
+
 // RegisterJSONHexEncoder registers a jsonHexEncoder under "json-hex" name.
 // Later, this name can be used as a value for zap.Config.Encoding to enable
 // jsonHexEncoder.
 func RegisterJSONHexEncoder() error {
 	return zap.RegisterEncoder("json-hex", func(cfg zapcore.EncoderConfig) (zapcore.Encoder, error) {
 		return NewJSONHexEncoder(cfg), nil
+	})
+}
+
+type consoleHexEncoder struct {
+	zapcore.Encoder
+}
+
+func NewConsoleHexEncoder(cfg zapcore.EncoderConfig) zapcore.Encoder {
+	consoleEncoder := zapcore.NewConsoleEncoder(cfg)
+	return &consoleHexEncoder{
+		Encoder: consoleEncoder,
+	}
+}
+
+func (enc *consoleHexEncoder) AddBinary(key string, val []byte) {
+	enc.AddString(key, "0x"+hex.EncodeToString(val))
+}
+
+func (enc *consoleHexEncoder) Clone() zapcore.Encoder {
+	encodeClone := enc.Encoder.Clone()
+	return &consoleHexEncoder{Encoder: encodeClone}
+}
+
+func RegisterConsoleHexEncoder() error {
+	return zap.RegisterEncoder("console-hex", func(cfg zapcore.EncoderConfig) (zapcore.Encoder, error) {
+		return NewConsoleHexEncoder(cfg), nil
 	})
 }

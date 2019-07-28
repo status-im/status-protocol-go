@@ -254,7 +254,7 @@ func (a *whisperAdapter) addDatasyncPacket(publicKey *ecdsa.PublicKey, datasyncM
 // 3) if it's not a datasync message a single message will be handled
 // Fingerprinting datasync messages is a bit tricky, as they might unmarshal fine
 // because they are wrapped messages, so we need to check whether anything is
-// poulated in the fields.
+// populated in the fields.
 func (a *whisperAdapter) handleDecodedMessages(message *whisper.Message) ([]*protocol.StatusMessage, error) {
 	var decodedMessages []*protocol.StatusMessage
 
@@ -495,7 +495,7 @@ func (a *whisperAdapter) SendPrivate(
 			return nil, nil, errors.Wrap(err, "failed to send message with datasync")
 		}
 	} else {
-		err = a.encryptAndSend(ctx, publicKey, wrappedMessage)
+		err = a.encryptAndSend(ctx, publicKey, wrappesdMessage)
 		if err != nil {
 			return nil, nil, err
 		}
