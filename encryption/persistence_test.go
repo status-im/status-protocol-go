@@ -9,7 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/suite"
 
-	migrations "github.com/status-im/status-protocol-go/encryption/migrations"
+	migrations "github.com/status-im/status-protocol-go/encryption/internal/sqlite"
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
 	"github.com/status-im/status-protocol-go/sqlite"
 )
@@ -30,7 +30,7 @@ func (s *SQLLitePersistenceTestSuite) SetupTest() {
 	s.Require().NoError(err)
 
 	db, err := sqlite.Open(filepath.Join(dir, "db.sql"), "test-key", sqlite.MigrationConfig{
-		AssetNames: migrations.AssetNames(),
+		AssetNames:  migrations.AssetNames(),
 		AssetGetter: func(name string) ([]byte, error) {
 			return migrations.Asset(name)
 		},

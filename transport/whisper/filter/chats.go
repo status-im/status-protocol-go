@@ -81,7 +81,10 @@ func New(db *sql.DB, w *whisper.Whisper, privateKey *ecdsa.PrivateKey, logger *z
 		logger = zap.NewNop()
 	}
 
-	persistence := newSQLitePersistence(db)
+	persistence, err := newSQLitePersistence(db)
+	if err != nil {
+		return nil, err
+	}
 
 	keys, err := persistence.All()
 	if err != nil {

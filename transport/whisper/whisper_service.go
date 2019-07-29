@@ -3,7 +3,6 @@ package whisper
 import (
 	"context"
 	"crypto/ecdsa"
-	"database/sql"
 	"encoding/hex"
 	"fmt"
 	"math/big"
@@ -20,7 +19,9 @@ import (
 	whisper "github.com/status-im/whisper/whisperv6"
 	"go.uber.org/zap"
 
+	"github.com/status-im/status-protocol-go/sqlite"
 	"github.com/status-im/status-protocol-go/transport/whisper/filter"
+	migrations "github.com/status-im/status-protocol-go/transport/whisper/internal/sqlite"
 )
 
 const (
@@ -88,10 +89,22 @@ func NewWhisperServiceTransport(
 	node Server,
 	shh *whisper.Whisper,
 	privateKey *ecdsa.PrivateKey,
-	db *sql.DB,
+	dbPath string,
+	dbKey string,
 	mailservers []string,
 	logger *zap.Logger,
 ) (*WhisperServiceTransport, error) {
+	// DB is shared between this package and all sub-packages.
+	db, err := sqlite.Open(dbPath, dbKey, sqlite.MigrationConfig{
+		AssetNames: migrations.AssetNames(),
+		AssetGetter: func(name string) ([]byte, error) {
+			return migrations.Asset(name)
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	chats, err := filter.New(db, shh, privateKey, logger)
 	if err != nil {
 		return nil, err

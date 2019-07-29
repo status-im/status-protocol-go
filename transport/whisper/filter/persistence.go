@@ -2,14 +2,26 @@ package filter
 
 import (
 	"database/sql"
+
+	"github.com/status-im/status-protocol-go/sqlite"
+	migrations "github.com/status-im/status-protocol-go/transport/whisper/internal/sqlite"
 )
 
 type sqlitePersistence struct {
 	db *sql.DB
 }
 
-func newSQLitePersistence(db *sql.DB) *sqlitePersistence {
-	return &sqlitePersistence{db: db}
+func newSQLitePersistence(db *sql.DB) (*sqlitePersistence, error) {
+	err := sqlite.ApplyMigrations(
+		db,
+		migrations.AssetNames(),
+		func(name string) ([]byte, error) {
+			return migrations.Asset(name)
+		})
+	if err != nil {
+		return nil, nil
+	}
+	return &sqlitePersistence{db: db}, nil
 }
 
 func (s *sqlitePersistence) Add(chatID string, key []byte) error {

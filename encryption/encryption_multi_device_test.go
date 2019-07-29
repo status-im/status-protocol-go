@@ -6,9 +6,6 @@ import (
 	"io/ioutil"
 	"testing"
 
-	"github.com/status-im/status-protocol-go/encryption/migrations"
-	"github.com/status-im/status-protocol-go/sqlite"
-
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
@@ -55,22 +52,19 @@ func setupUser(user string, s *EncryptionServiceMultiDeviceSuite, n int) error {
 		if err != nil {
 			return err
 		}
-		db, err := sqlite.Open(dbPath.Name(), "some-key", sqlite.MigrationConfig{
-			AssetNames:  migrations.AssetNames(),
-			AssetGetter: migrations.Asset,
-		})
-		if err != nil {
-			return err
-		}
 
-		protocol := New(
-			db,
+		protocol, err := New(
+			dbPath.Name(),
+			"some-key",
 			installationID,
 			func(s []*multidevice.Installation) {},
 			func(s []*sharedsecret.Secret) {},
 			func(*ProtocolMessageSpec) {},
 			s.logger.With(zap.String("user", user)),
 		)
+		if err != nil {
+			return err
+		}
 		s.services[user].services[i] = protocol
 	}
 

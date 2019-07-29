@@ -3,7 +3,6 @@ package encryption
 import (
 	"bytes"
 	"crypto/ecdsa"
-	"database/sql"
 	"fmt"
 
 	"go.uber.org/zap"
@@ -84,15 +83,17 @@ var (
 
 // New creates a new ProtocolService instance
 func New(
-	db *sql.DB,
+	dbPath string,
+	dbKey string,
 	installationID string,
 	addedBundlesHandler func([]*multidevice.Installation),
 	onNewSharedSecretHandler func([]*sharedsecret.Secret),
 	onSendContactCodeHandler func(*ProtocolMessageSpec),
 	logger *zap.Logger,
-) *Protocol {
+) (*Protocol, error) {
 	return NewWithEncryptorConfig(
-		db,
+		dbPath,
+		dbKey,
 		installationID,
 		defaultEncryptorConfig(installationID, logger),
 		addedBundlesHandler,
@@ -102,19 +103,27 @@ func New(
 	)
 }
 
-// DB and migrations are shared between encryption package
-// and its sub-packages.
 func NewWithEncryptorConfig(
-	db *sql.DB,
+	dbPath string,
+	dbKey string,
 	installationID string,
 	encryptorConfig encryptorConfig,
 	addedBundlesHandler func([]*multidevice.Installation),
 	onNewSharedSecretHandler func([]*sharedsecret.Secret),
 	onSendContactCodeHandler func(*ProtocolMessageSpec),
 	logger *zap.Logger,
-) *Protocol {
+) (*Protocol, error) {
+	encryptor, err := newEncryptor(dbPath, dbKey, encryptorConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	// DB and migrations are shared between encryption package
+	// and its sub-packages.
+	db := encryptor.persistence.DB
+
 	return &Protocol{
-		encryptor: newEncryptor(db, encryptorConfig),
+		encryptor: encryptor,
 		secret:    sharedsecret.New(db, logger),
 		multidevice: multidevice.New(db, &multidevice.Config{
 			MaxInstallations: 3,
@@ -126,7 +135,7 @@ func NewWithEncryptorConfig(
 		onNewSharedSecretHandler: onNewSharedSecretHandler,
 		onSendContactCodeHandler: onSendContactCodeHandler,
 		logger:                   logger.With(zap.Namespace("Protocol")),
-	}
+	}, nil
 }
 
 func (p *Protocol) Start(myIdentity *ecdsa.PrivateKey) error {

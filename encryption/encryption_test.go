@@ -12,9 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/status-im/status-protocol-go/encryption/migrations"
-	"github.com/status-im/status-protocol-go/sqlite"
-
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
@@ -50,14 +47,10 @@ func (s *EncryptionServiceTestSuite) initDatabases(config encryptorConfig) {
 	s.bobDBPath, err = ioutil.TempFile("", "bob.db.sql")
 	s.Require().NoError(err)
 
-	db, err := sqlite.Open(s.aliceDBPath.Name(), "alice-key", sqlite.MigrationConfig{
-		AssetNames:  migrations.AssetNames(),
-		AssetGetter: migrations.Asset,
-	})
-	s.Require().NoError(err)
 	config.InstallationID = aliceInstallationID
-	s.alice = NewWithEncryptorConfig(
-		db,
+	s.alice, err = NewWithEncryptorConfig(
+		s.aliceDBPath.Name(),
+		"alice-key",
 		aliceInstallationID,
 		config,
 		func(s []*multidevice.Installation) {},
@@ -65,15 +58,12 @@ func (s *EncryptionServiceTestSuite) initDatabases(config encryptorConfig) {
 		func(*ProtocolMessageSpec) {},
 		s.logger.With(zap.String("user", "alice")),
 	)
-
-	db, err = sqlite.Open(s.bobDBPath.Name(), "bob-key", sqlite.MigrationConfig{
-		AssetNames:  migrations.AssetNames(),
-		AssetGetter: migrations.Asset,
-	})
 	s.Require().NoError(err)
+
 	config.InstallationID = bobInstallationID
-	s.bob = NewWithEncryptorConfig(
-		db,
+	s.bob, err = NewWithEncryptorConfig(
+		s.bobDBPath.Name(),
+		"bob-key",
 		bobInstallationID,
 		config,
 		func(s []*multidevice.Installation) {},
@@ -81,6 +71,7 @@ func (s *EncryptionServiceTestSuite) initDatabases(config encryptorConfig) {
 		func(*ProtocolMessageSpec) {},
 		s.logger.With(zap.String("user", "bob")),
 	)
+	s.Require().NoError(err)
 }
 
 func (s *EncryptionServiceTestSuite) SetupTest() {

@@ -2,13 +2,11 @@ package statusproto
 
 import (
 	"crypto/ecdsa"
+	"fmt"
 	"io/ioutil"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
-
-	"github.com/status-im/status-protocol-go/sqlite"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/status-im/status-protocol-go/encryption"
@@ -68,14 +66,6 @@ func (s *AdaptersSuite) SetupTest() {
 	s.tmpDir, err = ioutil.TempDir("", "adapters-test")
 	s.Require().NoError(err)
 
-	names, getter, err := prepareMigrations(defaultMigrations)
-	s.Require().NoError(err)
-	database, err := sqlite.Open(filepath.Join(s.tmpDir, "transport.db.sql"), "some-key", sqlite.MigrationConfig{
-		AssetNames:  names,
-		AssetGetter: getter,
-	})
-	s.Require().NoError(err)
-
 	s.privateKey, err = crypto.GenerateKey()
 	s.Require().NoError(err)
 
@@ -90,7 +80,8 @@ func (s *AdaptersSuite) SetupTest() {
 		nil,
 		shh,
 		s.privateKey,
-		database,
+		fmt.Sprintf("%s/transport.db", s.tmpDir),
+		"",
 		nil,
 		logger,
 	)
@@ -99,8 +90,9 @@ func (s *AdaptersSuite) SetupTest() {
 	onNewInstallations := func([]*multidevice.Installation) {}
 	onNewSharedSecret := func([]*sharedsecret.Secret) {}
 	onSendContactCode := func(*encryption.ProtocolMessageSpec) {}
-	encryptionProtocol := encryption.New(
-		database,
+	encryptionProtocol, err := encryption.New(
+		fmt.Sprintf("%s/encrpytion.db", s.tmpDir),
+		"",
 		"installation-1",
 		onNewInstallations,
 		onNewSharedSecret,
@@ -131,7 +123,7 @@ func (s *AdaptersSuite) SetupTest() {
 		config.featureFlags,
 		logger,
 	)
-
+	s.Require().NoError(err)
 	dataSyncNode.Start(100 * time.Second)
 }
 

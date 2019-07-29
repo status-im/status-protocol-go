@@ -3,7 +3,8 @@ package statusproto
 import (
 	"context"
 	"crypto/ecdsa"
-	"database/sql"
+	"fmt"
+	"path/filepath"
 	"time"
 
 	"go.uber.org/zap"
@@ -16,6 +17,7 @@ import (
 	"github.com/status-im/status-protocol-go/encryption"
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
 	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
+	migrations "github.com/status-im/status-protocol-go/internal/sqlite"
 	"github.com/status-im/status-protocol-go/sqlite"
 	transport "github.com/status-im/status-protocol-go/transport/whisper"
 	"github.com/status-im/status-protocol-go/transport/whisper/filter"
@@ -40,7 +42,7 @@ var (
 // mailservers because they can also be managed by the user.
 type Messenger struct {
 	identity    *ecdsa.PrivateKey
-	persistence *sqlitePersistence
+	persistence persistence
 	adapter     *whisperAdapter
 	encryptor   *encryption.Protocol
 	logger      *zap.Logger
@@ -63,11 +65,6 @@ type featureFlags struct {
 	datasync bool
 }
 
-type dbConfig struct {
-	dbPath string
-	dbKey  string
-}
-
 type config struct {
 	onNewInstallationsHandler func([]*multidevice.Installation)
 	// DEPRECATED: no need to expose it
@@ -75,69 +72,62 @@ type config struct {
 	// DEPRECATED: no need to expose it
 	onSendContactCodeHandler func(*encryption.ProtocolMessageSpec)
 
+	encryptionLayerFilePath string
+	transportLayerFilePath  string
+
 	messagesPersistenceEnabled bool
 	featureFlags               featureFlags
-
-	// A path to a database or a database instance is required.
-	// The database instance has a higher priority.
-	dbConfig dbConfig
-	db       *sql.DB
 
 	logger *zap.Logger
 }
 
 type Option func(*config) error
 
-func WithOnNewInstallationsHandler(h func([]*multidevice.Installation)) Option {
+func WithOnNewInstallationsHandler(h func([]*multidevice.Installation)) func(c *config) error {
 	return func(c *config) error {
 		c.onNewInstallationsHandler = h
 		return nil
 	}
 }
 
-func WithOnNewSharedSecret(h func([]*sharedsecret.Secret)) Option {
+func WithOnNewSharedSecret(h func([]*sharedsecret.Secret)) func(c *config) error {
 	return func(c *config) error {
 		c.onNewSharedSecretHandler = h
 		return nil
 	}
 }
 
-func WithCustomLogger(logger *zap.Logger) Option {
+func WithCustomLogger(logger *zap.Logger) func(c *config) error {
 	return func(c *config) error {
 		c.logger = logger
 		return nil
 	}
 }
 
-func WithGenericDiscoveryTopicSupport() Option {
+func WithGenericDiscoveryTopicSupport() func(c *config) error {
 	return func(c *config) error {
 		c.featureFlags.genericDiscoveryTopicEnabled = true
 		return nil
 	}
 }
 
-func WithMessagesPersistenceEnabled() Option {
+func WithMessagesPersistenceEnabled() func(c *config) error {
 	return func(c *config) error {
 		c.messagesPersistenceEnabled = true
 		return nil
 	}
 }
 
-func WithDatabaseConfig(dbPath, dbKey string) Option {
+// TODO: use this config fileds.
+func WithDatabaseFilePaths(encryptionLayerFilePath, transportLayerFilePath string) func(c *config) error {
 	return func(c *config) error {
-		c.dbConfig = dbConfig{dbPath: dbPath, dbKey: dbKey}
+		c.encryptionLayerFilePath = encryptionLayerFilePath
+		c.transportLayerFilePath = transportLayerFilePath
 		return nil
 	}
 }
 
-func WithDatabase(db *sql.DB) Option {
-	return func(c *config) error {
-		c.db = db
-		return nil
-	}
-}
-
-func WithSendV1Messages() Option {
+func WithSendV1Messages() func(c *config) error {
 	return func(c *config) error {
 		c.featureFlags.sendV1Messages = true
 		return nil
@@ -155,6 +145,8 @@ func NewMessenger(
 	identity *ecdsa.PrivateKey,
 	server transport.Server,
 	shh *whisper.Whisper,
+	dataDir string,
+	dbKey string,
 	installationID string,
 	opts ...Option,
 ) (*Messenger, error) {
@@ -209,36 +201,20 @@ func NewMessenger(
 		}
 	}
 
-	// Configure the database.
-	database := c.db
-	if c.db == nil && c.dbConfig == (dbConfig{}) {
-		return nil, errors.New("database instance or database path needs to be provided")
+	// Set default database file paths.
+	if c.encryptionLayerFilePath == "" {
+		c.encryptionLayerFilePath = filepath.Join(dataDir, "sessions.sql")
 	}
-	if c.db == nil {
-		logger.Info("opening a database", zap.String("dbPath", c.dbConfig.dbPath))
-		var err error
-		database, err = sqlite.Open(c.dbConfig.dbPath, c.dbConfig.dbKey)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to initialize database from the db config")
-		}
+	if c.transportLayerFilePath == "" {
+		c.transportLayerFilePath = filepath.Join(dataDir, "transport.sql")
 	}
 
-	// Apply migrations for all components.
-	migrationNames, migrationGetter, err := prepareMigrations(defaultMigrations)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to prepare migrations")
-	}
-	err = sqlite.ApplyMigrations(database, migrationNames, migrationGetter)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to apply migrations")
-	}
-
-	// Initialize transport layer.
 	t, err := transport.NewWhisperServiceTransport(
 		server,
 		shh,
 		identity,
-		database,
+		c.transportLayerFilePath,
+		dbKey,
 		nil,
 		logger,
 	)
@@ -246,17 +222,31 @@ func NewMessenger(
 		return nil, errors.Wrap(err, "failed to create a WhisperServiceTransport")
 	}
 
-	// Initialize encryption layer.
-	encryptionProtocol := encryption.New(
-		database,
+	encryptionProtocol, err := encryption.New(
+		c.encryptionLayerFilePath,
+		dbKey,
 		installationID,
 		c.onNewInstallationsHandler,
 		c.onNewSharedSecretHandler,
 		c.onSendContactCodeHandler,
 		logger,
 	)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create the encryption layer")
+	}
 
-	// Initialize data sync.
+	messagesDatabaseFileName := fmt.Sprintf("%s.messages.sql", installationID)
+
+	applicationLayerFilePath := filepath.Join(dataDir, messagesDatabaseFileName)
+	applicationLayerPersistence, err := sqlite.Open(applicationLayerFilePath, dbKey, sqlite.MigrationConfig{
+		AssetNames: migrations.AssetNames(),
+		AssetGetter: func(name string) ([]byte, error) {
+			return migrations.Asset(name)
+		},
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to initialize messages db")
+	}
 	dataSyncTransport := datasync.NewDataSyncNodeTransport()
 	dataSyncStore := datasyncstore.NewDummyStore()
 	dataSyncNode := datasyncnode.NewNode(
@@ -271,18 +261,18 @@ func NewMessenger(
 	)
 	datasync := datasync.New(dataSyncNode, dataSyncTransport, c.featureFlags.datasync, logger)
 
+	persistence := &sqlitePersistence{db: applicationLayerPersistence}
 	adapter := newWhisperAdapter(identity, t, encryptionProtocol, datasync, c.featureFlags, logger)
-
 	messenger = &Messenger{
 		identity:                   identity,
-		persistence:                &sqlitePersistence{db: database},
+		persistence:                persistence,
 		adapter:                    adapter,
 		encryptor:                  encryptionProtocol,
 		ownMessages:                make(map[string][]*protocol.Message),
 		featureFlags:               c.featureFlags,
 		messagesPersistenceEnabled: c.messagesPersistenceEnabled,
 		shutdownTasks: []func() error{
-			database.Close,
+			persistence.Close,
 			adapter.transport.Reset,
 			func() error { datasync.Stop(); return nil },
 			// Currently this often fails, seems like it's safe to ignore them
