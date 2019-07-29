@@ -59,7 +59,9 @@ type featureFlags struct {
 	// which contains a signature and payload.
 	sendV1Messages bool
 
-	// datasync indicates whether messages should be sent using datasync, breaking change for non-v1 clients
+	// datasync indicates whether direct messages should be sent exclusively
+	// using datasync, breaking change for non-v1 clients. Public messages
+	// are not impacted
 	datasync bool
 }
 
