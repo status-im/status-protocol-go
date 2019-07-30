@@ -3,7 +3,6 @@ package statusproto
 import (
 	"testing"
 
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
 )
 
@@ -18,31 +17,17 @@ var (
 )
 
 func TestDecodePairMessageMessage(t *testing.T) {
-	key, err := crypto.GenerateKey()
+	val, err := decodeTransitMessage(testPairMessageBytes)
 	require.NoError(t, err)
-
-	val, err := DecodeMessage(&key.PublicKey, testPairMessageBytes)
-	require.NoError(t, err)
-	require.EqualValues(t, StatusMessage{
-		Message:   testPairMessageStruct,
-		SigPubKey: &key.PublicKey,
-		ID:        MessageID(&key.PublicKey, testPairMessageBytes),
-	}, val)
+	require.EqualValues(t, testPairMessageStruct, val)
 }
 
 func TestEncodePairMessage(t *testing.T) {
-	key, err := crypto.GenerateKey()
-	require.NoError(t, err)
-
 	data, err := EncodePairMessage(testPairMessageStruct)
 	require.NoError(t, err)
 	// Decode it back to a struct because, for example, map encoding is non-deterministic
 	// and it is not possible to compare bytes.
-	val, err := DecodeMessage(&key.PublicKey, data)
+	val, err := decodeTransitMessage(data)
 	require.NoError(t, err)
-	require.EqualValues(t, StatusMessage{
-		Message:   testPairMessageStruct,
-		SigPubKey: &key.PublicKey,
-		ID:        MessageID(&key.PublicKey, data),
-	}, val)
+	require.EqualValues(t, testPairMessageStruct, val)
 }

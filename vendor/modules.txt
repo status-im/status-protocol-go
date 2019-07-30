@@ -57,6 +57,8 @@ github.com/huin/goupnp/soap
 github.com/huin/goupnp/ssdp
 # github.com/jackpal/go-nat-pmp v1.0.1
 github.com/jackpal/go-nat-pmp
+# github.com/jinzhu/copier v0.0.0-20190625015134-976e0346caa8
+github.com/jinzhu/copier
 # github.com/leodido/go-urn v1.1.0
 github.com/leodido/go-urn
 # github.com/lib/pq v1.0.0
