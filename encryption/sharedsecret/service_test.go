@@ -5,6 +5,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/status-im/status-protocol-go/tt"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	migrations "github.com/status-im/status-protocol-go/encryption/migrations"
 	"github.com/status-im/status-protocol-go/sqlite"
@@ -24,9 +26,7 @@ type SharedSecretTestSuite struct {
 }
 
 func (s *SharedSecretTestSuite) SetupTest() {
-	logger, err := zap.NewDevelopment()
-	s.Require().NoError(err)
-	s.logger = logger
+	s.logger = tt.MustCreateTestLogger()
 
 	dbFile, err := ioutil.TempFile(os.TempDir(), "sharedsecret")
 	s.Require().NoError(err)
@@ -40,7 +40,7 @@ func (s *SharedSecretTestSuite) SetupTest() {
 	})
 	s.Require().NoError(err)
 
-	s.service = New(db, logger)
+	s.service = New(db, s.logger)
 }
 
 func (s *SharedSecretTestSuite) TearDownTest() {

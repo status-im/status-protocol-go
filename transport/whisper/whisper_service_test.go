@@ -9,11 +9,12 @@ import (
 	migrations "github.com/status-im/status-protocol-go/transport/whisper/migrations"
 
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
+
+	"github.com/status-im/status-protocol-go/tt"
 )
 
 func TestSelectAndAddNoMailservers(t *testing.T) {
-	logger := zap.NewNop()
+	logger := tt.MustCreateTestLogger()
 	svc := &WhisperServiceTransport{
 		logger: logger,
 	}
@@ -34,7 +35,7 @@ func TestNewWhisperServiceTransport(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	logger, err := zap.NewDevelopment()
+	logger := tt.MustCreateTestLogger()
 	require.NoError(t, err)
 	defer func() { _ = logger.Sync() }()
 

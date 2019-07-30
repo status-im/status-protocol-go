@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
+
+	"github.com/status-im/status-protocol-go/tt"
 )
 
 func TestServiceTestSuite(t *testing.T) {
@@ -26,11 +28,8 @@ func (p *PublisherTestSuite) SetupTest(installationID string) {
 	db, err := sql.Open("sqlite3", dir)
 	p.Require().NoError(err)
 
-	logger, err := zap.NewDevelopment()
-	p.Require().NoError(err)
-	p.logger = logger
-
-	p.publisher = New(db, logger)
+	p.logger = tt.MustCreateTestLogger()
+	p.publisher = New(db, p.logger)
 }
 
 func (p *PublisherTestSuite) TearDownTest() {

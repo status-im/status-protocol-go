@@ -6,6 +6,8 @@ import (
 	"io/ioutil"
 	"testing"
 
+	"github.com/status-im/status-protocol-go/tt"
+
 	"github.com/status-im/status-protocol-go/encryption/migrations"
 	"github.com/status-im/status-protocol-go/sqlite"
 
@@ -78,12 +80,10 @@ func setupUser(user string, s *EncryptionServiceMultiDeviceSuite, n int) error {
 }
 
 func (s *EncryptionServiceMultiDeviceSuite) SetupTest() {
-	logger, err := zap.NewDevelopment()
-	s.Require().NoError(err)
-	s.logger = logger
+	s.logger = tt.MustCreateTestLogger()
 
 	s.services = make(map[string]*serviceAndKey)
-	err = setupUser(aliceUser, s, 4)
+	err := setupUser(aliceUser, s, 4)
 	s.Require().NoError(err)
 
 	err = setupUser(bobUser, s, 4)

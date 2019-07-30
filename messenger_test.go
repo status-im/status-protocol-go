@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/status-im/status-protocol-go/tt"
+
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 
@@ -53,9 +55,7 @@ type MessengerSuite struct {
 func (s *MessengerSuite) SetupTest() {
 	var err error
 
-	logger, err := zap.NewDevelopment()
-	s.Require().NoError(err)
-	s.logger = logger
+	s.logger = tt.MustCreateTestLogger()
 
 	s.tmpFile, err = ioutil.TempFile("", "messenger-test.sql")
 	s.Require().NoError(err)
@@ -73,7 +73,7 @@ func (s *MessengerSuite) SetupTest() {
 		nil,
 		shh,
 		"installation-1",
-		WithCustomLogger(logger),
+		WithCustomLogger(s.logger),
 		WithMessagesPersistenceEnabled(),
 		WithDatabaseConfig(s.tmpFile.Name(), "some-key"),
 	)
