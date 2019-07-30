@@ -57,7 +57,7 @@ func (enc *consoleHexEncoder) AddBinary(key string, val []byte) {
 
 func (enc *consoleHexEncoder) Clone() zapcore.Encoder {
 	encoderClone := enc.Encoder.Clone()
-	return &consoleHexEncoder{Encoder: encodeClone}
+	return &consoleHexEncoder{Encoder: encoderClone}
 }
 
 func RegisterConsoleHexEncoder() error {
