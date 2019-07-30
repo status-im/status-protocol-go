@@ -366,36 +366,44 @@ func (m *Messenger) Mailservers() ([]string, error) {
 }
 
 func (m *Messenger) Join(chat Chat) error {
-	if chat.PublicKey() != nil {
-		return m.adapter.JoinPrivate(chat.PublicKey())
-	} else if chat.PublicName() != "" {
-		return m.adapter.JoinPublic(chat.PublicName())
+	if chat.PublicKey != nil {
+		return m.adapter.JoinPrivate(chat.PublicKey)
+	} else if chat.Name != "" {
+		return m.adapter.JoinPublic(chat.Name)
 	}
 	return errors.New("chat is neither public nor private")
 }
 
 func (m *Messenger) Leave(chat Chat) error {
-	if chat.PublicKey() != nil {
-		return m.adapter.LeavePrivate(chat.PublicKey())
-	} else if chat.PublicName() != "" {
-		return m.adapter.LeavePublic(chat.PublicName())
+	if chat.PublicKey != nil {
+		return m.adapter.LeavePrivate(chat.PublicKey)
+	} else if chat.Name != "" {
+		return m.adapter.LeavePublic(chat.Name)
 	}
 	return errors.New("chat is neither public nor private")
 }
 
+func (m *Messenger) SaveChat(chat Chat) error {
+	return m.persistence.SaveChat(chat)
+}
+
+func (m *Messenger) Chats(from, to int) ([]*Chat, error) {
+	return m.persistence.Chats(from, to)
+}
+
 func (m *Messenger) Send(ctx context.Context, chat Chat, data []byte) ([]byte, error) {
-	chatID := chat.ID()
+	chatID := chat.ID
 	if chatID == "" {
 		return nil, ErrChatIDEmpty
 	}
 
-	clock, err := m.persistence.LastMessageClock(chat.ID())
+	clock, err := m.persistence.LastMessageClock(chat.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	if chat.PublicKey() != nil {
-		hash, message, err := m.adapter.SendPrivate(ctx, chat.PublicKey(), chat.ID(), data, clock)
+	if chat.PublicKey != nil {
+		hash, message, err := m.adapter.SendPrivate(ctx, chat.PublicKey, chat.ID, data, clock)
 		if err != nil {
 			return nil, err
 		}
@@ -405,7 +413,7 @@ func (m *Messenger) Send(ctx context.Context, chat Chat, data []byte) ([]byte, e
 		message.SigPubKey = &m.identity.PublicKey
 
 		if m.messagesPersistenceEnabled {
-			_, err = m.persistence.SaveMessages(chat.ID(), []*protocol.Message{message})
+			_, err = m.persistence.SaveMessages(chat.ID, []*protocol.Message{message})
 			if err != nil {
 				return nil, err
 			}
@@ -415,8 +423,8 @@ func (m *Messenger) Send(ctx context.Context, chat Chat, data []byte) ([]byte, e
 		m.ownMessages[chatID] = append(m.ownMessages[chatID], message)
 
 		return hash, nil
-	} else if chat.PublicName() != "" {
-		return m.adapter.SendPublic(ctx, chat.PublicName(), chat.ID(), data, clock)
+	} else if chat.Name != "" {
+		return m.adapter.SendPublic(ctx, chat.Name, chat.ID, data, clock)
 	}
 	return nil, errors.New("chat is neither public nor private")
 }
@@ -424,10 +432,10 @@ func (m *Messenger) Send(ctx context.Context, chat Chat, data []byte) ([]byte, e
 // SendRaw takes encoded data, encrypts it and sends through the wire.
 // DEPRECATED
 func (m *Messenger) SendRaw(ctx context.Context, chat Chat, data []byte) ([]byte, whisper.NewMessage, error) {
-	if chat.PublicKey() != nil {
-		return m.adapter.SendPrivateRaw(ctx, chat.PublicKey(), data)
-	} else if chat.PublicName() != "" {
-		return m.adapter.SendPublicRaw(ctx, chat.PublicName(), data)
+	if chat.PublicKey != nil {
+		return m.adapter.SendPrivateRaw(ctx, chat.PublicKey, data)
+	} else if chat.Name != "" {
+		return m.adapter.SendPublicRaw(ctx, chat.Name, data)
 	}
 	return nil, whisper.NewMessage{}, errors.New("chat is neither public nor private")
 }
@@ -491,14 +499,14 @@ func (m *Messenger) Retrieve(ctx context.Context, chat Chat, c RetrieveConfig) (
 		ownLatest []*protocol.Message
 	)
 
-	if chat.PublicKey() != nil {
-		latest, err = m.adapter.RetrievePrivateMessages(chat.PublicKey())
+	if chat.PublicKey != nil {
+		latest, err = m.adapter.RetrievePrivateMessages(chat.PublicKey)
 		// Return any own messages for this chat as well.
-		if ownMessages, ok := m.ownMessages[chat.ID()]; ok {
+		if ownMessages, ok := m.ownMessages[chat.ID]; ok {
 			ownLatest = ownMessages
 		}
-	} else if chat.PublicName() != "" {
-		latest, err = m.adapter.RetrievePublicMessages(chat.PublicName())
+	} else if chat.Name != "" {
+		latest, err = m.adapter.RetrievePublicMessages(chat.Name)
 	} else {
 		return nil, errors.New("chat is neither public nor private")
 	}
@@ -509,14 +517,14 @@ func (m *Messenger) Retrieve(ctx context.Context, chat Chat, c RetrieveConfig) (
 	}
 
 	if m.messagesPersistenceEnabled {
-		_, err = m.persistence.SaveMessages(chat.ID(), latest)
+		_, err = m.persistence.SaveMessages(chat.ID, latest)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to save latest messages")
 		}
 	}
 
 	// Confirm received and decrypted messages.
-	if m.messagesPersistenceEnabled && chat.PublicKey() != nil {
+	if m.messagesPersistenceEnabled && chat.PublicKey != nil {
 		for _, message := range latest {
 			// Confirm received and decrypted messages.
 			if err := m.encryptor.ConfirmMessageProcessed(message.ID); err != nil {
@@ -526,13 +534,13 @@ func (m *Messenger) Retrieve(ctx context.Context, chat Chat, c RetrieveConfig) (
 	}
 
 	// We may need to add more messages from the past.
-	result, err := m.retrieveSaved(ctx, chat.ID(), c, append(latest, ownLatest...))
+	result, err := m.retrieveSaved(ctx, chat.ID, c, append(latest, ownLatest...))
 	if err != nil {
 		return nil, err
 	}
 
 	// When our messages are returned, we can delete them.
-	delete(m.ownMessages, chat.ID())
+	delete(m.ownMessages, chat.ID)
 
 	return result, nil
 }

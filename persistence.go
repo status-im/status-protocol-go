@@ -1,11 +1,16 @@
 package statusproto
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"database/sql"
+	"encoding/gob"
+	"encoding/hex"
+	"fmt"
 	"time"
 
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/secp256k1"
 	"github.com/pkg/errors"
 
@@ -92,6 +97,151 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	return
 }
 
+func (db sqlitePersistence) SaveChat(chat Chat) error {
+	var err error
+	// We build the db chatID using the type, so that we have no clashes
+	chatID := fmt.Sprintf("%s-%d", chat.ID, chat.ChatType)
+
+	pkey := []byte{}
+	// For one to one chatID is an encoded public key
+	if chat.ChatType == ChatTypeOneToOne {
+		pkey, err = hex.DecodeString(chat.ID[2:])
+		if err != nil {
+			return err
+		}
+		// Safety check, make sure is well formed
+		_, err := crypto.UnmarshalPubkey(pkey)
+		if err != nil {
+			return err
+		}
+
+	}
+
+	// Encode members
+	var encodedMembers bytes.Buffer
+	memberEncoder := gob.NewEncoder(&encodedMembers)
+
+	if err := memberEncoder.Encode(chat.Members); err != nil {
+		return err
+	}
+
+	// Encode membership updates
+	var encodedMembershipUpdates bytes.Buffer
+	membershipUpdatesEncoder := gob.NewEncoder(&encodedMembershipUpdates)
+
+	if err := membershipUpdatesEncoder.Encode(chat.MembershipUpdates); err != nil {
+		return err
+	}
+
+	// Insert record
+	stmt, err := db.db.Prepare(`INSERT INTO chats(id, name, color, active, type, timestamp,  deleted_at_clock_value, public_key, unviewed_message_count, last_clock_value, last_message_content_type, last_message_content, members, membership_updates)
+	    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(
+		chatID,
+		chat.Name,
+		chat.Color,
+		chat.Active,
+		chat.ChatType,
+		chat.Timestamp,
+		chat.DeletedAtClockValue,
+		pkey,
+		chat.UnviewedMessagesCount,
+		chat.LastClockValue,
+		chat.LastMessageContentType,
+		chat.LastMessageContent,
+		encodedMembers.Bytes(),
+		encodedMembershipUpdates.Bytes(),
+	)
+	if err != nil {
+		return err
+	}
+
+	return err
+}
+
+func (db sqlitePersistence) Chats(from, to int) ([]*Chat, error) {
+
+	rows, err := db.db.Query(`SELECT
+	id,
+	name,
+	color,
+	active,
+	type,
+	timestamp,
+	deleted_at_clock_value,
+	public_key,
+	unviewed_message_count,
+	last_clock_value,
+	last_message_content_type,
+	last_message_content,
+	members,
+	membership_updates
+	FROM chats
+	ORDER BY chats.timestamp DESC LIMIT ? OFFSET ?`, to, from)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var response []*Chat
+
+	for rows.Next() {
+		chat := &Chat{}
+		encodedMembers := []byte{}
+		encodedMembershipUpdates := []byte{}
+		pkey := []byte{}
+		err := rows.Scan(
+			&chat.ID,
+			&chat.Name,
+			&chat.Color,
+			&chat.Active,
+			&chat.ChatType,
+			&chat.Timestamp,
+			&chat.DeletedAtClockValue,
+			&pkey,
+			&chat.UnviewedMessagesCount,
+			&chat.LastClockValue,
+			&chat.LastMessageContentType,
+			&chat.LastMessageContent,
+			&encodedMembers,
+			&encodedMembershipUpdates,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		// Restore the backward compatible ID
+		chat.ID = chat.ID[:len(chat.ID)-2]
+
+		// Restore members
+		membersDecoder := gob.NewDecoder(bytes.NewBuffer(encodedMembers))
+		if err := membersDecoder.Decode(&chat.Members); err != nil {
+			return nil, err
+		}
+
+		// Restore membership updates
+		membershipUpdatesDecoder := gob.NewDecoder(bytes.NewBuffer(encodedMembershipUpdates))
+		if err := membershipUpdatesDecoder.Decode(&chat.MembershipUpdates); err != nil {
+			return nil, err
+		}
+
+		if len(pkey) != 0 {
+			chat.PublicKey, err = crypto.UnmarshalPubkey(pkey)
+			if err != nil {
+				return nil, err
+			}
+		}
+		response = append(response, chat)
+	}
+
+	return response, nil
+}
+
 // Messages returns messages for a given contact, in a given period. Ordered by a timestamp.
 func (db sqlitePersistence) Messages(chatID string, from, to time.Time) (result []*protocol.Message, err error) {
 	rows, err := db.db.Query(`SELECT
@@ -101,6 +251,8 @@ FROM user_messages WHERE chat_id = ? AND timestamp >= ? AND timestamp <= ? ORDER
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
+
 	var (
 		rst = []*protocol.Message{}
 	)
@@ -134,6 +286,8 @@ FROM user_messages WHERE chat_id = ? AND rowid >= ? ORDER BY clock`,
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
+
 	var (
 		rst = []*protocol.Message{}
 	)
@@ -185,6 +339,7 @@ func (db sqlitePersistence) UnreadMessages(chatID string) ([]*protocol.Message, 
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
 	var result []*protocol.Message
 
