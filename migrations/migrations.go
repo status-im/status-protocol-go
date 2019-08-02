@@ -4,6 +4,8 @@
 // 000001_init.up.db.sql (840B)
 // 000002_add_chats.down.db.sql (74B)
 // 000002_add_chats.up.db.sql (541B)
+// 000003_add_contacts.down.db.sql (21B)
+// 000003_add_contacts.up.db.sql (251B)
 // doc.go (377B)
 
 package migrations
@@ -128,7 +130,7 @@ func _000002_add_chatsDownDbSql() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "000002_add_chats.down.db.sql", size: 74, mode: os.FileMode(0644), modTime: time.Unix(1564502835, 0)}
+	info := bindataFileInfo{name: "000002_add_chats.down.db.sql", size: 74, mode: os.FileMode(0644), modTime: time.Unix(1564587343, 0)}
 	a := &asset{bytes: bytes, info: info, digest: [32]uint8{0xd3, 0xa7, 0xf0, 0x94, 0x7a, 0x9, 0xdc, 0x6c, 0x7b, 0xdc, 0x12, 0x30, 0x55, 0x31, 0x17, 0xf2, 0xcc, 0x6e, 0xfd, 0xbb, 0x70, 0xb9, 0xd8, 0x9f, 0x81, 0x83, 0xdc, 0x1d, 0x1c, 0x3a, 0x8d, 0xce}}
 	return a, nil
 }
@@ -148,8 +150,48 @@ func _000002_add_chatsUpDbSql() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "000002_add_chats.up.db.sql", size: 541, mode: os.FileMode(0644), modTime: time.Unix(1564587096, 0)}
+	info := bindataFileInfo{name: "000002_add_chats.up.db.sql", size: 541, mode: os.FileMode(0644), modTime: time.Unix(1564587387, 0)}
 	a := &asset{bytes: bytes, info: info, digest: [32]uint8{0xd, 0x7f, 0x3a, 0xd7, 0xf6, 0x8b, 0x6e, 0x4d, 0xce, 0x7d, 0x63, 0x1d, 0x30, 0xa2, 0xc1, 0xb, 0xa0, 0x35, 0x2e, 0xfa, 0xef, 0xf0, 0x39, 0xf7, 0x22, 0xdd, 0x31, 0x11, 0xb1, 0xff, 0xbf, 0xb3}}
+	return a, nil
+}
+
+var __000003_add_contactsDownDbSql = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\x72\x09\xf2\x0f\x50\x08\x71\x74\xf2\x71\x55\x48\xce\xcf\x2b\x49\x4c\x2e\x29\xb6\xe6\x02\x04\x00\x00\xff\xff\x66\x64\xd9\xdd\x15\x00\x00\x00")
+
+func _000003_add_contactsDownDbSqlBytes() ([]byte, error) {
+	return bindataRead(
+		__000003_add_contactsDownDbSql,
+		"000003_add_contacts.down.db.sql",
+	)
+}
+
+func _000003_add_contactsDownDbSql() (*asset, error) {
+	bytes, err := _000003_add_contactsDownDbSqlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "000003_add_contacts.down.db.sql", size: 21, mode: os.FileMode(0644), modTime: time.Unix(1564721146, 0)}
+	a := &asset{bytes: bytes, info: info, digest: [32]uint8{0xfc, 0x7e, 0xb, 0xec, 0x72, 0xcd, 0x21, 0x3e, 0xa2, 0x38, 0xe0, 0x95, 0x7e, 0xce, 0x4a, 0x17, 0xc8, 0xd0, 0x1c, 0xfa, 0xa3, 0x23, 0x5, 0xab, 0x89, 0xf9, 0xfc, 0x63, 0x7, 0x28, 0xe9, 0x93}}
+	return a, nil
+}
+
+var __000003_add_contactsUpDbSql = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\x64\xcd\xc1\x4a\xc4\x30\x14\x85\xe1\x7d\x9e\xe2\x2c\x15\x5c\xb8\x77\x95\xc6\x3b\x50\x8c\xc9\x10\x32\xe0\xac\x42\x6c\xa2\x06\xa7\x4d\x69\x6e\x05\xdf\x5e\x8a\xa0\x0c\xdd\x7e\xe7\x87\xa3\x1c\x49\x4f\xf0\xb2\xd3\x84\xa1\x4e\x1c\x07\x6e\xb8\x11\x40\x49\xf0\xf4\xe2\x71\x74\xfd\xb3\x74\x67\x3c\xd1\x19\xd6\x40\x59\x73\xd0\xbd\xf2\x70\x74\xd4\x52\xd1\x9d\x00\x62\x4a\x4b\x6e\xed\xb7\x37\xd6\xc3\x9c\xb4\xde\x86\x29\x8e\x79\xaf\xf3\x47\xe5\xba\xe7\x4b\x6c\x1c\xd6\x39\x45\xce\x09\xbd\xf9\x1f\xf1\x48\x07\x79\xd2\x1e\xf7\x5b\xd6\xbe\x1b\xe7\x31\x70\x7c\x6f\xe8\xb4\xed\x36\x4b\xf9\xab\x0c\x39\x94\xe9\xad\xfe\x19\x2f\xe5\x75\xe5\x1c\xb8\x06\x8e\x97\xcf\xeb\x3f\x71\xfb\x20\x7e\x02\x00\x00\xff\xff\xc3\x2e\x5b\xed\xfb\x00\x00\x00")
+
+func _000003_add_contactsUpDbSqlBytes() ([]byte, error) {
+	return bindataRead(
+		__000003_add_contactsUpDbSql,
+		"000003_add_contacts.up.db.sql",
+	)
+}
+
+func _000003_add_contactsUpDbSql() (*asset, error) {
+	bytes, err := _000003_add_contactsUpDbSqlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "000003_add_contacts.up.db.sql", size: 251, mode: os.FileMode(0644), modTime: time.Unix(1564721109, 0)}
+	a := &asset{bytes: bytes, info: info, digest: [32]uint8{0x8f, 0x19, 0x9f, 0x5c, 0x9d, 0xa1, 0xe5, 0x99, 0xbe, 0x47, 0xce, 0xa5, 0xd3, 0x51, 0x2f, 0x9b, 0x1d, 0xd9, 0x3f, 0x7a, 0xbf, 0xf, 0x76, 0x6b, 0x4f, 0x82, 0xbd, 0x13, 0x9d, 0x25, 0xdd, 0x60}}
 	return a, nil
 }
 
@@ -272,6 +314,10 @@ var _bindata = map[string]func() (*asset, error){
 
 	"000002_add_chats.up.db.sql": _000002_add_chatsUpDbSql,
 
+	"000003_add_contacts.down.db.sql": _000003_add_contactsDownDbSql,
+
+	"000003_add_contacts.up.db.sql": _000003_add_contactsUpDbSql,
+
 	"doc.go": docGo,
 }
 
@@ -316,11 +362,13 @@ type bintree struct {
 }
 
 var _bintree = &bintree{nil, map[string]*bintree{
-	"000001_init.down.db.sql":      &bintree{_000001_initDownDbSql, map[string]*bintree{}},
-	"000001_init.up.db.sql":        &bintree{_000001_initUpDbSql, map[string]*bintree{}},
-	"000002_add_chats.down.db.sql": &bintree{_000002_add_chatsDownDbSql, map[string]*bintree{}},
-	"000002_add_chats.up.db.sql":   &bintree{_000002_add_chatsUpDbSql, map[string]*bintree{}},
-	"doc.go":                       &bintree{docGo, map[string]*bintree{}},
+	"000001_init.down.db.sql":         &bintree{_000001_initDownDbSql, map[string]*bintree{}},
+	"000001_init.up.db.sql":           &bintree{_000001_initUpDbSql, map[string]*bintree{}},
+	"000002_add_chats.down.db.sql":    &bintree{_000002_add_chatsDownDbSql, map[string]*bintree{}},
+	"000002_add_chats.up.db.sql":      &bintree{_000002_add_chatsUpDbSql, map[string]*bintree{}},
+	"000003_add_contacts.down.db.sql": &bintree{_000003_add_contactsDownDbSql, map[string]*bintree{}},
+	"000003_add_contacts.up.db.sql":   &bintree{_000003_add_contactsUpDbSql, map[string]*bintree{}},
+	"doc.go":                          &bintree{docGo, map[string]*bintree{}},
 }}
 
 // RestoreAsset restores an asset under the given directory.

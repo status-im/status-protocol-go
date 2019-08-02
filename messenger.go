@@ -391,6 +391,18 @@ func (m *Messenger) Chats(from, to int) ([]*Chat, error) {
 	return m.persistence.Chats(from, to)
 }
 
+func (m *Messenger) DeleteChat(chatID string, chatType ChatType) error {
+	return m.persistence.DeleteChat(chatID, chatType)
+}
+
+func (m *Messenger) SaveContact(contact Contact) error {
+	return m.persistence.SaveContact(contact)
+}
+
+func (m *Messenger) Contacts() ([]*Contact, error) {
+	return m.persistence.Contacts()
+}
+
 func (m *Messenger) Send(ctx context.Context, chat Chat, data []byte) ([]byte, error) {
 	chatID := chat.ID
 	if chatID == "" {

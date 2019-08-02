@@ -97,10 +97,14 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	return
 }
 
+func formatChatID(chatID string, chatType ChatType) string {
+	return fmt.Sprintf("%s-%d", chatID, chatType)
+}
+
 func (db sqlitePersistence) SaveChat(chat Chat) error {
 	var err error
 	// We build the db chatID using the type, so that we have no clashes
-	chatID := fmt.Sprintf("%s-%d", chat.ID, chat.ChatType)
+	chatID := formatChatID(chat.ID, chat.ChatType)
 
 	pkey := []byte{}
 	// For one to one chatID is an encoded public key
@@ -161,6 +165,12 @@ func (db sqlitePersistence) SaveChat(chat Chat) error {
 		return err
 	}
 
+	return err
+}
+
+func (db sqlitePersistence) DeleteChat(chatID string, chatType ChatType) error {
+	dbChatID := formatChatID(chatID, chatType)
+	_, err := db.db.Exec("DELETE FROM chats WHERE id = ?", dbChatID)
 	return err
 }
 
@@ -240,6 +250,108 @@ func (db sqlitePersistence) Chats(from, to int) ([]*Chat, error) {
 	}
 
 	return response, nil
+}
+
+func (db sqlitePersistence) Contacts() ([]*Contact, error) {
+	rows, err := db.db.Query(`SELECT
+	id,
+	address,
+	name,
+	photo,
+	last_updated,
+	system_tags,
+	device_info,
+	tribute_to_talk
+	FROM contacts`)
+
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var response []*Contact
+
+	for rows.Next() {
+		contact := &Contact{}
+		encodedDeviceInfo := []byte{}
+		encodedSystemTags := []byte{}
+		err := rows.Scan(
+			&contact.ID,
+			&contact.Address,
+			&contact.Name,
+			&contact.Photo,
+			&contact.LastUpdated,
+			&encodedSystemTags,
+			&encodedDeviceInfo,
+			&contact.TributeToTalk,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		// Restore device info
+		deviceInfoDecoder := gob.NewDecoder(bytes.NewBuffer(encodedDeviceInfo))
+		if err := deviceInfoDecoder.Decode(&contact.DeviceInfo); err != nil {
+			return nil, err
+		}
+
+		// Restore system tags
+		systemTagsDecoder := gob.NewDecoder(bytes.NewBuffer(encodedSystemTags))
+		if err := systemTagsDecoder.Decode(&contact.SystemTags); err != nil {
+			return nil, err
+		}
+
+		response = append(response, contact)
+	}
+
+	return response, nil
+}
+
+func (db sqlitePersistence) SaveContact(contact Contact) error {
+	// Encode device info
+	var encodedDeviceInfo bytes.Buffer
+	deviceInfoEncoder := gob.NewEncoder(&encodedDeviceInfo)
+
+	if err := deviceInfoEncoder.Encode(contact.DeviceInfo); err != nil {
+		return err
+	}
+
+	// Encoded system tags
+	var encodedSystemTags bytes.Buffer
+	systemTagsEncoder := gob.NewEncoder(&encodedSystemTags)
+
+	if err := systemTagsEncoder.Encode(contact.SystemTags); err != nil {
+		return err
+	}
+
+	// Insert record
+	stmt, err := db.db.Prepare(`INSERT INTO contacts(
+	  id,
+	  address,
+	  name,
+	  photo,
+	  last_updated,
+	  system_tags,
+	  device_info,
+	  tribute_to_talk
+	)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(
+		contact.ID,
+		contact.Address,
+		contact.Name,
+		contact.Photo,
+		contact.LastUpdated,
+		encodedSystemTags.Bytes(),
+		encodedDeviceInfo.Bytes(),
+		contact.TributeToTalk,
+	)
+	return err
 }
 
 // Messages returns messages for a given contact, in a given period. Ordered by a timestamp.
