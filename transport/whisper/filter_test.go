@@ -82,7 +82,7 @@ func (s *FiltersManagerSuite) SetupTest() {
 
 	whisper := whisper.New(nil)
 
-	s.chats, err = newFilterManager(db, whisper, s.manager[0].privateKey, s.logger)
+	s.chats, err = newFiltersManager(db, whisper, s.manager[0].privateKey, s.logger)
 	s.Require().NoError(err)
 }
 

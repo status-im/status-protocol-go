@@ -90,7 +90,7 @@ func NewWhisperServiceTransport(
 	mailservers []string,
 	logger *zap.Logger,
 ) (*WhisperServiceTransport, error) {
-	chats, err := newFilterManager(db, shh, privateKey, logger)
+	chats, err := newFiltersManager(db, shh, privateKey, logger)
 	if err != nil {
 		return nil, err
 	}

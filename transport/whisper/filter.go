@@ -75,8 +75,8 @@ type filtersManager struct {
 	filters map[string]*Filter
 }
 
-// newFilterManager returns a new filtersManager.
-func newFilterManager(db *sql.DB, w *whisper.Whisper, privateKey *ecdsa.PrivateKey, logger *zap.Logger) (*filtersManager, error) {
+// newFiltersManager returns a new filtersManager.
+func newFiltersManager(db *sql.DB, w *whisper.Whisper, privateKey *ecdsa.PrivateKey, logger *zap.Logger) (*filtersManager, error) {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
