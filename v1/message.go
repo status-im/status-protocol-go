@@ -5,12 +5,14 @@ import (
 	"crypto/ecdsa"
 	"encoding/hex"
 	"encoding/json"
-	"github.com/pkg/errors"
 	"time"
+
+	"github.com/pkg/errors"
+
+	"strings"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/golang/protobuf/proto"
-	"strings"
 )
 
 const (
@@ -132,6 +134,10 @@ func decodeTransitMessage(originalPayload []byte) (interface{}, error) {
 		return nil, err
 	}
 	return value, nil
+}
+
+func DecodeMessage(data []byte) (interface{}, error) {
+	return decodeTransitMessage(data)
 }
 
 // EncodeMessage encodes a Message using Transit serialization.
