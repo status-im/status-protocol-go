@@ -51,10 +51,10 @@ func TestMessageID(t *testing.T) {
 	key, err := crypto.GenerateKey()
 	require.NoError(t, err)
 
-	compressedKey := crypto.CompressPubkey(&key.PublicKey)
+	keyBytes := crypto.FromECDSAPub(&key.PublicKey)
 
 	data := []byte("test")
-	expectedID := crypto.Keccak256(append(compressedKey, data...))
+	expectedID := crypto.Keccak256(append(keyBytes, data...))
 	require.Equal(t, expectedID, MessageID(&key.PublicKey, data))
 }
 
