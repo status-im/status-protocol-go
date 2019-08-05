@@ -156,6 +156,33 @@ func (s *MessengerSuite) TestChatPersistencePublic() {
 	s.Require().Equal(actualChat, expectedChat)
 }
 
+func (s *MessengerSuite) TestDeleteChat() {
+	chatID := "chatid"
+	chat := Chat{
+		ID:                     chatID,
+		Name:                   "chat-name",
+		Color:                  "#fffff",
+		Active:                 true,
+		ChatType:               ChatTypePublic,
+		Timestamp:              10,
+		LastClockValue:         20,
+		DeletedAtClockValue:    30,
+		UnviewedMessagesCount:  40,
+		LastMessageContentType: "something",
+		LastMessageContent:     "something-else",
+	}
+
+	s.Require().NoError(s.m.SaveChat(chat))
+	savedChats, err := s.m.Chats(0, 10)
+	s.Require().NoError(err)
+	s.Require().Equal(1, len(savedChats))
+
+	s.Require().NoError(s.m.DeleteChat(chatID, ChatTypePublic))
+	savedChats, err = s.m.Chats(0, 10)
+	s.Require().NoError(err)
+	s.Require().Equal(0, len(savedChats))
+}
+
 func (s *MessengerSuite) TestChatPersistenceUpdate() {
 	chat := Chat{
 		ID:                     "chat-name",
@@ -319,6 +346,85 @@ func (s *MessengerSuite) TestChatPersistencePrivateGroupChat() {
 	expectedChat := &chat
 
 	s.Require().Equal(expectedChat, actualChat)
+}
+
+func (s *MessengerSuite) TestContactPersistence() {
+	contact := Contact{
+		ID:          "contact-id",
+		Address:     "contact-address",
+		Name:        "contact-name",
+		Photo:       "contact-photo",
+		LastUpdated: 20,
+		SystemTags:  []string{"1", "2"},
+		DeviceInfo: []ContactDeviceInfo{
+			ContactDeviceInfo{
+				InstallationID: "1",
+				Timestamp:      2,
+				FCMToken:       "token",
+			},
+			ContactDeviceInfo{
+				InstallationID: "2",
+				Timestamp:      3,
+				FCMToken:       "token-2",
+			},
+		},
+		TributeToTalk: "talk",
+	}
+
+	s.Require().NoError(s.m.SaveContact(contact))
+	savedContacts, err := s.m.Contacts()
+	s.Require().NoError(err)
+	s.Require().Equal(1, len(savedContacts))
+
+	actualContact := savedContacts[0]
+	expectedContact := &contact
+
+	s.Require().Equal(expectedContact, actualContact)
+}
+
+func (s *MessengerSuite) TestContactPersistenceUpdate() {
+	contact := Contact{
+		ID:          "contact-id",
+		Address:     "contact-address",
+		Name:        "contact-name",
+		Photo:       "contact-photo",
+		LastUpdated: 20,
+		SystemTags:  []string{"1", "2"},
+		DeviceInfo: []ContactDeviceInfo{
+			ContactDeviceInfo{
+				InstallationID: "1",
+				Timestamp:      2,
+				FCMToken:       "token",
+			},
+			ContactDeviceInfo{
+				InstallationID: "2",
+				Timestamp:      3,
+				FCMToken:       "token-2",
+			},
+		},
+		TributeToTalk: "talk",
+	}
+
+	s.Require().NoError(s.m.SaveContact(contact))
+	savedContacts, err := s.m.Contacts()
+	s.Require().NoError(err)
+	s.Require().Equal(1, len(savedContacts))
+
+	actualContact := savedContacts[0]
+	expectedContact := &contact
+
+	s.Require().Equal(expectedContact, actualContact)
+
+	contact.Name = "updated-name"
+	s.Require().NoError(s.m.SaveContact(contact))
+	updatedContact, err := s.m.Contacts()
+	s.Require().NoError(err)
+	s.Require().Equal(1, len(updatedContact))
+
+	actualUpdatedContact := updatedContact[0]
+	expectedUpdatedContact := &contact
+
+	s.Require().Equal(expectedUpdatedContact, actualUpdatedContact)
 }
 
 func (s *MessengerSuite) TestSharedSecretHandler() {
