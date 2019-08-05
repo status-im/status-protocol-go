@@ -13,18 +13,6 @@ import (
 	"github.com/status-im/status-protocol-go/tt"
 )
 
-func TestSelectAndAddNoMailservers(t *testing.T) {
-	logger := tt.MustCreateTestLogger()
-	svc := &WhisperServiceTransport{
-		logger: logger,
-	}
-
-	rst, err := svc.selectAndAddMailServer()
-	require.Empty(t, rst)
-	require.EqualError(t, ErrNoMailservers, err.Error())
-	_ = logger.Sync()
-}
-
 func TestNewWhisperServiceTransport(t *testing.T) {
 	dbPath, err := ioutil.TempFile("", "transport.sql")
 	require.NoError(t, err)
@@ -39,6 +27,6 @@ func TestNewWhisperServiceTransport(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = logger.Sync() }()
 
-	_, err = NewWhisperServiceTransport(nil, nil, nil, db, nil, logger)
+	_, err = NewWhisperServiceTransport(nil, nil, db, nil, nil, logger)
 	require.NoError(t, err)
 }

@@ -50,7 +50,6 @@ func (s *MessengerSuite) SetupTest() {
 
 	s.m, err = NewMessenger(
 		s.privateKey,
-		nil,
 		shh,
 		"installation-1",
 		WithCustomLogger(s.logger),
