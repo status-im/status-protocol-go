@@ -24,13 +24,6 @@ import (
 	datasyncpeer "github.com/status-im/status-protocol-go/datasync/peer"
 )
 
-// Whisper message properties.
-const (
-	whisperTTL     = 15
-	whisperPoW     = 0.002
-	whisperPoWTime = 5
-)
-
 // whisperAdapter is a bridge between encryption and transport
 // layers.
 type whisperAdapter struct {
@@ -71,22 +64,6 @@ func newWhisperAdapter(
 	}
 
 	return adapter
-}
-
-func (a *whisperAdapter) JoinPublic(chatID string) error {
-	return a.transport.JoinPublic(chatID)
-}
-
-func (a *whisperAdapter) LeavePublic(chatID string) error {
-	return a.transport.LeavePublic(chatID)
-}
-
-func (a *whisperAdapter) JoinPrivate(publicKey *ecdsa.PublicKey) error {
-	return a.transport.JoinPrivate(publicKey)
-}
-
-func (a *whisperAdapter) LeavePrivate(publicKey *ecdsa.PublicKey) error {
-	return a.transport.LeavePrivate(publicKey)
 }
 
 type ChatMessages struct {

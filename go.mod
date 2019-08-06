@@ -5,6 +5,7 @@ go 1.12
 require (
 	github.com/aristanetworks/goarista v0.0.0-20190704150520-f44d68189fd7 // indirect
 	github.com/deckarep/golang-set v1.7.1 // indirect
+	github.com/docker/go-metrics v0.0.0-20181218153428-b84716841b82 // indirect
 	github.com/ethereum/go-ethereum v1.8.27
 	github.com/golang/protobuf v1.3.2
 	github.com/jinzhu/copier v0.0.0-20190625015134-976e0346caa8

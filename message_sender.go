@@ -10,36 +10,39 @@ import (
 	whisper "github.com/status-im/whisper/whisperv6"
 )
 
+const (
+	whisperTTL     = 15
+	whisperPoW     = 0.002
+	whisperPoWTime = 5
+)
+
+var defaultWhisperNewMessage = whisper.NewMessage{
+	TTL:       whisperTTL,
+	PowTarget: whisperPoW,
+	PowTime:   whisperPoWTime,
+}
+
 type Sender interface {
-	SendPublic(string, *encryption.ProtocolMessageSpec) ([]byte, error)
-	SendPrivate(*encryption.ProtocolMessageSpec) ([]byte, error)
-	SendPublicRaw(string, []byte) ([]byte, error)
+	SendPublic(string, *encryption.ProtocolMessageSpec) ([]byte, whisper.NewMessage, error)
+	SendPrivate(*encryption.ProtocolMessageSpec) ([]byte, whisper.NewMessage, error)
+	SendPublicRaw(string, []byte) ([]byte, whisper.NewMessage, error)
 }
 
 type whisperSender struct {
-	privKey                      *ecdsa.PrivateKey
 	w                            *whisper.Whisper
 	api                          *whisper.PublicWhisperAPI
 	encryption                   *encryption.Protocol
-	persistence                  *sqlitePersistence
 	transport                    *transport.WhisperServiceTransport
 	genericDiscoveryTopicEnabled bool
 }
 
 func (w *whisperSender) messageSpecToWhisper(spec *encryption.ProtocolMessageSpec) (whisper.NewMessage, error) {
-	var newMessage whisper.NewMessage
-
+	newMessage := defaultWhisperNewMessage
 	payload, err := proto.Marshal(spec.Message)
 	if err != nil {
 		return newMessage, err
 	}
-
-	newMessage = whisper.NewMessage{
-		TTL:       whisperTTL,
-		Payload:   payload,
-		PowTarget: whisperPoW,
-		PowTime:   whisperPoWTime,
-	}
+	newMessage.Payload = payload
 	return newMessage, nil
 }
 
@@ -67,4 +70,21 @@ func (w *whisperSender) SendPrivate(recipient *ecdsa.PublicKey, spec *encryption
 	default:
 		return w.transport.SendPrivateOnDiscovery(context.Background(), newMessage, recipient)
 	}
+}
+
+// SendPublicRaw sends a raw payload.
+// It uses only Whisper encryption.
+func (w *whisperSender) SendPublicRaw(chatName string, data []byte) ([]byte, error) {
+	newMessage := defaultWhisperNewMessage
+	newMessage.Payload = data
+	return w.transport.SendPublic(context.Background(), newMessage, chatName)
+}
+
+// SendPrivateRaw sends a raw payload using the discovery topic.
+// It uses only Whisper encryption.
+// DEPRECATED: use SendPrivate instead.
+func (w *whisperSender) SendPrivateRaw(recipient *ecdsa.PublicKey, data []byte) ([]byte, error) {
+	newMessage := defaultWhisperNewMessage
+	newMessage.Payload = data
+	return w.transport.SendPrivateOnDiscovery(context.Background(), newMessage, recipient)
 }

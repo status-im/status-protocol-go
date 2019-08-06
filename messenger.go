@@ -6,6 +6,8 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/ethereum/go-ethereum/crypto"
+
 	"go.uber.org/zap"
 
 	"github.com/pkg/errors"
@@ -41,7 +43,7 @@ var (
 type Messenger struct {
 	identity    *ecdsa.PrivateKey
 	persistence *sqlitePersistence
-	adapter     *whisperAdapter
+	transport   *transport.WhisperServiceTransport
 	encryptor   *encryption.Protocol
 	logger      *zap.Logger
 
@@ -326,7 +328,18 @@ func (m *Messenger) Shutdown() (err error) {
 }
 
 func (m *Messenger) handleSharedSecrets(secrets []*sharedsecret.Secret) error {
-	return m.adapter.handleSharedSecrets(secrets)
+	logger := m.logger.With(zap.String("site", "handleSharedSecrets"))
+	for _, secret := range secrets {
+		logger.Debug("received shared secret", zap.Binary("identity", crypto.FromECDSAPub(secret.Identity)))
+		fSecret := filter.NegotiatedSecret{
+			PublicKey: secret.Identity,
+			Key:       secret.Key,
+		}
+		if err := m.transport.ProcessNegotiatedSecret(fSecret); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (m *Messenger) EnableInstallation(id string) error {
@@ -367,18 +380,18 @@ func (m *Messenger) Mailservers() ([]string, error) {
 
 func (m *Messenger) Join(chat Chat) error {
 	if chat.PublicKey != nil {
-		return m.adapter.JoinPrivate(chat.PublicKey)
+		return m.transport.JoinPrivate(chat.PublicKey)
 	} else if chat.Name != "" {
-		return m.adapter.JoinPublic(chat.Name)
+		return m.transport.JoinPublic(chat.Name)
 	}
 	return errors.New("chat is neither public nor private")
 }
 
 func (m *Messenger) Leave(chat Chat) error {
 	if chat.PublicKey != nil {
-		return m.adapter.LeavePrivate(chat.PublicKey)
+		return m.transport.LeavePrivate(chat.PublicKey)
 	} else if chat.Name != "" {
-		return m.adapter.LeavePublic(chat.Name)
+		return m.transport.LeavePublic(chat.Name)
 	}
 	return errors.New("chat is neither public nor private")
 }
@@ -402,42 +415,79 @@ func (m *Messenger) Send(ctx context.Context, chat Chat, data []byte) ([]byte, e
 		return nil, err
 	}
 
+	var (
+		message         *Message
+		protocolMessage protocol.Message
+	)
+
 	if chat.PublicKey != nil {
-		hash, message, err := m.adapter.SendPrivate(ctx, chat.PublicKey, chat.ID, data, clock)
+		protocolMessage = protocol.CreatePrivateTextMessage(data, clock, chat.ID)
+		message = newPrivateMessage(&m.identity.PublicKey, chat.PublicKey, protocolMessage)
+	} else if chat.Name != "" {
+		protocolMessage := protocol.CreatePublicTextMessage(data, clock, chat.ID)
+		message = newPublicMessage(&m.identity.PublicKey, chat.ID, protocolMessage)
+	} else {
+		return nil, errors.New("chat is neither public nor private")
+	}
+
+	if m.messagesPersistenceEnabled {
+		_, err := m.persistence.SaveMessages(chat.ID, []*protocol.Message{&protocolMessage})
 		if err != nil {
 			return nil, err
 		}
-
-		// Save our message because it won't be received from the transport layer.
-		message.ID = hash // a Message need ID to be properly stored in the db
-		message.SigPubKey = &m.identity.PublicKey
-
-		if m.messagesPersistenceEnabled {
-			_, err = m.persistence.SaveMessages(chat.ID, []*protocol.Message{message})
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		// Cache it to be returned in Retrieve().
-		m.ownMessages[chatID] = append(m.ownMessages[chatID], message)
-
-		return hash, nil
-	} else if chat.Name != "" {
-		return m.adapter.SendPublic(ctx, chat.Name, chat.ID, data, clock)
 	}
-	return nil, errors.New("chat is neither public nor private")
+
+	// Cache it to be returned in Retrieve().
+	m.ownMessages[chatID] = append(m.ownMessages[chatID], &protocolMessage)
+
+	if err := m.send(message, false); err != nil {
+		return nil, err
+	}
+	return message.ID(), nil
 }
 
 // SendRaw takes encoded data, encrypts it and sends through the wire.
 // DEPRECATED
 func (m *Messenger) SendRaw(ctx context.Context, chat Chat, data []byte) ([]byte, whisper.NewMessage, error) {
-	if chat.PublicKey != nil {
-		return m.adapter.SendPrivateRaw(ctx, chat.PublicKey, data)
-	} else if chat.Name != "" {
-		return m.adapter.SendPublicRaw(ctx, chat.Name, data)
+	message := &Message{
+		sigPubKey: &m.identity.PublicKey,
+		transportMeta: transportMeta{
+			chatID: chat.ID,
+			public: chat.ChatType == ChatTypePublic,
+		},
+		decryptedPayload: data,
 	}
-	return nil, whisper.NewMessage{}, errors.New("chat is neither public nor private")
+
+	if err := m.send(message, true); err != nil {
+		return nil, whisper.NewMessage{}, err
+	}
+	return message.ID(), message.transportMeta.newMessage, nil
+}
+
+func (m *Messenger) send(message *Message, raw bool) error {
+	if !raw {
+		if err := message.Encode(nil); err != nil {
+			return err
+		}
+	}
+
+	if m.featureFlags.sendV1Messages {
+		if err := message.Wrap(nil); err != nil {
+			return err
+		}
+	}
+
+	if m.featureFlags.datasync {
+		if err := message.DataSync(nil); err != nil {
+			return err
+		}
+	}
+
+	if err := message.Encrypt(nil); err != nil {
+		return err
+	}
+
+	return message.Send(nil)
 }
 
 type RetrieveConfig struct {
@@ -452,8 +502,115 @@ var (
 	RetrieveLastDay = RetrieveConfig{latest: true, last24Hours: true}
 )
 
-// RetrieveAll retrieves all previously fetched messages
 func (m *Messenger) RetrieveAll(ctx context.Context, c RetrieveConfig) (allMessages []*protocol.Message, err error) {
+	chatMessages, err := m.transport.RetrieveAllMessages()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, chat := range chatMessages {
+		for _, recv := range chat.Messages {
+			newMessage, err := newMessageFromTransport(whisper.ToWhisperMessage(recv), chat.ChatID, chat.Public)
+			if err != nil {
+				return nil, err
+			}
+			decodedMessages, err := m.handleMessage(newMessage)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+}
+
+func (m *Messenger) handleMessage(message *Message) ([]*Message, error) {
+	err := message.Decrypt(nil)
+	if err == encryption.ErrDeviceNotFound {
+		handleErr := m.handleErrDeviceNotFound(context.Background(), message.SigPubKey())
+		if handleErr != nil {
+			m.logger.Error("failed to handle error", zap.Error(err), zap.NamedError("handleErr", handleErr))
+		}
+	} else if err != nil {
+		return nil, err
+	}
+
+	messages, err := message.DataDesync(nil)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, message := range messages {
+		if err := message.Unwrap(nil); err != nil {
+			m.logger.Error("failed to handle application metadata layer message", zap.Error(err))
+		}
+		if err := message.Decode(nil); err != nil {
+			m.logger.Error("failed to handle application layer message")
+		}
+	}
+
+	return messages, nil
+}
+
+func (m *Messenger) handleDecodedMessages(messages []*Message) (decoded []*protocol.Message, err error) {
+	for _, message := range messages {
+		switch value := message.message.(type) {
+		case protocol.Message:
+			value.ID = message.ID()
+			value.SigPubKey = message.SigPubKey()
+			decoded = append(decoded, &value)
+		case protocol.PairMessage:
+			fromOurDevice := isPubKeyEqual(message.SigPubKey(), &m.identity.PublicKey)
+			if !fromOurDevice {
+				m.logger.Debug("received PairMessage from not our device, skipping")
+				break
+			}
+
+			metadata := &multidevice.InstallationMetadata{
+				Name:       value.Name,
+				FCMToken:   value.FCMToken,
+				DeviceType: value.DeviceType,
+			}
+			err := m.encryptor.SetInstallationMetadata(&m.identity.PublicKey, value.InstallationID, metadata)
+			if err != nil {
+				return nil, err
+			}
+		default:
+			m.logger.Error("skipped a public message of unsupported type")
+		}
+	}
+	return
+}
+
+func (m *Messenger) handleErrDeviceNotFound(ctx context.Context, publicKey *ecdsa.PublicKey) error {
+	now := time.Now().Unix()
+	advertise, err := m.encryptor.ShouldAdvertiseBundle(publicKey, now)
+	if err != nil {
+		return err
+	}
+	if !advertise {
+		return nil
+	}
+
+	message := Message{
+		sigPubKey: &m.identity.PublicKey,
+		recipient: publicKey,
+		encryptionMeta: encryptionMeta{
+			bundleAdvertisement: true,
+		},
+	}
+	if err := message.Encrypt(nil); err != nil {
+		return err
+	}
+	if err := message.Send(nil); err != nil {
+		return err
+	}
+
+	m.encryptor.ConfirmBundleAdvertisement(publicKey, now)
+
+	return nil
+}
+
+// RetrieveAll retrieves all previously fetched messages
+func (m *Messenger) RetrieveAll_(ctx context.Context, c RetrieveConfig) (allMessages []*protocol.Message, err error) {
 	latest, err := m.adapter.RetrieveAllMessages()
 	if err != nil {
 		err = errors.Wrap(err, "failed to retrieve messages")
