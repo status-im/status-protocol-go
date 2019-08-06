@@ -1,4 +1,4 @@
-package filter
+package whisper
 
 import (
 	"crypto/ecdsa"
@@ -20,16 +20,16 @@ import (
 	migrations "github.com/status-im/status-protocol-go/transport/whisper/migrations"
 )
 
-func TestServiceTestSuite(t *testing.T) {
-	suite.Run(t, new(ChatsTestSuite))
+func TestFiltersManagerSuite(t *testing.T) {
+	suite.Run(t, new(FiltersManagerSuite))
 }
 
-type ChatsTestSuite struct {
+type FiltersManagerSuite struct {
 	suite.Suite
-	chats  *ChatsManager
-	dbPath string
-	keys   []*testKey
-	logger *zap.Logger
+	chats   *filtersManager
+	dbPath  string
+	manager []*testKey
+	logger  *zap.Logger
 }
 
 type testKey struct {
@@ -53,7 +53,7 @@ func newTestKey(privateKey string, partitionedTopic int) (*testKey, error) {
 	}, nil
 }
 
-func (s *ChatsTestSuite) SetupTest() {
+func (s *FiltersManagerSuite) SetupTest() {
 	s.logger = tt.MustCreateTestLogger()
 
 	keyStrs := []string{
@@ -69,7 +69,7 @@ func (s *ChatsTestSuite) SetupTest() {
 	for i, k := range keyStrs {
 		testKey, err := newTestKey(k, keyTopics[i])
 		s.Require().NoError(err)
-		s.keys = append(s.keys, testKey)
+		s.manager = append(s.manager, testKey)
 	}
 
 	db, err := sqlite.Open(s.dbPath, "filter-key", sqlite.MigrationConfig{
@@ -82,54 +82,54 @@ func (s *ChatsTestSuite) SetupTest() {
 
 	whisper := whisper.New(nil)
 
-	s.chats, err = New(db, whisper, s.keys[0].privateKey, s.logger)
+	s.chats, err = newFiltersManager(db, whisper, s.manager[0].privateKey, s.logger)
 	s.Require().NoError(err)
 }
 
-func (s *ChatsTestSuite) TearDownTest() {
+func (s *FiltersManagerSuite) TearDownTest() {
 	os.Remove(s.dbPath)
 	_ = s.logger.Sync()
 }
 
-func (s *ChatsTestSuite) TestDiscoveryAndPartitionedTopic() {
+func (s *FiltersManagerSuite) TestDiscoveryAndPartitionedTopic() {
 	_, err := s.chats.Init(nil, nil, true)
 	s.Require().NoError(err)
 
-	s.Require().Equal(4, len(s.chats.chats), "It creates four filters")
+	s.Require().Equal(4, len(s.chats.filters), "It creates four filters")
 
-	discoveryFilter := s.chats.chats[DiscoveryTopic]
+	discoveryFilter := s.chats.filters[discoveryTopic]
 	s.Require().NotNil(discoveryFilter, "It adds the discovery filter")
 	s.Require().True(discoveryFilter.Listen)
 
 	s.assertRequiredFilters()
 }
 
-func (s *ChatsTestSuite) TestPartitionedTopicWithDiscoveryDisabled() {
+func (s *FiltersManagerSuite) TestPartitionedTopicWithDiscoveryDisabled() {
 	_, err := s.chats.Init(nil, nil, false)
 	s.Require().NoError(err)
 
-	s.Require().Equal(3, len(s.chats.chats), "It creates three filters")
+	s.Require().Equal(3, len(s.chats.filters), "It creates three filters")
 
-	discoveryFilter := s.chats.chats[DiscoveryTopic]
+	discoveryFilter := s.chats.filters[discoveryTopic]
 	s.Require().Nil(discoveryFilter, "It does not add the discovery filter")
 
 	s.assertRequiredFilters()
 }
 
-func (s *ChatsTestSuite) assertRequiredFilters() {
-	partitionedTopic := fmt.Sprintf("contact-discovery-%d", s.keys[0].partitionedTopic)
-	personalDiscoveryTopic := fmt.Sprintf("contact-discovery-%s", s.keys[0].publicKeyString())
-	contactCodeTopic := contactCodeTopic(&s.keys[0].privateKey.PublicKey)
+func (s *FiltersManagerSuite) assertRequiredFilters() {
+	partitionedTopic := fmt.Sprintf("contact-discovery-%d", s.manager[0].partitionedTopic)
+	personalDiscoveryTopic := fmt.Sprintf("contact-discovery-%s", s.manager[0].publicKeyString())
+	contactCodeTopic := contactCodeTopic(&s.manager[0].privateKey.PublicKey)
 
-	personalDiscoveryFilter := s.chats.chats[personalDiscoveryTopic]
+	personalDiscoveryFilter := s.chats.filters[personalDiscoveryTopic]
 	s.Require().NotNil(personalDiscoveryFilter, "It adds the discovery filter")
 	s.Require().True(personalDiscoveryFilter.Listen)
 
-	contactCodeFilter := s.chats.chats[contactCodeTopic]
+	contactCodeFilter := s.chats.filters[contactCodeTopic]
 	s.Require().NotNil(contactCodeFilter, "It adds the contact code filter")
 	s.Require().True(contactCodeFilter.Listen)
 
-	partitionedFilter := s.chats.chats[partitionedTopic]
+	partitionedFilter := s.chats.filters[partitionedTopic]
 	s.Require().NotNil(partitionedFilter, "It adds the partitioned filter")
 	s.Require().True(partitionedFilter.Listen)
 }

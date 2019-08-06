@@ -18,7 +18,6 @@ import (
 	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
 	"github.com/status-im/status-protocol-go/sqlite"
 	transport "github.com/status-im/status-protocol-go/transport/whisper"
-	"github.com/status-im/status-protocol-go/transport/whisper/filter"
 	protocol "github.com/status-im/status-protocol-go/v1"
 	datasyncnode "github.com/vacp2p/mvds/node"
 	datasyncpeers "github.com/vacp2p/mvds/peers"
@@ -576,17 +575,17 @@ func (m *Messenger) retrieveSaved(ctx context.Context, chatID string, c Retrieve
 }
 
 // DEPRECATED
-func (m *Messenger) RetrieveRawAll() (map[filter.Chat][]*protocol.StatusMessage, error) {
+func (m *Messenger) RetrieveRawAll() (map[transport.Filter][]*protocol.StatusMessage, error) {
 	return m.adapter.RetrieveRawAll()
 }
 
 // DEPRECATED
-func (m *Messenger) LoadFilters(chats []*filter.Chat) ([]*filter.Chat, error) {
+func (m *Messenger) LoadFilters(chats []*transport.Filter) ([]*transport.Filter, error) {
 	return m.adapter.transport.LoadFilters(chats, m.featureFlags.genericDiscoveryTopicEnabled)
 }
 
 // DEPRECATED
-func (m *Messenger) RemoveFilters(chats []*filter.Chat) error {
+func (m *Messenger) RemoveFilters(chats []*transport.Filter) error {
 	return m.adapter.transport.RemoveFilters(chats)
 }
 
