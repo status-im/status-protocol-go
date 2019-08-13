@@ -176,7 +176,7 @@ func (s *MessengerSuite) TestDeleteChat() {
 	s.Require().NoError(err)
 	s.Require().Equal(1, len(savedChats))
 
-	s.Require().NoError(s.m.DeleteChat(chatID, ChatTypePublic))
+	s.Require().NoError(s.m.DeleteChat(chatID))
 	savedChats, err = s.m.Chats(0, 10)
 	s.Require().NoError(err)
 	s.Require().Equal(0, len(savedChats))
@@ -347,6 +347,180 @@ func (s *MessengerSuite) TestChatPersistencePrivateGroupChat() {
 	s.Require().Equal(expectedChat, actualChat)
 }
 
+func (s *MessengerSuite) TestBlockContact() {
+	pk := "0x0424a68f89ba5fcd5e0640c1e1f591d561fa4125ca4e2a43592bc4123eca10ce064e522c254bb83079ba404327f6eafc01ec90a1444331fe769d3f3a7f90b0dde1"
+
+	contact := Contact{
+		ID:          pk,
+		Address:     "contact-address",
+		Name:        "contact-name",
+		Photo:       "contact-photo",
+		LastUpdated: 20,
+		SystemTags:  []string{"1", "2"},
+		DeviceInfo: []ContactDeviceInfo{
+			ContactDeviceInfo{
+				InstallationID: "1",
+				Timestamp:      2,
+				FCMToken:       "token",
+			},
+			ContactDeviceInfo{
+				InstallationID: "2",
+				Timestamp:      3,
+				FCMToken:       "token-2",
+			},
+		},
+		TributeToTalk: "talk",
+	}
+
+	chat1 := Chat{
+		ID:                    contact.ID,
+		Name:                  "chat-name",
+		Color:                 "#fffff",
+		Active:                true,
+		ChatType:              ChatTypeOneToOne,
+		Timestamp:             1,
+		LastClockValue:        20,
+		DeletedAtClockValue:   30,
+		UnviewedMessagesCount: 40,
+	}
+
+	chat2 := Chat{
+		ID:                    "chat-2",
+		Name:                  "chat-name",
+		Color:                 "#fffff",
+		Active:                true,
+		ChatType:              ChatTypePublic,
+		Timestamp:             2,
+		LastClockValue:        20,
+		DeletedAtClockValue:   30,
+		UnviewedMessagesCount: 40,
+	}
+
+	chat3 := Chat{
+		ID:                    "chat-3",
+		Name:                  "chat-name",
+		Color:                 "#fffff",
+		Active:                true,
+		ChatType:              ChatTypePublic,
+		Timestamp:             3,
+		LastClockValue:        20,
+		DeletedAtClockValue:   30,
+		UnviewedMessagesCount: 40,
+	}
+
+	s.Require().NoError(s.m.SaveChat(chat1))
+	s.Require().NoError(s.m.SaveChat(chat2))
+	s.Require().NoError(s.m.SaveChat(chat3))
+
+	s.Require().NoError(s.m.SaveContact(contact))
+
+	contact.Name = "blocked"
+
+	messages := []*Message{
+		&Message{
+			ID:          "test-1",
+			ChatID:      chat2.ID,
+			ContentType: "content-type-1",
+			Content:     "test-1",
+			ClockValue:  1,
+			From:        contact.ID,
+		},
+		&Message{
+			ID:          "test-2",
+			ChatID:      chat2.ID,
+			ContentType: "content-type-2",
+			Content:     "test-2",
+			ClockValue:  2,
+			From:        contact.ID,
+		},
+		&Message{
+			ID:          "test-3",
+			ChatID:      chat2.ID,
+			ContentType: "content-type-3",
+			Content:     "test-3",
+			ClockValue:  3,
+			Seen:        false,
+			From:        "test",
+		},
+		&Message{
+			ID: "test-4",
+
+			ChatID:      chat2.ID,
+			ContentType: "content-type-4",
+			Content:     "test-4",
+			ClockValue:  4,
+			Seen:        false,
+			From:        "test",
+		},
+		&Message{
+			ID:          "test-5",
+			ChatID:      chat2.ID,
+			ContentType: "content-type-5",
+			Content:     "test-5",
+			ClockValue:  5,
+			Seen:        true,
+			From:        "test",
+		},
+		&Message{
+			ID:          "test-6",
+			ChatID:      chat3.ID,
+			ContentType: "content-type-6",
+			Content:     "test-6",
+			ClockValue:  6,
+			Seen:        false,
+			From:        contact.ID,
+		},
+		&Message{
+			ID:          "test-7",
+			ChatID:      chat3.ID,
+			ContentType: "content-type-7",
+			Content:     "test-7",
+			ClockValue:  7,
+			Seen:        false,
+			From:        "test",
+		},
+	}
+
+	err := s.m.SaveMessages(messages)
+	s.Require().NoError(err)
+
+	response, err := s.m.BlockContact(contact)
+	s.Require().NoError(err)
+
+	// The new unviewed count is updated
+	s.Require().Equal(uint(1), response[0].UnviewedMessagesCount)
+	s.Require().Equal(uint(2), response[1].UnviewedMessagesCount)
+
+	// The new message content is updated
+	s.Require().Equal("test-7", response[0].LastMessageContent)
+	s.Require().Equal("test-5", response[1].LastMessageContent)
+
+	// The new message content-type is updated
+	s.Require().Equal("content-type-7", response[0].LastMessageContentType)
+	s.Require().Equal("content-type-5", response[1].LastMessageContentType)
+
+	// The contact is updated
+	savedContacts, err := s.m.Contacts()
+	s.Require().NoError(err)
+	s.Require().Equal(1, len(savedContacts))
+	s.Require().Equal("blocked", savedContacts[0].Name)
+
+	// The chat is deleted
+	actualChats, err := s.m.Chats(0, -1)
+	s.Require().NoError(err)
+	s.Require().Equal(2, len(actualChats))
+
+	// The messages have been deleted
+	chat2Messages, _, err := s.m.MessageByChatID(chat2.ID, "", 20)
+	s.Require().NoError(err)
+	s.Require().Equal(3, len(chat2Messages))
+
+	chat3Messages, _, err := s.m.MessageByChatID(chat3.ID, "", 20)
+	s.Require().NoError(err)
+	s.Require().Equal(1, len(chat3Messages))
+
+}
+
 func (s *MessengerSuite) TestContactPersistence() {
 	contact := Contact{
 		ID:          "contact-id",
@@ -382,8 +556,10 @@ func (s *MessengerSuite) TestContactPersistence() {
 }
 
 func (s *MessengerSuite) TestContactPersistenceUpdate() {
+	contactID := "0424a68f89ba5fcd5e0640c1e1f591d561fa4125ca4e2a43592bc4123eca10ce064e522c254bb83079ba404327f6eafc01ec90a1444331fe769d3f3a7f90b0dde1"
+
 	contact := Contact{
-		ID:          "contact-id",
+		ID:          contactID,
 		Address:     "contact-address",
 		Name:        "contact-name",
 		Photo:       "contact-photo",

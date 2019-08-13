@@ -1,7 +1,6 @@
 package statusproto
 
 import (
-	"bytes"
 	"database/sql"
 	"io/ioutil"
 	"math"
@@ -50,18 +49,28 @@ func TestMessageByID(t *testing.T) {
 	require.EqualValues(t, id, m.ID)
 }
 
-func TestMessageExists(t *testing.T) {
+func TestMessagesExist(t *testing.T) {
 	db, err := openTestDB()
 	require.NoError(t, err)
 	p := sqlitePersistence{db: db}
-	id := "1"
 
-	err = insertMinimalMessage(p, id)
+	err = insertMinimalMessage(p, "1")
 	require.NoError(t, err)
 
-	exists, err := p.MessageExists(id)
+	result, err := p.MessagesExist([]string{"1"})
 	require.NoError(t, err)
-	require.True(t, exists)
+
+	require.True(t, result["1"])
+
+	err = insertMinimalMessage(p, "2")
+	require.NoError(t, err)
+
+	result, err = p.MessagesExist([]string{"1", "2", "3"})
+	require.NoError(t, err)
+
+	require.True(t, result["1"])
+	require.True(t, result["2"])
+	require.False(t, result["3"])
 }
 
 func TestMessageByChatID(t *testing.T) {
@@ -72,26 +81,23 @@ func TestMessageByChatID(t *testing.T) {
 	count := 1000
 	pageSize := 50
 
+	var messages []*Message
 	for i := 0; i < count; i++ {
-		err := p.SaveMessage(&Message{
-			ID:             strconv.Itoa(i),
-			ChatID:         chatID,
-			RawPayloadHash: strconv.Itoa(i),
-			From:           []byte("me"),
-			ClockValue:     int64(i),
+		messages = append(messages, &Message{
+			ID:         strconv.Itoa(i),
+			ChatID:     chatID,
+			From:       "me",
+			ClockValue: int64(i),
 		})
-		require.NoError(t, err)
 
 		// Add some other chats.
 		if count%5 == 0 {
-			err := p.SaveMessage(&Message{
-				ID:             strconv.Itoa(count + i),
-				ChatID:         "other-chat",
-				RawPayloadHash: strconv.Itoa(count + i),
-				From:           []byte("me"),
-				ClockValue:     int64(i),
+			messages = append(messages, &Message{
+				ID:         strconv.Itoa(count + i),
+				ChatID:     "other-chat",
+				From:       "me",
+				ClockValue: int64(i),
 			})
-			require.NoError(t, err)
 		}
 	}
 
@@ -99,15 +105,16 @@ func TestMessageByChatID(t *testing.T) {
 	outOfOrderCount := pageSize + 1
 	allCount := count + outOfOrderCount
 	for i := 0; i < pageSize+1; i++ {
-		err := p.SaveMessage(&Message{
-			ID:             strconv.Itoa(count*2 + i),
-			ChatID:         chatID,
-			RawPayloadHash: strconv.Itoa(count*2 + i),
-			From:           []byte("me"),
-			ClockValue:     int64(i), // use very old clock values
+		messages = append(messages, &Message{
+			ID:         strconv.Itoa(count*2 + i),
+			ChatID:     chatID,
+			From:       "me",
+			ClockValue: int64(i), // use very old clock values
 		})
-		require.NoError(t, err)
 	}
+
+	err = p.SaveMessagesLegacy(messages)
+	require.NoError(t, err)
 
 	var (
 		result []*Message
@@ -141,6 +148,54 @@ func TestMessageByChatID(t *testing.T) {
 	)
 }
 
+func TestMessageReplies(t *testing.T) {
+	db, err := openTestDB()
+	require.NoError(t, err)
+	p := sqlitePersistence{db: db}
+	chatID := "super-chat"
+	message1 := &Message{
+		ID:         "id-1",
+		ChatID:     chatID,
+		Content:    "content-1",
+		From:       "1",
+		ClockValue: int64(1),
+	}
+	message2 := &Message{
+		ID:         "id-2",
+		ChatID:     chatID,
+		Content:    "content-2",
+		From:       "2",
+		ClockValue: int64(2),
+		ReplyTo:    "id-1",
+	}
+
+	message3 := &Message{
+		ID:         "id-3",
+		ChatID:     chatID,
+		Content:    "content-3",
+		From:       "3",
+		ClockValue: int64(3),
+		ReplyTo:    "non-existing",
+	}
+
+	messages := []*Message{message1, message2, message3}
+
+	err = p.SaveMessagesLegacy(messages)
+	require.NoError(t, err)
+
+	retrievedMessages, _, err := p.MessageByChatID(chatID, "", 10)
+	require.NoError(t, err)
+
+	require.Equal(t, "non-existing", retrievedMessages[0].ReplyTo)
+	require.Nil(t, retrievedMessages[0].QuotedMessage)
+
+	require.Equal(t, "id-1", retrievedMessages[1].ReplyTo)
+	require.Equal(t, &QuotedMessage{From: "1", Content: "content-1"}, retrievedMessages[1].QuotedMessage)
+
+	require.Equal(t, "", retrievedMessages[2].ReplyTo)
+	require.Nil(t, retrievedMessages[2].QuotedMessage)
+}
+
 func TestMessageByChatIDWithTheSameClockValues(t *testing.T) {
 	db, err := openTestDB()
 	require.NoError(t, err)
@@ -150,16 +205,19 @@ func TestMessageByChatIDWithTheSameClockValues(t *testing.T) {
 	count := len(clockValues)
 	pageSize := 2
 
+	var messages []*Message
+
 	for i, clock := range clockValues {
-		err := p.SaveMessage(&Message{
-			ID:             strconv.Itoa(i),
-			ChatID:         chatID,
-			RawPayloadHash: strconv.Itoa(i),
-			From:           []byte("me"),
-			ClockValue:     clock,
+		messages = append(messages, &Message{
+			ID:         strconv.Itoa(i),
+			ChatID:     chatID,
+			From:       "me",
+			ClockValue: clock,
 		})
-		require.NoError(t, err)
 	}
+
+	err = p.SaveMessagesLegacy(messages)
+	require.NoError(t, err)
 
 	var (
 		result []*Message
@@ -196,55 +254,6 @@ func TestMessageByChatIDWithTheSameClockValues(t *testing.T) {
 	require.EqualValues(t, expectedClockValues, resultClockValues)
 }
 
-func TestUnseenMessageIDs(t *testing.T) {
-	db, err := openTestDB()
-	require.NoError(t, err)
-	p := sqlitePersistence{db: db}
-	count := 10
-
-	for i := 0; i < count; i++ {
-		id := strconv.Itoa(i)
-		err := insertMinimalMessage(p, id)
-		require.NoError(t, err)
-	}
-
-	ids, err := p.UnseenMessageIDs()
-	require.NoError(t, err)
-	require.Len(t, ids, count)
-}
-
-func TestMessagesFrom(t *testing.T) {
-	db, err := openTestDB()
-	require.NoError(t, err)
-	p := sqlitePersistence{db: db}
-	count := 10
-
-	for i := 0; i < count; i++ {
-		id := strconv.Itoa(i)
-		err := insertMinimalMessage(p, id)
-		require.NoError(t, err)
-
-		err = p.SaveMessage(&Message{
-			ID:             id,
-			RawPayloadHash: id,
-			From:           []byte("other"),
-		})
-		require.NoError(t, err)
-	}
-
-	messages, err := p.MessagesFrom([]byte("other"))
-	require.NoError(t, err)
-	require.Len(t, messages, 10)
-	require.Condition(t, func() bool {
-		for _, m := range messages {
-			if !bytes.Equal(m.From, []byte("other")) {
-				return false
-			}
-		}
-		return true
-	})
-}
-
 func TestDeleteMessageByID(t *testing.T) {
 	db, err := openTestDB()
 	require.NoError(t, err)
@@ -263,6 +272,30 @@ func TestDeleteMessageByID(t *testing.T) {
 
 	_, err = p.MessageByID(id)
 	require.EqualError(t, err, "record not found")
+}
+
+func TestDeleteMessagesByChatID(t *testing.T) {
+	db, err := openTestDB()
+	require.NoError(t, err)
+	p := sqlitePersistence{db: db}
+
+	err = insertMinimalMessage(p, "1")
+	require.NoError(t, err)
+
+	err = insertMinimalMessage(p, "2")
+	require.NoError(t, err)
+
+	m, _, err := p.MessageByChatID("chat-id", "", 10)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(m))
+
+	err = p.DeleteMessagesByChatID("chat-id")
+	require.NoError(t, err)
+
+	m, _, err = p.MessageByChatID("chat-id", "", 10)
+	require.NoError(t, err)
+	require.Equal(t, 0, len(m))
+
 }
 
 func TestMarkMessageSeen(t *testing.T) {
@@ -319,9 +352,9 @@ func openTestDB() (*sql.DB, error) {
 }
 
 func insertMinimalMessage(p sqlitePersistence, id string) error {
-	return p.SaveMessage(&Message{
-		ID:             id,
-		RawPayloadHash: id,
-		From:           []byte("me"),
-	})
+	return p.SaveMessagesLegacy([]*Message{&Message{
+		ID:     id,
+		ChatID: "chat-id",
+		From:   "me",
+	}})
 }

@@ -2,7 +2,6 @@
 -- when implementing infinite-scroll.
 CREATE TABLE IF NOT EXISTS user_messages_legacy (
     id VARCHAR PRIMARY KEY ON CONFLICT REPLACE,
-    raw_payload_hash VARCHAR NOT NULL,
     whisper_timestamp INTEGER NOT NULL,
     source BLOB NOT NULL,
     destination BLOB,
@@ -12,6 +11,7 @@ CREATE TABLE IF NOT EXISTS user_messages_legacy (
     timestamp INT NOT NULL,
     chat_id VARCHAR NOT NULL,
     retry_count INT NOT NULL DEFAULT 0,
+    reply_to VARCHAR,
     message_type VARCHAR,
     message_status VARCHAR,
     clock_value INT NOT NULL,
