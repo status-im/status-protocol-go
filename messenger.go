@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 
 	"go.uber.org/zap"
@@ -78,6 +79,9 @@ type config struct {
 	onNewSharedSecretHandler func([]*sharedsecret.Secret)
 	// DEPRECATED: no need to expose it
 	onSendContactCodeHandler func(*encryption.ProtocolMessageSpec)
+
+	// Config for the envelopes monitor
+	envelopesMonitorConfig *transport.EnvelopesMonitorConfig
 
 	messagesPersistenceEnabled bool
 	featureFlags               featureFlags
@@ -155,9 +159,15 @@ func WithDatasync() func(c *config) error {
 	}
 }
 
+func WithEnvelopesMonitorConfig(emc *transport.EnvelopesMonitorConfig) Option {
+	return func(c *config) error {
+		c.envelopesMonitorConfig = emc
+		return nil
+	}
+}
+
 func NewMessenger(
 	identity *ecdsa.PrivateKey,
-	server transport.Server,
 	shh *whisper.Whisper,
 	installationID string,
 	opts ...Option,
@@ -239,11 +249,11 @@ func NewMessenger(
 
 	// Initialize transport layer.
 	t, err := transport.NewWhisperServiceTransport(
-		server,
 		shh,
 		identity,
 		database,
 		nil,
+		c.envelopesMonitorConfig,
 		logger,
 	)
 	if err != nil {
@@ -292,6 +302,7 @@ func NewMessenger(
 			// Currently this often fails, seems like it's safe to ignore them
 			// https://github.com/uber-go/zap/issues/328
 			func() error { _ = logger.Sync; return nil },
+			func() error { adapter.Stop(); return nil },
 		},
 		logger: logger,
 	}
@@ -402,6 +413,18 @@ func (m *Messenger) SaveChat(chat Chat) error {
 
 func (m *Messenger) Chats(from, to int) ([]*Chat, error) {
 	return m.persistence.Chats(from, to)
+}
+
+func (m *Messenger) DeleteChat(chatID string, chatType ChatType) error {
+	return m.persistence.DeleteChat(chatID, chatType)
+}
+
+func (m *Messenger) SaveContact(contact Contact) error {
+	return m.persistence.SaveContact(contact)
+}
+
+func (m *Messenger) Contacts() ([]*Contact, error) {
+	return m.persistence.Contacts()
 }
 
 func (m *Messenger) Send(ctx context.Context, chat Chat, data []byte) ([]byte, error) {
@@ -657,7 +680,7 @@ func (m *Messenger) Retrieve(ctx context.Context, chat Chat, c RetrieveConfig) (
 	)
 
 	if chat.PublicKey != nil {
-		latest, err = m.adapter.RetrievePrivateMessages(chat.PublicKey)
+		latest, err = m.transport.RetrievePrivateMessages(chat.PublicKey)
 		// Return any own messages for this chat as well.
 		if ownMessages, ok := m.ownMessages[chat.ID]; ok {
 			ownLatest = ownMessages
@@ -721,18 +744,18 @@ func (m *Messenger) retrieveSaved(ctx context.Context, chatID string, c Retrieve
 }
 
 // DEPRECATED
-func (m *Messenger) RetrieveRawAll() (map[filter.Chat][]*protocol.StatusMessage, error) {
-	return m.adapter.RetrieveRawAll()
+func (m *Messenger) RetrieveRawAll() (map[transport.Filter][]*protocol.StatusMessage, error) {
+	return m.transport.RetrieveRawAll()
 }
 
 // DEPRECATED
-func (m *Messenger) LoadFilters(chats []*filter.Chat) ([]*filter.Chat, error) {
-	return m.adapter.transport.LoadFilters(chats, m.featureFlags.genericDiscoveryTopicEnabled)
+func (m *Messenger) LoadFilters(chats []*transport.Filter) ([]*transport.Filter, error) {
+	return m.transport.LoadFilters(chats, m.featureFlags.genericDiscoveryTopicEnabled)
 }
 
 // DEPRECATED
-func (m *Messenger) RemoveFilters(chats []*filter.Chat) error {
-	return m.adapter.transport.RemoveFilters(chats)
+func (m *Messenger) RemoveFilters(chats []*transport.Filter) error {
+	return m.transport.RemoveFilters(chats)
 }
 
 // DEPRECATED
@@ -743,4 +766,62 @@ func (m *Messenger) ConfirmMessagesProcessed(messageIDs [][]byte) error {
 		}
 	}
 	return nil
+}
+
+// DEPRECATED: required by status-react.
+func (m *Messenger) MessageByID(id string) (*Message, error) {
+	return m.persistence.MessageByID(id)
+}
+
+// DEPRECATED: required by status-react.
+func (m *Messenger) MessageExists(id string) (bool, error) {
+	return m.persistence.MessageExists(id)
+}
+
+// DEPRECATED: required by status-react.
+func (m *Messenger) MessageByChatID(chatID, cursor string, limit int) ([]*Message, string, error) {
+	return m.persistence.MessageByChatID(chatID, cursor, limit)
+}
+
+// DEPRECATED: required by status-react.
+func (m *Messenger) MessagesFrom(from string) ([]*Message, error) {
+	publicKeyBytes, err := hexutil.Decode(from)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to decode from argument")
+	}
+	return m.persistence.MessagesFrom(publicKeyBytes)
+}
+
+// DEPRECATED: required by status-react.
+func (m *Messenger) UnseenMessageIDs() ([]string, error) {
+	ids, err := m.persistence.UnseenMessageIDs()
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]string, 0, len(ids))
+	for _, id := range ids {
+		result = append(result, hexutil.Encode(id))
+	}
+	return result, nil
+}
+
+// DEPRECATED: required by status-react.
+func (m *Messenger) SaveMessage(message *Message) error {
+	return m.persistence.SaveMessage(message)
+}
+
+// DEPRECATED: required by status-react.
+func (m *Messenger) DeleteMessage(id string) error {
+	return m.persistence.DeleteMessage(id)
+}
+
+// DEPRECATED: required by status-react.
+func (m *Messenger) MarkMessagesSeen(ids ...string) error {
+	return m.persistence.MarkMessagesSeen(ids...)
+}
+
+// DEPRECATED: required by status-react.
+func (m *Messenger) UpdateMessageOutgoingStatus(id, newOutgoingStatus string) error {
+	return m.persistence.UpdateMessageOutgoingStatus(id, newOutgoingStatus)
 }

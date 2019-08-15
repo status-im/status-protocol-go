@@ -44,63 +44,14 @@ func (db sqlitePersistence) LastMessageClock(chatID string) (int64, error) {
 	return last.Int64, nil
 }
 
-func (db sqlitePersistence) SaveMessages(chatID string, messages []*protocol.Message) (last int64, err error) {
-	var (
-		tx   *sql.Tx
-		stmt *sql.Stmt
-	)
-	tx, err = db.db.BeginTx(context.Background(), &sql.TxOptions{})
-	if err != nil {
-		return
-	}
-	stmt, err = tx.Prepare(`INSERT INTO user_messages(
-id, chat_id, content_type, message_type, text, clock, timestamp, content_chat_id, content_text, public_key, flags)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-	if err != nil {
-		return
-	}
-	defer func() {
-		if err == nil {
-			err = tx.Commit()
-			return
-
-		}
-		// don't shadow original error
-		_ = tx.Rollback()
-	}()
-
-	var rst sql.Result
-
-	for _, msg := range messages {
-		pkey := []byte{}
-		if msg.SigPubKey != nil {
-			pkey, err = marshalECDSAPub(msg.SigPubKey)
-		}
-		rst, err = stmt.Exec(
-			msg.ID, chatID, msg.ContentT, msg.MessageT, msg.Text,
-			msg.Clock, msg.Timestamp, msg.Content.ChatID, msg.Content.Text,
-			pkey, msg.Flags)
-		if err != nil {
-			if err.Error() == uniqueIDContstraint {
-				// skip duplicated messages
-				err = nil
-				continue
-			}
-			return
-		}
-
-		last, err = rst.LastInsertId()
-		if err != nil {
-			return
-		}
-	}
-	return
+func formatChatID(chatID string, chatType ChatType) string {
+	return fmt.Sprintf("%s-%d", chatID, chatType)
 }
 
 func (db sqlitePersistence) SaveChat(chat Chat) error {
 	var err error
 	// We build the db chatID using the type, so that we have no clashes
-	chatID := fmt.Sprintf("%s-%d", chat.ID, chat.ChatType)
+	chatID := formatChatID(chat.ID, chat.ChatType)
 
 	pkey := []byte{}
 	// For one to one chatID is an encoded public key
@@ -161,6 +112,12 @@ func (db sqlitePersistence) SaveChat(chat Chat) error {
 		return err
 	}
 
+	return err
+}
+
+func (db sqlitePersistence) DeleteChat(chatID string, chatType ChatType) error {
+	dbChatID := formatChatID(chatID, chatType)
+	_, err := db.db.Exec("DELETE FROM chats WHERE id = ?", dbChatID)
 	return err
 }
 
@@ -240,6 +197,108 @@ func (db sqlitePersistence) Chats(from, to int) ([]*Chat, error) {
 	}
 
 	return response, nil
+}
+
+func (db sqlitePersistence) Contacts() ([]*Contact, error) {
+	rows, err := db.db.Query(`SELECT
+	id,
+	address,
+	name,
+	photo,
+	last_updated,
+	system_tags,
+	device_info,
+	tribute_to_talk
+	FROM contacts`)
+
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var response []*Contact
+
+	for rows.Next() {
+		contact := &Contact{}
+		encodedDeviceInfo := []byte{}
+		encodedSystemTags := []byte{}
+		err := rows.Scan(
+			&contact.ID,
+			&contact.Address,
+			&contact.Name,
+			&contact.Photo,
+			&contact.LastUpdated,
+			&encodedSystemTags,
+			&encodedDeviceInfo,
+			&contact.TributeToTalk,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		// Restore device info
+		deviceInfoDecoder := gob.NewDecoder(bytes.NewBuffer(encodedDeviceInfo))
+		if err := deviceInfoDecoder.Decode(&contact.DeviceInfo); err != nil {
+			return nil, err
+		}
+
+		// Restore system tags
+		systemTagsDecoder := gob.NewDecoder(bytes.NewBuffer(encodedSystemTags))
+		if err := systemTagsDecoder.Decode(&contact.SystemTags); err != nil {
+			return nil, err
+		}
+
+		response = append(response, contact)
+	}
+
+	return response, nil
+}
+
+func (db sqlitePersistence) SaveContact(contact Contact) error {
+	// Encode device info
+	var encodedDeviceInfo bytes.Buffer
+	deviceInfoEncoder := gob.NewEncoder(&encodedDeviceInfo)
+
+	if err := deviceInfoEncoder.Encode(contact.DeviceInfo); err != nil {
+		return err
+	}
+
+	// Encoded system tags
+	var encodedSystemTags bytes.Buffer
+	systemTagsEncoder := gob.NewEncoder(&encodedSystemTags)
+
+	if err := systemTagsEncoder.Encode(contact.SystemTags); err != nil {
+		return err
+	}
+
+	// Insert record
+	stmt, err := db.db.Prepare(`INSERT INTO contacts(
+	  id,
+	  address,
+	  name,
+	  photo,
+	  last_updated,
+	  system_tags,
+	  device_info,
+	  tribute_to_talk
+	)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(
+		contact.ID,
+		contact.Address,
+		contact.Name,
+		contact.Photo,
+		contact.LastUpdated,
+		encodedSystemTags.Bytes(),
+		encodedDeviceInfo.Bytes(),
+		contact.TributeToTalk,
+	)
+	return err
 }
 
 // Messages returns messages for a given contact, in a given period. Ordered by a timestamp.
@@ -364,6 +423,59 @@ func (db sqlitePersistence) UnreadMessages(chatID string) ([]*protocol.Message, 
 	}
 
 	return result, nil
+}
+
+func (db sqlitePersistence) SaveMessages(chatID string, messages []*protocol.Message) (last int64, err error) {
+	var (
+		tx   *sql.Tx
+		stmt *sql.Stmt
+	)
+	tx, err = db.db.BeginTx(context.Background(), &sql.TxOptions{})
+	if err != nil {
+		return
+	}
+	stmt, err = tx.Prepare(`INSERT INTO user_messages(
+id, chat_id, content_type, message_type, text, clock, timestamp, content_chat_id, content_text, public_key, flags)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return
+	}
+	defer func() {
+		if err == nil {
+			err = tx.Commit()
+			return
+
+		}
+		// don't shadow original error
+		_ = tx.Rollback()
+	}()
+
+	var rst sql.Result
+
+	for _, msg := range messages {
+		pkey := []byte{}
+		if msg.SigPubKey != nil {
+			pkey, err = marshalECDSAPub(msg.SigPubKey)
+		}
+		rst, err = stmt.Exec(
+			msg.ID, chatID, msg.ContentT, msg.MessageT, msg.Text,
+			msg.Clock, msg.Timestamp, msg.Content.ChatID, msg.Content.Text,
+			pkey, msg.Flags)
+		if err != nil {
+			if err.Error() == uniqueIDContstraint {
+				// skip duplicated messages
+				err = nil
+				continue
+			}
+			return
+		}
+
+		last, err = rst.LastInsertId()
+		if err != nil {
+			return
+		}
+	}
+	return
 }
 
 func marshalECDSAPub(pub *ecdsa.PublicKey) (rst []byte, err error) {

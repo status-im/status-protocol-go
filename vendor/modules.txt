@@ -1,6 +1,6 @@
 # github.com/aristanetworks/goarista v0.0.0-20190704150520-f44d68189fd7
 github.com/aristanetworks/goarista/monotime
-# github.com/btcsuite/btcd v0.0.0-20190523000118-16327141da8c
+# github.com/btcsuite/btcd v0.0.0-20171128150713-2e60448ffcc6
 github.com/btcsuite/btcd/btcec
 # github.com/davecgh/go-spew v1.1.1
 github.com/davecgh/go-spew/spew
@@ -11,10 +11,10 @@ github.com/ethereum/go-ethereum/crypto
 github.com/ethereum/go-ethereum/crypto/secp256k1
 github.com/ethereum/go-ethereum/crypto/ecies
 github.com/ethereum/go-ethereum/common
-github.com/ethereum/go-ethereum/common/hexutil
 github.com/ethereum/go-ethereum/p2p/enode
-github.com/ethereum/go-ethereum/rlp
 github.com/ethereum/go-ethereum/common/math
+github.com/ethereum/go-ethereum/rlp
+github.com/ethereum/go-ethereum/common/hexutil
 github.com/ethereum/go-ethereum/event
 github.com/ethereum/go-ethereum/log
 github.com/ethereum/go-ethereum/metrics
@@ -27,15 +27,9 @@ github.com/ethereum/go-ethereum/common/bitutil
 github.com/ethereum/go-ethereum/p2p/discover
 github.com/ethereum/go-ethereum/p2p/discv5
 github.com/ethereum/go-ethereum/p2p/nat
-github.com/ethereum/go-ethereum/params
-# github.com/go-playground/locales v0.12.1
-github.com/go-playground/locales
-github.com/go-playground/locales/currency
-# github.com/go-playground/universal-translator v0.16.0
-github.com/go-playground/universal-translator
 # github.com/go-stack/stack v1.8.0
 github.com/go-stack/stack
-# github.com/golang-migrate/migrate/v4 v4.4.0
+# github.com/golang-migrate/migrate/v4 v4.5.0
 github.com/golang-migrate/migrate/v4/database
 github.com/golang-migrate/migrate/v4/source
 github.com/golang-migrate/migrate/v4
@@ -47,7 +41,7 @@ github.com/golang/snappy
 github.com/hashicorp/errwrap
 # github.com/hashicorp/go-multierror v1.0.0
 github.com/hashicorp/go-multierror
-# github.com/huin/goupnp v1.0.0
+# github.com/huin/goupnp v0.0.0-20161224104101-679507af18f3
 github.com/huin/goupnp
 github.com/huin/goupnp/dcps/internetgateway1
 github.com/huin/goupnp/dcps/internetgateway2
@@ -55,15 +49,10 @@ github.com/huin/goupnp/httpu
 github.com/huin/goupnp/scpd
 github.com/huin/goupnp/soap
 github.com/huin/goupnp/ssdp
-# github.com/jackpal/go-nat-pmp v1.0.1
+# github.com/jackpal/go-nat-pmp v0.0.0-20160603034137-1fa385a6f458
 github.com/jackpal/go-nat-pmp
 # github.com/jinzhu/copier v0.0.0-20190625015134-976e0346caa8
 github.com/jinzhu/copier
-# github.com/leodido/go-urn v1.1.0
-github.com/leodido/go-urn
-# github.com/lib/pq v1.0.0
-github.com/lib/pq
-github.com/lib/pq/oid
 # github.com/mutecomm/go-sqlcipher v0.0.0-20170920224653-f799951b4ab2
 github.com/mutecomm/go-sqlcipher
 # github.com/pborman/uuid v0.0.0-20170112150404-1b00554d8222
@@ -84,19 +73,13 @@ github.com/status-im/doubleratchet
 github.com/status-im/migrate/v4
 github.com/status-im/migrate/v4/database/sqlcipher
 github.com/status-im/migrate/v4/source/go_bindata
-github.com/status-im/migrate/v4/database/postgres
-# github.com/status-im/status-go v0.29.0-beta.3
-github.com/status-im/status-go/mailserver
-github.com/status-im/status-go/mailserver/migrations
-github.com/status-im/status-go/params
-github.com/status-im/status-go/static
 # github.com/status-im/whisper v1.4.14
 github.com/status-im/whisper/whisperv6
 # github.com/stretchr/testify v1.3.0
 github.com/stretchr/testify/require
 github.com/stretchr/testify/suite
 github.com/stretchr/testify/assert
-# github.com/syndtr/goleveldb v1.0.0
+# github.com/syndtr/goleveldb v0.0.0-20181128100959-b001fa50d6b2
 github.com/syndtr/goleveldb/leveldb
 github.com/syndtr/goleveldb/leveldb/errors
 github.com/syndtr/goleveldb/leveldb/iterator
@@ -161,7 +144,5 @@ golang.org/x/text/runes
 golang.org/x/text/internal/language
 golang.org/x/text/internal/language/compact
 golang.org/x/text/internal/tag
-# gopkg.in/go-playground/validator.v9 v9.29.0
-gopkg.in/go-playground/validator.v9
 # gopkg.in/natefinch/npipe.v2 v2.0.0-20160621034901-c1b8fa8bdcce
 gopkg.in/natefinch/npipe.v2

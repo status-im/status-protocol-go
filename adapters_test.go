@@ -88,10 +88,10 @@ func (s *AdaptersSuite) SetupTest() {
 	s.Require().NoError(WithDatasync()(config))
 
 	whisperTransport, err := transport.NewWhisperServiceTransport(
-		nil,
 		shh,
 		s.privateKey,
 		database,
+		nil,
 		nil,
 		logger,
 	)
