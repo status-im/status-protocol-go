@@ -18,17 +18,17 @@ func (h *hexutilSQL) Scan(value interface{}) error {
 		return nil
 	}
 	if b, ok := value.([]byte); ok {
-		*h = hexutilSQL(b)
+		*h = b
 		return nil
 	}
 	return errors.New("failed to scan hexutilSQL")
 }
 
-// Message represents a message record in the database,
+// MessageLegacy represents a message record in the database,
 // more specifically in user_messages_legacy table.
 // Encoding and decoding of byte blobs should be performed
 // using hexutil package.
-type Message struct {
+type MessageLegacy struct {
 	// ID calculated as keccak256(compressedAuthorPubKey, data) where data is unencrypted payload.
 	ID string `json:"id"`
 	// RawPayloadHash is a Whisper envelope hash.

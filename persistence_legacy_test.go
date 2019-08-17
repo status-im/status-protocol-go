@@ -73,7 +73,7 @@ func TestMessageByChatID(t *testing.T) {
 	pageSize := 50
 
 	for i := 0; i < count; i++ {
-		err := p.SaveMessage(&Message{
+		err := p.SaveMessage(&MessageLegacy{
 			ID:             strconv.Itoa(i),
 			ChatID:         chatID,
 			RawPayloadHash: strconv.Itoa(i),
@@ -84,7 +84,7 @@ func TestMessageByChatID(t *testing.T) {
 
 		// Add some other chats.
 		if count%5 == 0 {
-			err := p.SaveMessage(&Message{
+			err := p.SaveMessage(&MessageLegacy{
 				ID:             strconv.Itoa(count + i),
 				ChatID:         "other-chat",
 				RawPayloadHash: strconv.Itoa(count + i),
@@ -99,7 +99,7 @@ func TestMessageByChatID(t *testing.T) {
 	outOfOrderCount := pageSize + 1
 	allCount := count + outOfOrderCount
 	for i := 0; i < pageSize+1; i++ {
-		err := p.SaveMessage(&Message{
+		err := p.SaveMessage(&MessageLegacy{
 			ID:             strconv.Itoa(count*2 + i),
 			ChatID:         chatID,
 			RawPayloadHash: strconv.Itoa(count*2 + i),
@@ -110,13 +110,13 @@ func TestMessageByChatID(t *testing.T) {
 	}
 
 	var (
-		result []*Message
+		result []*MessageLegacy
 		cursor string
 		iter   int
 	)
 	for {
 		var (
-			items []*Message
+			items []*MessageLegacy
 			err   error
 		)
 
@@ -151,7 +151,7 @@ func TestMessageByChatIDWithTheSameClockValues(t *testing.T) {
 	pageSize := 2
 
 	for i, clock := range clockValues {
-		err := p.SaveMessage(&Message{
+		err := p.SaveMessage(&MessageLegacy{
 			ID:             strconv.Itoa(i),
 			ChatID:         chatID,
 			RawPayloadHash: strconv.Itoa(i),
@@ -162,13 +162,13 @@ func TestMessageByChatIDWithTheSameClockValues(t *testing.T) {
 	}
 
 	var (
-		result []*Message
+		result []*MessageLegacy
 		cursor string
 		iter   int
 	)
 	for {
 		var (
-			items []*Message
+			items []*MessageLegacy
 			err   error
 		)
 
@@ -224,7 +224,7 @@ func TestMessagesFrom(t *testing.T) {
 		err := insertMinimalMessage(p, id)
 		require.NoError(t, err)
 
-		err = p.SaveMessage(&Message{
+		err = p.SaveMessage(&MessageLegacy{
 			ID:             id,
 			RawPayloadHash: id,
 			From:           []byte("other"),
@@ -319,7 +319,7 @@ func openTestDB() (*sql.DB, error) {
 }
 
 func insertMinimalMessage(p sqlitePersistence, id string) error {
-	return p.SaveMessage(&Message{
+	return p.SaveMessage(&MessageLegacy{
 		ID:             id,
 		RawPayloadHash: id,
 		From:           []byte("me"),

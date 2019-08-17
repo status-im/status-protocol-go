@@ -10,21 +10,30 @@ import (
 
 type Encryptor interface {
 	Encrypt(recipientKey *ecdsa.PublicKey, data []byte) ([]byte, encryptionMeta, error)
-}
-
-type Decryptor interface {
 	Decrypt(senderKey *ecdsa.PublicKey, messageID []byte, data []byte) ([]byte, error)
 }
 
-type privateEncryptor struct {
+type protocolEncryptor struct {
 	encryptionProtocol *encryption.Protocol
 	privateKey         *ecdsa.PrivateKey
 }
 
-func (e *privateEncryptor) Encrypt(recipientKey *ecdsa.PublicKey, data []byte) ([]byte, encryptionMeta, error) {
-	var meta encryptionMeta
+func (e *protocolEncryptor) Encrypt(recipientKey *ecdsa.PublicKey, data []byte) ([]byte, encryptionMeta, error) {
+	var (
+		err  error
+		meta encryptionMeta
+		spec *encryption.ProtocolMessageSpec
+	)
 
-	spec, err := e.encryptionProtocol.BuildDirectMessage(e.privateKey, recipientKey, data)
+	if recipientKey != nil && len(data) > 0 {
+		spec, err = e.encryptionProtocol.BuildDirectMessage(e.privateKey, recipientKey, data)
+	} else if recipientKey != nil && len(data) == 0 {
+		spec, err = e.encryptionProtocol.BuildBundleAdvertiseMessage(e.privateKey, recipientKey)
+	} else if recipientKey == nil {
+		spec, err = e.encryptionProtocol.BuildPublicMessage(e.privateKey, data)
+	} else {
+		err = errors.New("encryptor: invalid arguments to encrypt")
+	}
 	if err != nil {
 		return nil, meta, err
 	}
@@ -34,50 +43,10 @@ func (e *privateEncryptor) Encrypt(recipientKey *ecdsa.PublicKey, data []byte) (
 		return nil, meta, err
 	}
 	return payload, encryptionMeta{spec: spec}, nil
-}
-
-type publicEncryptor struct {
-	encryptionProtocol *encryption.Protocol
-	privateKey         *ecdsa.PrivateKey
-}
-
-func (e *publicEncryptor) Encrypt(_ *ecdsa.PublicKey, data []byte) ([]byte, encryptionMeta, error) {
-	var meta encryptionMeta
-
-	spec, err := e.encryptionProtocol.BuildPublicMessage(e.privateKey, data)
-	if err != nil {
-		return nil, meta, err
-	}
-
-	payload, err := proto.Marshal(spec.Message)
-	if err != nil {
-		return nil, meta, err
-	}
-	return payload, encryptionMeta{spec: spec}, nil
-}
-
-type advertiseBundleEncryptor struct {
-	encryptionProtocol *encryption.Protocol
-	privateKey         *ecdsa.PrivateKey
-}
-
-func (e *advertiseBundleEncryptor) Encrypt(recipientKey *ecdsa.PublicKey, data []byte) ([]byte, encryptionMeta, error) {
-	var meta encryptionMeta
-	spec, err := e.encryptionProtocol.BuildBundleAdvertiseMessage(e.privateKey, recipientKey)
-	payload, err := proto.Marshal(spec.Message)
-	if err != nil {
-		return nil, meta, err
-	}
-	return payload, encryptionMeta{spec: spec}, nil
-}
-
-type decryptor struct {
-	encryptionProtocol *encryption.Protocol
-	privateKey         *ecdsa.PrivateKey
 }
 
 // TODO: get rid of messageID which should be calculated by the encryption package based on the other arguments.
-func (e *decryptor) Decrypt(senderKey *ecdsa.PublicKey, messageID []byte, data []byte) ([]byte, error) {
+func (e *protocolEncryptor) Decrypt(senderKey *ecdsa.PublicKey, messageID []byte, data []byte) ([]byte, error) {
 	var protocolMessage encryption.ProtocolMessage
 	err := proto.Unmarshal(data, &protocolMessage)
 	if err != nil {

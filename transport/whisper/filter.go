@@ -186,7 +186,7 @@ func (s *filtersManager) Reset() error {
 	return s.Remove(chats...)
 }
 
-func (s *filtersManager) Chats() (result []*Filter) {
+func (s *filtersManager) Filters() (result []*Filter) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -198,13 +198,13 @@ func (s *filtersManager) Chats() (result []*Filter) {
 }
 
 // ChatByID returns a chat by id.
-func (s *filtersManager) ChatByID(chatID string) *Filter {
+func (s *filtersManager) FilterByChatID(chatID string) *Filter {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	return s.filters[chatID]
 }
 
-func (s *filtersManager) ChatByFilterID(filterID string) *Filter {
+func (s *filtersManager) Filter(filterID string) *Filter {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	for _, chat := range s.filters {
@@ -215,7 +215,7 @@ func (s *filtersManager) ChatByFilterID(filterID string) *Filter {
 	return nil
 }
 
-func (s *filtersManager) ChatsByPublicKey(publicKey *ecdsa.PublicKey) (result []*Filter) {
+func (s *filtersManager) FiltersByPublicKey(publicKey *ecdsa.PublicKey) (result []*Filter) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 

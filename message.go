@@ -4,31 +4,108 @@ import (
 	"crypto/ecdsa"
 	"errors"
 
+	"go.uber.org/zap"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/status-im/status-protocol-go/encryption"
-	"github.com/status-im/status-protocol-go/transport/whisper/filter"
+	transport "github.com/status-im/status-protocol-go/transport/whisper"
 	protocol "github.com/status-im/status-protocol-go/v1"
 	whisper "github.com/status-im/whisper/whisperv6"
 )
+
+type messageProcessor struct {
+	Encryptor
+	Encoder
+	Syncer
+	Wrapper
+	Sender
+
+	logger       *zap.Logger
+	featureFlags featureFlags
+}
+
+// swallowErr logs errors which do not interrupt in processing the message.
+func (ma messageProcessor) swallowErr(err error) {
+	if err == nil {
+		return
+	}
+	ma.logger.Error("processing message error", zap.Error(err))
+}
+
+func (ma *messageProcessor) Send(m *Message) (err error) {
+	err = m.Encode(ma)
+	if err != nil {
+		return
+	}
+
+	return ma.SendEncoded(m)
+}
+
+func (ma *messageProcessor) SendEncoded(m *Message) (err error) {
+	if ma.featureFlags.sendV1Messages {
+		err = m.Wrap(ma)
+		if err != nil {
+			return
+		}
+	}
+
+	if ma.featureFlags.datasync {
+		err = m.Sync(ma)
+		if err != nil {
+			return
+		}
+	}
+
+	err = m.Encrypt(ma)
+	if err != nil {
+		return
+	}
+
+	err = m.Send(ma)
+	return
+}
+
+func (ma *messageProcessor) Resolve(m *Message) ([]*Message, error) {
+	err := m.Decrypt(ma)
+	if err != nil {
+		return nil, err
+	}
+
+	messages, err := m.Desync(ma)
+	if err != nil {
+		messages = []*Message{m}
+		ma.swallowErr(err)
+	}
+
+	for _, m := range messages {
+		if err := m.Unwrap(ma); err != nil {
+			ma.swallowErr(err)
+		}
+		if err := m.Decode(ma); err != nil {
+			ma.swallowErr(err)
+		}
+	}
+
+	return messages, nil
+}
 
 type transportMeta struct {
 	hash         []byte
 	sigPublicKey *ecdsa.PublicKey
 	chatID       string
 	public       bool
-	newMessage   whisper.NewMessage // NewMessage is set when sending a message
+	newMessage   *whisper.NewMessage // set when sending a message
 }
 
 type encryptionMeta struct {
-	spec                *encryption.ProtocolMessageSpec
-	bundleAdvertisement bool // when true, it means we want to only advertise our bundle
+	spec *encryption.ProtocolMessageSpec
 }
 
 type Message struct {
-	id              []byte           // calculated from a signature key and decrypted payload
-	recipient       *ecdsa.PublicKey // recipient of a private message, used only in outgoing messages
-	sigPubKey       *ecdsa.PublicKey // signature of a received unwrapped message; check transportMeta.sigPublicKey as well
-	protocolMessage interface{}      // decoded message, it's interface{} because it might be of any supported type
+	recipient *ecdsa.PublicKey // recipient of a private message, used only in outgoing messages
+	sigPubKey *ecdsa.PublicKey // signature of a received unwrapped message; check transportMeta.sigPublicKey as well
+
+	protocolMessage interface{} // decoded message, it's interface{} because it might be of any supported type
 
 	transportMeta    transportMeta // used for sending and receiving messages
 	encryptedPayload []byte        // comes from the transport layer
@@ -54,7 +131,11 @@ func newMessageFromTransport(m *whisper.Message, chatID string, public bool) (*M
 	}, nil
 }
 
-func newPrivateMessage(sigPubKey *ecdsa.PublicKey, recipient *ecdsa.PublicKey, message interface{}) *Message {
+func newPrivateMessage(
+	sigPubKey *ecdsa.PublicKey,
+	recipient *ecdsa.PublicKey,
+	message interface{},
+) *Message {
 	return &Message{
 		sigPubKey:       sigPubKey,
 		recipient:       recipient,
@@ -62,7 +143,11 @@ func newPrivateMessage(sigPubKey *ecdsa.PublicKey, recipient *ecdsa.PublicKey, m
 	}
 }
 
-func newPublicMessage(sigPubKey *ecdsa.PublicKey, chatID string, message interface{}) *Message {
+func newPublicMessage(
+	sigPubKey *ecdsa.PublicKey,
+	chatID string,
+	message interface{},
+) *Message {
 	return &Message{
 		sigPubKey:       sigPubKey,
 		protocolMessage: message,
@@ -74,26 +159,17 @@ func newPublicMessage(sigPubKey *ecdsa.PublicKey, chatID string, message interfa
 }
 
 func newContactCodeMessage(sigPubKey *ecdsa.PublicKey) *Message {
-	chatID := filter.ContactCodeTopic(sigPubKey)
+	chatID := transport.ContactCodeTopic(sigPubKey)
 	return newPublicMessage(sigPubKey, chatID, nil)
 }
 
-func newAdvertiseMessage(sigPubKey *ecdsa.PublicKey, recipient *ecdsa.PublicKey) *Message {
-	return &Message{
-		recipient: recipient,
-		sigPubKey: sigPubKey,
-		encryptionMeta: encryptionMeta{
-			bundleAdvertisement: true,
-		},
-	}
+func (m Message) Interface() interface{} {
+	return m.protocolMessage
 }
 
 func (m Message) ID() []byte {
 	if m.SigPubKey() != nil && len(m.decryptedPayload) > 0 {
-		m.id = protocol.MessageID(m.SigPubKey(), m.decryptedPayload)
-	}
-	if m.id != nil {
-		return m.id
+		return protocol.MessageID(m.SigPubKey(), m.decryptedPayload)
 	}
 	return m.transportMeta.hash
 }
@@ -105,6 +181,28 @@ func (m Message) SigPubKey() *ecdsa.PublicKey {
 	return m.transportMeta.sigPublicKey
 }
 
+func (m Message) ChatID() string {
+	if m.transportMeta.chatID != "" {
+		return m.transportMeta.chatID
+	}
+	// TODO: create a chat ID for private chats.
+	return ""
+}
+
+func (m Message) Clock() int64 {
+	if val, ok := m.Interface().(protocol.Message); ok {
+		return val.Clock
+	}
+	return 0
+}
+
+func (m Message) Timestamp() int64 {
+	if val, ok := m.Interface().(protocol.Message); ok {
+		return int64(val.Timestamp)
+	}
+	return 0
+}
+
 // TODO: it should return error if there was no chance to get a decrypted message yet.
 func (m Message) RawMessage() []byte {
 	return m.decryptedPayload
@@ -112,6 +210,7 @@ func (m Message) RawMessage() []byte {
 
 func (m Message) clone() *Message {
 	return &Message{
+		recipient:        m.recipient,
 		sigPubKey:        m.sigPubKey,
 		transportMeta:    m.transportMeta,
 		encryptedPayload: m.encryptedPayload,
@@ -120,7 +219,7 @@ func (m Message) clone() *Message {
 }
 
 func (m *Message) Encrypt(enc Encryptor) (err error) {
-	m.encryptedPayload, m.encryptionMeta, err = enc.Encrypt(m.recipient, m.transportMeta.public, m.decryptedPayload)
+	m.encryptedPayload, m.encryptionMeta, err = enc.Encrypt(m.recipient, m.decryptedPayload)
 	return
 }
 
@@ -129,13 +228,13 @@ func (m *Message) Decrypt(dec Encryptor) (err error) {
 	return
 }
 
-func (m *Message) DataSync(sync Syncer) error {
-	return sync.Sync(m.recipient, m.decryptedPayload)
+func (m *Message) Sync(s Syncer) error {
+	return s.Sync(m.recipient, m.decryptedPayload)
 }
 
-func (m *Message) DataDesync(sync Syncer) ([]*Message, error) {
+func (m *Message) Desync(s Syncer) ([]*Message, error) {
 	var messages []*Message
-	payloads := sync.Desync(m.SigPubKey(), m.decryptedPayload)
+	payloads := s.Desync(m.SigPubKey(), m.decryptedPayload)
 	for _, payload := range payloads {
 		cloned := m.clone()
 		cloned.decryptedPayload = payload
@@ -144,23 +243,23 @@ func (m *Message) DataDesync(sync Syncer) ([]*Message, error) {
 	return messages, nil
 }
 
-func (m *Message) Wrap(wrapper Wrapper) (err error) {
-	m.decryptedPayload, err = wrapper.Wrap(m.decryptedPayload)
+func (m *Message) Wrap(w Wrapper) (err error) {
+	m.decryptedPayload, err = w.Wrap(m.decryptedPayload)
 	return
 }
 
-func (m *Message) Unwrap(wrapper Wrapper) error {
-	message, err := wrapper.Unwrap(m.decryptedPayload)
+func (m *Message) Unwrap(w Wrapper) error {
+	meta, err := w.Unwrap(m.decryptedPayload)
 	if err != nil {
 		return err
 	}
 
-	recoveredKey, err := message.RecoverKey()
+	recoveredKey, err := meta.RecoverKey()
 	if err != nil {
 		return err
 	}
 
-	m.decryptedPayload = message.Payload
+	m.decryptedPayload = meta.Payload
 	m.sigPubKey = recoveredKey
 	return nil
 }
@@ -170,20 +269,33 @@ func (m *Message) Encode(enc Encoder) (err error) {
 	return
 }
 
-func (m *Message) Decode(dec Encoder) (err error) {
-	m.protocolMessage, err = dec.Decode(m.decryptedPayload)
-	return
+func (m *Message) Decode(dec Encoder) error {
+	val, err := dec.Decode(m.decryptedPayload)
+	if err != nil {
+		return err
+	}
+
+	switch v := val.(type) {
+	case protocol.Message:
+		v.ID = m.ID()
+		m.protocolMessage = v
+	case protocol.PairMessage:
+		v.ID = m.ID()
+		m.protocolMessage = v
+	}
+
+	return nil
 }
 
-func (m *Message) Send(sender Sender) (err error) {
+func (m *Message) Send(s Sender) (err error) {
 	if m.encryptionMeta.spec != nil {
 		if m.transportMeta.public {
-			m.transportMeta.hash, m.transportMeta.newMessage, err = sender.SendPublic(m.transportMeta.chatID, m.encryptionMeta.spec)
+			m.transportMeta.hash, m.transportMeta.newMessage, err = s.SendPublic(m.transportMeta.chatID, m.encryptionMeta.spec)
 		} else {
-			m.transportMeta.hash, m.transportMeta.newMessage, err = sender.SendPrivate(m.encryptionMeta.spec)
+			m.transportMeta.hash, m.transportMeta.newMessage, err = s.SendPrivate(m.recipient, m.encryptionMeta.spec)
 		}
 	} else if m.transportMeta.public {
-		m.transportMeta.hash, m.transportMeta.newMessage, err = sender.SendPublicRaw(m.transportMeta.chatID, m.RawMessage())
+		m.transportMeta.hash, m.transportMeta.newMessage, err = s.SendPublicRaw(m.transportMeta.chatID, m.RawMessage())
 	} else {
 		err = errors.New("unable to send a message due to invalid configuration")
 	}

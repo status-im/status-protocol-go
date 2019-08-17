@@ -5,7 +5,6 @@ import (
 	"crypto/ecdsa"
 	"database/sql"
 	"sync"
-	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -123,12 +122,13 @@ func (a *WhisperServiceTransport) ProcessNegotiatedSecret(secret NegotiatedSecre
 }
 
 func (a *WhisperServiceTransport) JoinPublic(chatID string) error {
+	a.logger.Debug("joining public chat", zap.String("chatID", chatID))
 	_, err := a.chats.LoadPublic(chatID)
 	return err
 }
 
 func (a *WhisperServiceTransport) LeavePublic(chatID string) error {
-	chat := a.chats.ChatByID(chatID)
+	chat := a.chats.FilterByChatID(chatID)
 	if chat != nil {
 		return nil
 	}
@@ -136,12 +136,16 @@ func (a *WhisperServiceTransport) LeavePublic(chatID string) error {
 }
 
 func (a *WhisperServiceTransport) JoinPrivate(publicKey *ecdsa.PublicKey) error {
-	_, err := a.chats.LoadContactCode(publicKey)
+	_, err := a.chats.LoadDiscovery()
+	if err != nil {
+		return err
+	}
+	_, err = a.chats.LoadContactCode(publicKey)
 	return err
 }
 
 func (a *WhisperServiceTransport) LeavePrivate(publicKey *ecdsa.PublicKey) error {
-	chats := a.chats.ChatsByPublicKey(publicKey)
+	chats := a.chats.FiltersByPublicKey(publicKey)
 	return a.chats.Remove(chats...)
 }
 
@@ -151,19 +155,23 @@ type ChatMessages struct {
 	ChatID   string
 }
 
-func (a *WhisperServiceTransport) RetrieveAllMessages() ([]ChatMessages, error) {
+func (a *WhisperServiceTransport) RetrieveMessages() ([]ChatMessages, error) {
 	chatMessages := make(map[string]ChatMessages)
 
-	for _, chat := range a.chats.Chats() {
+	for _, chat := range a.chats.Filters() {
 		f := a.shh.GetFilter(chat.FilterID)
 		if f == nil {
 			return nil, errors.New("failed to return a filter")
 		}
 
-		messages := chatMessages[chat.ChatID]
-		messages.ChatID = chat.ChatID
-		messages.Public = chat.IsPublic()
-		messages.Messages = append(messages.Messages, f.Retrieve()...)
+		ch := chatMessages[chat.ChatID]
+		ch.ChatID = chat.ChatID
+		ch.Public = chat.IsPublic()
+
+		newMessages := f.Retrieve()
+		ch.Messages = append(ch.Messages, newMessages...)
+
+		chatMessages[chat.ChatID] = ch
 	}
 
 	var result []ChatMessages
@@ -173,72 +181,27 @@ func (a *WhisperServiceTransport) RetrieveAllMessages() ([]ChatMessages, error) 
 	return result, nil
 }
 
-func (a *WhisperServiceTransport) RetrievePublicMessages(chatID string) ([]*whisper.ReceivedMessage, error) {
-	chat, err := a.chats.LoadPublic(chatID)
-	if err != nil {
-		return nil, err
-	}
-
-	f := a.shh.GetFilter(chat.FilterID)
-	if f == nil {
-		return nil, errors.New("failed to return a filter")
-	}
-
-	return f.Retrieve(), nil
-}
-
-func (a *WhisperServiceTransport) RetrievePrivateMessages(publicKey *ecdsa.PublicKey) ([]*whisper.ReceivedMessage, error) {
-	chats := a.chats.ChatsByPublicKey(publicKey)
-	discoveryChats, err := a.chats.Init(nil, nil, true)
-	if err != nil {
-		return nil, err
-	}
-
-	var result []*whisper.ReceivedMessage
-
-	for _, chat := range append(chats, discoveryChats...) {
-		f := a.shh.GetFilter(chat.FilterID)
-		if f == nil {
-			return nil, errors.New("failed to return a filter")
-		}
-
-		result = append(result, f.Retrieve()...)
-	}
-
-	return result, nil
-}
-
-// DEPRECATED
-func (a *WhisperServiceTransport) RetrieveRawAll() (map[Filter][]*whisper.ReceivedMessage, error) {
+func (a *WhisperServiceTransport) RetrieveMessagesByFilter() (map[Filter][]*whisper.ReceivedMessage, error) {
 	result := make(map[Filter][]*whisper.ReceivedMessage)
-
-	allChats := a.chats.Chats()
-	for _, chat := range allChats {
+	for _, chat := range a.chats.Filters() {
 		f := a.shh.GetFilter(chat.FilterID)
 		if f == nil {
 			return nil, errors.New("failed to return a filter")
 		}
-
 		result[*chat] = append(result[*chat], f.Retrieve()...)
 	}
-
 	return result, nil
-}
-
-// DEPRECATED
-func (a *WhisperServiceTransport) RetrieveRaw(filterID string) ([]*whisper.ReceivedMessage, error) {
-	f := a.shh.GetFilter(filterID)
-	if f == nil {
-		return nil, errors.New("failed to return a filter")
-	}
-	return f.Retrieve(), nil
 }
 
 // SendPublic sends a new message using the Whisper service.
 // For public filters, chat name is used as an ID as well as
 // a topic.
-func (a *WhisperServiceTransport) SendPublic(ctx context.Context, newMessage *whisper.NewMessage, chatName string) ([]byte, error) {
-	if err := a.addSig(newMessage); err != nil {
+func (a *WhisperServiceTransport) SendPublic(ctx context.Context, newMessage whisper.NewMessage, chatName string) ([]byte, error) {
+	a.logger.
+		With(zap.String("field", "SendPublic")).
+		Debug("sending", zap.String("chatName", chatName))
+
+	if err := a.addSig(&newMessage); err != nil {
 		return nil, err
 	}
 
@@ -250,11 +213,15 @@ func (a *WhisperServiceTransport) SendPublic(ctx context.Context, newMessage *wh
 	newMessage.SymKeyID = chat.SymKeyID
 	newMessage.Topic = chat.Topic
 
-	return a.shhAPI.Post(ctx, *newMessage)
+	return a.shhAPI.Post(ctx, newMessage)
 }
 
-func (a *WhisperServiceTransport) SendPrivateWithSharedSecret(ctx context.Context, newMessage *whisper.NewMessage, publicKey *ecdsa.PublicKey, secret []byte) ([]byte, error) {
-	if err := a.addSig(newMessage); err != nil {
+func (a *WhisperServiceTransport) SendPrivateWithSharedSecret(ctx context.Context, newMessage whisper.NewMessage, publicKey *ecdsa.PublicKey, secret []byte) ([]byte, error) {
+	a.logger.
+		With(zap.String("field", "SendPrivateWithSharedSecret")).
+		Debug("sending", zap.Binary("publicKey", crypto.FromECDSAPub(publicKey)))
+
+	if err := a.addSig(&newMessage); err != nil {
 		return nil, err
 	}
 
@@ -270,27 +237,36 @@ func (a *WhisperServiceTransport) SendPrivateWithSharedSecret(ctx context.Contex
 	newMessage.Topic = chat.Topic
 	newMessage.PublicKey = nil
 
-	return a.shhAPI.Post(ctx, *newMessage)
+	return a.shhAPI.Post(ctx, newMessage)
 }
 
-func (a *WhisperServiceTransport) SendPrivateWithPartitioned(ctx context.Context, newMessage *whisper.NewMessage, publicKey *ecdsa.PublicKey) ([]byte, error) {
-	if err := a.addSig(newMessage); err != nil {
+func (a *WhisperServiceTransport) SendPrivateWithPartitioned(ctx context.Context, newMessage whisper.NewMessage, publicKey *ecdsa.PublicKey) ([]byte, error) {
+	logger := a.logger.With(zap.String("field", "SendPrivateWithPartitioned"))
+	logger.Debug("sending", zap.Binary("publicKey", crypto.FromECDSAPub(publicKey)))
+
+	if err := a.addSig(&newMessage); err != nil {
 		return nil, err
 	}
 
-	chat, err := a.chats.LoadPartitioned(publicKey)
+	filter, err := a.chats.LoadPartitioned(publicKey)
 	if err != nil {
 		return nil, err
 	}
 
-	newMessage.Topic = chat.Topic
+	logger.Debug("loaded filter", zap.String("chatID", filter.ChatID))
+
+	newMessage.Topic = filter.Topic
 	newMessage.PublicKey = crypto.FromECDSAPub(publicKey)
 
-	return a.shhAPI.Post(ctx, *newMessage)
+	return a.shhAPI.Post(ctx, newMessage)
 }
 
-func (a *WhisperServiceTransport) SendPrivateOnDiscovery(ctx context.Context, newMessage *whisper.NewMessage, publicKey *ecdsa.PublicKey) ([]byte, error) {
-	if err := a.addSig(newMessage); err != nil {
+func (a *WhisperServiceTransport) SendPrivateOnDiscovery(ctx context.Context, newMessage whisper.NewMessage, publicKey *ecdsa.PublicKey) ([]byte, error) {
+	a.logger.
+		With(zap.String("field", "SendPrivateOnDiscovery")).
+		Debug("sending", zap.Binary("publicKey", crypto.FromECDSAPub(publicKey)))
+
+	if err := a.addSig(&newMessage); err != nil {
 		return nil, err
 	}
 
@@ -305,7 +281,7 @@ func (a *WhisperServiceTransport) SendPrivateOnDiscovery(ctx context.Context, ne
 	)
 	newMessage.PublicKey = crypto.FromECDSAPub(publicKey)
 
-	return a.shhAPI.Post(ctx, *newMessage)
+	return a.shhAPI.Post(ctx, newMessage)
 }
 
 func (a *WhisperServiceTransport) addSig(newMessage *whisper.NewMessage) error {
@@ -327,62 +303,4 @@ func (a *WhisperServiceTransport) Stop() {
 	if a.envelopesMonitor != nil {
 		a.envelopesMonitor.Stop()
 	}
-}
-
-// MessagesRequest is a RequestMessages() request payload.
-type MessagesRequest struct {
-	// MailServerPeer is MailServer's enode address.
-	MailServerPeer string `json:"mailServerPeer"`
-
-	// From is a lower bound of time range (optional).
-	// Default is 24 hours back from now.
-	From uint32 `json:"from"`
-
-	// To is a upper bound of time range (optional).
-	// Default is now.
-	To uint32 `json:"to"`
-
-	// Limit determines the number of messages sent by the mail server
-	// for the current paginated request
-	Limit uint32 `json:"limit"`
-
-	// Cursor is used as starting point for paginated requests
-	Cursor string `json:"cursor"`
-
-	// Topic is a regular Whisper topic.
-	// DEPRECATED
-	Topic whisper.TopicType `json:"topic"`
-
-	// Topics is a list of Whisper topics.
-	Topics []whisper.TopicType `json:"topics"`
-
-	// SymKeyID is an ID of a symmetric key to authenticate to MailServer.
-	// It's derived from MailServer password.
-	SymKeyID string `json:"symKeyID"`
-
-	// Timeout is the time to live of the request specified in seconds.
-	// Default is 10 seconds
-	Timeout time.Duration `json:"timeout"`
-
-	// Force ensures that requests will bypass enforced delay.
-	// TODO(adam): it's currently not handled.
-	Force bool `json:"force"`
-}
-
-type MessagesResponse struct {
-	// Cursor from the response can be used to retrieve more messages
-	// for the previous request.
-	Cursor string `json:"cursor"`
-
-	// Error indicates that something wrong happened when sending messages
-	// to the requester.
-	Error error `json:"error"`
-}
-
-// RetryConfig specifies configuration for retries with timeout and max amount of retries.
-type RetryConfig struct {
-	BaseTimeout time.Duration
-	// StepTimeout defines duration increase per each retry.
-	StepTimeout time.Duration
-	MaxRetries  int
 }

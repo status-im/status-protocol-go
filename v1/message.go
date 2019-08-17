@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/status-im/status-protocol-go/applicationmetadata"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
@@ -52,19 +54,6 @@ func TimestampInMsFromTime(t time.Time) TimestampInMs {
 	return TimestampInMs(t.UnixNano() / int64(time.Millisecond))
 }
 
-// Flags define various boolean properties of a message.
-type Flags uint64
-
-func (f *Flags) Set(val Flags)     { *f = *f | val }
-func (f *Flags) Clear(val Flags)   { *f = *f &^ val }
-func (f *Flags) Toggle(val Flags)  { *f = *f ^ val }
-func (f Flags) Has(val Flags) bool { return f&val != 0 }
-
-// A list of Message flags. By default, a message is unread.
-const (
-	MessageRead Flags = 1 << iota
-)
-
 // Message is a chat message sent by an user.
 type Message struct {
 	Text      string        `json:"text"` // TODO: why is this duplicated?
@@ -74,11 +63,8 @@ type Message struct {
 	Timestamp TimestampInMs `json:"timestamp"`
 	Content   Content       `json:"content"`
 
-	Flags     Flags            `json:"-"`
-	ID        []byte           `json:"-"`
-	SigPubKey *ecdsa.PublicKey `json:"-"`
-	ChatID    string           `json:"-"`
-	Public    bool             `json:"-"`
+	// not protocol defined fields
+	ID []byte `json:"-"`
 }
 
 func (m *Message) MarshalJSON() ([]byte, error) {
@@ -166,7 +152,7 @@ func WrapMessageV1(payload []byte, identity *ecdsa.PrivateKey) ([]byte, error) {
 		}
 	}
 
-	message := &StatusProtocolMessage{
+	message := &applicationmetadata.Message{
 		Signature: signature,
 		Payload:   payload,
 	}

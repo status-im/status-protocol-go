@@ -40,7 +40,7 @@ type scanner interface {
 	Scan(dest ...interface{}) error
 }
 
-func (db sqlitePersistence) tableUserMessagesLegacyScanAllFields(row scanner, message *Message, others ...interface{}) error {
+func (db sqlitePersistence) tableUserMessagesLegacyScanAllFields(row scanner, message *MessageLegacy, others ...interface{}) error {
 	args := []interface{}{
 		&message.ID,
 		&message.RawPayloadHash,
@@ -63,7 +63,7 @@ func (db sqlitePersistence) tableUserMessagesLegacyScanAllFields(row scanner, me
 	return row.Scan(append(args, others...)...)
 }
 
-func (db sqlitePersistence) tableUserMessagesLegacyAllValues(message *Message) []interface{} {
+func (db sqlitePersistence) tableUserMessagesLegacyAllValues(message *MessageLegacy) []interface{} {
 	return []interface{}{
 		message.ID,
 		message.RawPayloadHash,
@@ -85,8 +85,8 @@ func (db sqlitePersistence) tableUserMessagesLegacyAllValues(message *Message) [
 	}
 }
 
-func (db sqlitePersistence) MessageByID(id string) (*Message, error) {
-	var message Message
+func (db sqlitePersistence) MessageByID(id string) (*MessageLegacy, error) {
+	var message MessageLegacy
 
 	allFields := db.tableUserMessagesLegacyAllFields()
 	row := db.db.QueryRow(
@@ -127,7 +127,7 @@ func (db sqlitePersistence) MessageExists(id string) (bool, error) {
 // MessageByChatID returns all messages for a given chatID in descending order.
 // Ordering is accomplished using two concatenated values: ClockValue and ID.
 // These two values are also used to compose a cursor which is returned to the result.
-func (db sqlitePersistence) MessageByChatID(chatID string, currCursor string, limit int) ([]*Message, string, error) {
+func (db sqlitePersistence) MessageByChatID(chatID string, currCursor string, limit int) ([]*MessageLegacy, string, error) {
 	cursorWhere := ""
 	if currCursor != "" {
 		cursorWhere = "AND cursor <= ?"
@@ -160,12 +160,12 @@ func (db sqlitePersistence) MessageByChatID(chatID string, currCursor string, li
 	defer rows.Close()
 
 	var (
-		result  []*Message
+		result  []*MessageLegacy
 		cursors []string
 	)
 	for rows.Next() {
 		var (
-			message Message
+			message MessageLegacy
 			cursor  string
 		)
 		if err := db.tableUserMessagesLegacyScanAllFields(rows, &message, &cursor); err != nil {
@@ -183,7 +183,7 @@ func (db sqlitePersistence) MessageByChatID(chatID string, currCursor string, li
 	return result, newCursor, nil
 }
 
-func (db sqlitePersistence) MessagesFrom(from []byte) ([]*Message, error) {
+func (db sqlitePersistence) MessagesFrom(from []byte) ([]*MessageLegacy, error) {
 	allFields := db.tableUserMessagesLegacyAllFields()
 	rows, err := db.db.Query(
 		fmt.Sprintf(`
@@ -201,9 +201,9 @@ func (db sqlitePersistence) MessagesFrom(from []byte) ([]*Message, error) {
 	}
 	defer rows.Close()
 
-	var result []*Message
+	var result []*MessageLegacy
 	for rows.Next() {
-		var message Message
+		var message MessageLegacy
 		if err := db.tableUserMessagesLegacyScanAllFields(rows, &message); err != nil {
 			return nil, err
 		}
@@ -230,7 +230,7 @@ func (db sqlitePersistence) UnseenMessageIDs() ([][]byte, error) {
 	return result, nil
 }
 
-func (db sqlitePersistence) SaveMessage(m *Message) error {
+func (db sqlitePersistence) SaveMessage(m *MessageLegacy) error {
 	allFields := db.tableUserMessagesLegacyAllFields()
 	valuesVector := strings.Repeat("?, ", db.tableUserMessagesLegacyAllFieldsCount()-1) + "?"
 	query := fmt.Sprintf(`INSERT INTO user_messages_legacy(%s) VALUES (%s)`, allFields, valuesVector)

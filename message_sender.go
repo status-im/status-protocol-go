@@ -23,9 +23,9 @@ var defaultWhisperNewMessage = whisper.NewMessage{
 }
 
 type Sender interface {
-	SendPublic(string, *encryption.ProtocolMessageSpec) ([]byte, whisper.NewMessage, error)
-	SendPrivate(*encryption.ProtocolMessageSpec) ([]byte, whisper.NewMessage, error)
-	SendPublicRaw(string, []byte) ([]byte, whisper.NewMessage, error)
+	SendPublic(string, *encryption.ProtocolMessageSpec) ([]byte, *whisper.NewMessage, error)
+	SendPrivate(*ecdsa.PublicKey, *encryption.ProtocolMessageSpec) ([]byte, *whisper.NewMessage, error)
+	SendPublicRaw(string, []byte) ([]byte, *whisper.NewMessage, error)
 }
 
 type whisperSender struct {
@@ -35,6 +35,8 @@ type whisperSender struct {
 	transport                    *transport.WhisperServiceTransport
 	genericDiscoveryTopicEnabled bool
 }
+
+var _ Sender = (*whisperSender)(nil)
 
 func (w *whisperSender) messageSpecToWhisper(spec *encryption.ProtocolMessageSpec) (whisper.NewMessage, error) {
 	newMessage := defaultWhisperNewMessage
@@ -46,38 +48,44 @@ func (w *whisperSender) messageSpecToWhisper(spec *encryption.ProtocolMessageSpe
 	return newMessage, nil
 }
 
-func (w *whisperSender) SendPublic(chatName string, spec *encryption.ProtocolMessageSpec) ([]byte, error) {
+func (w *whisperSender) SendPublic(chatName string, spec *encryption.ProtocolMessageSpec) ([]byte, *whisper.NewMessage, error) {
 	newMessage, err := w.messageSpecToWhisper(spec)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return w.transport.SendPublic(context.Background(), newMessage, chatName)
+	hash, err := w.transport.SendPublic(context.Background(), newMessage, chatName)
+	return hash, &newMessage, err
 }
 
-func (w *whisperSender) SendPrivate(recipient *ecdsa.PublicKey, spec *encryption.ProtocolMessageSpec) ([]byte, error) {
+func (w *whisperSender) SendPrivate(recipient *ecdsa.PublicKey, spec *encryption.ProtocolMessageSpec) ([]byte, *whisper.NewMessage, error) {
 	newMessage, err := w.messageSpecToWhisper(spec)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+
+	var hash []byte
 
 	switch {
 	case spec.SharedSecret != nil:
-		return w.transport.SendPrivateWithSharedSecret(context.Background(), newMessage, recipient, spec.SharedSecret)
+		hash, err = w.transport.SendPrivateWithSharedSecret(context.Background(), newMessage, recipient, spec.SharedSecret)
 	case spec.PartitionedTopicMode() == encryption.PartitionTopicV1:
-		return w.transport.SendPrivateWithPartitioned(context.Background(), newMessage, recipient)
+		hash, err = w.transport.SendPrivateWithPartitioned(context.Background(), newMessage, recipient)
 	case !w.genericDiscoveryTopicEnabled:
-		return w.transport.SendPrivateWithPartitioned(context.Background(), newMessage, recipient)
+		hash, err = w.transport.SendPrivateWithPartitioned(context.Background(), newMessage, recipient)
 	default:
-		return w.transport.SendPrivateOnDiscovery(context.Background(), newMessage, recipient)
+		hash, err = w.transport.SendPrivateOnDiscovery(context.Background(), newMessage, recipient)
 	}
+
+	return hash, &newMessage, err
 }
 
 // SendPublicRaw sends a raw payload.
 // It uses only Whisper encryption.
-func (w *whisperSender) SendPublicRaw(chatName string, data []byte) ([]byte, error) {
+func (w *whisperSender) SendPublicRaw(chatName string, data []byte) ([]byte, *whisper.NewMessage, error) {
 	newMessage := defaultWhisperNewMessage
 	newMessage.Payload = data
-	return w.transport.SendPublic(context.Background(), newMessage, chatName)
+	hash, err := w.transport.SendPublic(context.Background(), newMessage, chatName)
+	return hash, &newMessage, err
 }
 
 // SendPrivateRaw sends a raw payload using the discovery topic.

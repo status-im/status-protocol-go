@@ -80,32 +80,8 @@ func (s *MessengerSuite) TestSendPrivate() {
 func (s *MessengerSuite) TestRetrievePublic() {
 	chat := Chat{ID: "status", Name: "status"}
 
-	_, err := s.m.Send(context.Background(), chat, []byte("test"))
+	err := s.m.Join(chat)
 	s.NoError(err)
-
-	// Give Whisper some time to propagate message to filters.
-	time.Sleep(time.Millisecond * 500)
-
-	// Retrieve chat
-	messages, err := s.m.Retrieve(context.Background(), chat, RetrieveLatest)
-	s.NoError(err)
-	s.Len(messages, 1)
-
-	// Retrieve again to test skipping already existing err.
-	messages, err = s.m.Retrieve(context.Background(), chat, RetrieveLastDay)
-	s.NoError(err)
-	s.Require().Len(messages, 1)
-
-	// Verify message fields.
-	message := messages[0]
-	s.NotEmpty(message.ID)
-	s.Equal(&s.privateKey.PublicKey, message.SigPubKey) // this is OUR message
-}
-
-func (s *MessengerSuite) TestRetrievePrivate() {
-	publicContact, err := crypto.GenerateKey()
-	s.NoError(err)
-	chat := Chat{ID: "x", PublicKey: &publicContact.PublicKey}
 
 	_, err = s.m.Send(context.Background(), chat, []byte("test"))
 	s.NoError(err)
@@ -114,19 +90,49 @@ func (s *MessengerSuite) TestRetrievePrivate() {
 	time.Sleep(time.Millisecond * 500)
 
 	// Retrieve chat
-	messages, err := s.m.Retrieve(context.Background(), chat, RetrieveLatest)
+	messages, err := s.m.RetrieveWithConfig(context.Background(), RetrieveLatest)
 	s.NoError(err)
 	s.Len(messages, 1)
 
 	// Retrieve again to test skipping already existing err.
-	messages, err = s.m.Retrieve(context.Background(), chat, RetrieveLastDay)
+	messages, err = s.m.RetrieveWithConfig(context.Background(), RetrieveLastDay)
+	s.NoError(err)
+	s.Require().Len(messages, 1)
+
+	// Verify message fields.
+	message := messages[0]
+	s.NotEmpty(message.ID)
+	s.Equal(&s.privateKey.PublicKey, message.SigPubKey()) // this is OUR message
+}
+
+func (s *MessengerSuite) TestRetrievePrivate() {
+	publicContact, err := crypto.GenerateKey()
+	s.NoError(err)
+	chat := Chat{ID: "x", PublicKey: &publicContact.PublicKey}
+
+	err = s.m.Join(chat)
+	s.NoError(err)
+
+	_, err = s.m.Send(context.Background(), chat, []byte("test"))
+	s.NoError(err)
+
+	// Give Whisper some time to propagate message to filters.
+	time.Sleep(time.Millisecond * 500)
+
+	// Retrieve chat
+	messages, err := s.m.RetrieveWithConfig(context.Background(), RetrieveLatest)
+	s.NoError(err)
+	s.Len(messages, 1)
+
+	// Retrieve again to test skipping already existing err.
+	messages, err = s.m.RetrieveWithConfig(context.Background(), RetrieveLastDay)
 	s.NoError(err)
 	s.Len(messages, 1)
 
 	// Verify message fields.
 	message := messages[0]
 	s.NotEmpty(message.ID)
-	s.Equal(&s.privateKey.PublicKey, message.SigPubKey) // this is OUR message
+	s.Equal(&s.privateKey.PublicKey, message.SigPubKey()) // this is OUR message
 }
 
 func (s *MessengerSuite) TestChatPersistencePublic() {
