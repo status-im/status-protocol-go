@@ -2,15 +2,22 @@ package statusproto
 
 import (
 	"crypto/ecdsa"
-	"errors"
-
-	"go.uber.org/zap"
 
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/pkg/errors"
 	"github.com/status-im/status-protocol-go/encryption"
 	transport "github.com/status-im/status-protocol-go/transport/whisper"
 	protocol "github.com/status-im/status-protocol-go/v1"
 	whisper "github.com/status-im/whisper/whisperv6"
+	"go.uber.org/zap"
+)
+
+var (
+	errMissingSigPubKey       = errors.New("missing signature public key")
+	errMissingRecipient       = errors.New("missing recipient's public key")
+	errMissingProtocolMessage = errors.New("missing protocol message")
+	errNotUserMessage         = errors.New("is not a user message")
+	errUndefinedProtocolID    = errors.New("protocol ID is undefined")
 )
 
 type messageProcessor struct {
@@ -90,11 +97,10 @@ func (ma *messageProcessor) Resolve(m *Message) ([]*Message, error) {
 }
 
 type transportMeta struct {
-	hash         []byte
-	sigPublicKey *ecdsa.PublicKey
-	chatID       string
-	public       bool
-	newMessage   *whisper.NewMessage // set when sending a message
+	hash       []byte
+	chatID     string
+	public     bool
+	newMessage *whisper.NewMessage // set only when sending a message
 }
 
 type encryptionMeta struct {
@@ -102,7 +108,10 @@ type encryptionMeta struct {
 }
 
 type Message struct {
-	recipient *ecdsa.PublicKey // recipient of a private message, used only in outgoing messages
+	id     []byte // cached result of ProtocolID() method; it can come from the database
+	chatID string // ID of a chat this message belongs to
+
+	recipient *ecdsa.PublicKey // recipient of a private message; if nil, then the message is public
 	sigPubKey *ecdsa.PublicKey // signature of a received unwrapped message; check transportMeta.sigPublicKey as well
 
 	protocolMessage interface{} // decoded message, it's interface{} because it might be of any supported type
@@ -117,15 +126,16 @@ type Message struct {
 func newMessageFromTransport(m *whisper.Message, chatID string, public bool) (*Message, error) {
 	sigPubKey, err := crypto.UnmarshalPubkey(m.Sig)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "received a message with invalid signature")
 	}
 
 	return &Message{
+		chatID:    chatID,
+		sigPubKey: sigPubKey,
 		transportMeta: transportMeta{
-			hash:         m.Hash,
-			sigPublicKey: sigPubKey,
-			chatID:       chatID,
-			public:       public,
+			hash:   m.Hash,
+			chatID: chatID,
+			public: public,
 		},
 		encryptedPayload: m.Payload,
 	}, nil
@@ -135,58 +145,154 @@ func newPrivateMessage(
 	sigPubKey *ecdsa.PublicKey,
 	recipient *ecdsa.PublicKey,
 	message interface{},
-) *Message {
-	return &Message{
+) (*Message, error) {
+	if sigPubKey == nil {
+		return nil, errMissingSigPubKey
+	}
+	if recipient == nil {
+		return nil, errMissingRecipient
+	}
+	m := &Message{
+		chatID:          "", // TODO
 		sigPubKey:       sigPubKey,
 		recipient:       recipient,
 		protocolMessage: message,
+		transportMeta: transportMeta{
+			chatID: "", // TODO
+		},
 	}
+	if err := validateUserMessage(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func newRawPrivateMessage(
+	sigPubKey *ecdsa.PublicKey,
+	recipient *ecdsa.PublicKey,
+	data []byte,
+) (*Message, error) {
+	if sigPubKey == nil {
+		return nil, errMissingSigPubKey
+	}
+	if recipient == nil {
+		return nil, errMissingRecipient
+	}
+	m := &Message{
+		chatID:           "", // TODO
+		sigPubKey:        sigPubKey,
+		recipient:        recipient,
+		decryptedPayload: data,
+		transportMeta: transportMeta{
+			chatID: "", // TODO
+		},
+	}
+	return m, nil
 }
 
 func newPublicMessage(
 	sigPubKey *ecdsa.PublicKey,
 	chatID string,
 	message interface{},
-) *Message {
-	return &Message{
+) (*Message, error) {
+	if sigPubKey == nil {
+		return nil, errMissingSigPubKey
+	}
+	m := &Message{
 		sigPubKey:       sigPubKey,
 		protocolMessage: message,
+		chatID:          chatID,
 		transportMeta: transportMeta{
 			chatID: chatID,
 			public: true,
 		},
 	}
+	if err := validateUserMessage(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
-func newContactCodeMessage(sigPubKey *ecdsa.PublicKey) *Message {
+func newRawPublicMessage(
+	sigPubKey *ecdsa.PublicKey,
+	chatID string,
+	data []byte,
+) (*Message, error) {
+	if sigPubKey == nil {
+		return nil, errMissingSigPubKey
+	}
+	return &Message{
+		sigPubKey:        sigPubKey,
+		decryptedPayload: data,
+		chatID:           chatID,
+		transportMeta: transportMeta{
+			chatID: chatID,
+			public: true,
+		},
+	}, nil
+}
+
+func newContactCodeMessage(sigPubKey *ecdsa.PublicKey) (*Message, error) {
 	chatID := transport.ContactCodeTopic(sigPubKey)
 	return newPublicMessage(sigPubKey, chatID, nil)
+}
+
+func validateUserMessage(m *Message) error {
+	if m.Interface() == nil {
+		return errMissingProtocolMessage
+	}
+	if !m.IsUserMessage() {
+		return errNotUserMessage
+	}
+	return nil
 }
 
 func (m Message) Interface() interface{} {
 	return m.protocolMessage
 }
 
-func (m Message) ID() []byte {
-	if m.SigPubKey() != nil && len(m.decryptedPayload) > 0 {
-		return protocol.MessageID(m.SigPubKey(), m.decryptedPayload)
+func (m Message) IsUserMessage() bool {
+	_, ok := m.protocolMessage.(protocol.Message)
+	return ok
+}
+
+func (m Message) ProtocolID() []byte {
+	// Already cached or retrieved from the database.
+	if m.id != nil {
+		return m.id
+	}
+	// If signature or decrypted payload is not available,
+	// it's not possible to compute a message ID.
+	if m.SigPubKey() == nil || len(m.decryptedPayload) == 0 {
+		return nil
+	}
+	m.id = protocol.MessageID(m.SigPubKey(), m.decryptedPayload)
+	return m.id
+}
+
+// AnyID returns any identifier of the Message. In case of some messages,
+// the content might be unspecified (for example, bundle advertise messages),
+// in such a case, a transport envelope hash is returned.
+func (m Message) AnyID() []byte {
+	id := m.ProtocolID()
+	if id != nil {
+		return id
 	}
 	return m.transportMeta.hash
 }
 
 func (m Message) SigPubKey() *ecdsa.PublicKey {
-	if m.sigPubKey != nil {
-		return m.sigPubKey
-	}
-	return m.transportMeta.sigPublicKey
+	return m.sigPubKey
 }
 
 func (m Message) ChatID() string {
-	if m.transportMeta.chatID != "" {
-		return m.transportMeta.chatID
-	}
-	// TODO: create a chat ID for private chats.
-	return ""
+	return m.chatID
+}
+
+// Public returns true if a message has no recipient, i.e. it is a public message
+// sent to a public chat.
+func (m Message) Public() bool {
+	return m.recipient == nil
 }
 
 func (m Message) Clock() int64 {
@@ -203,13 +309,13 @@ func (m Message) Timestamp() int64 {
 	return 0
 }
 
-// TODO: it should return error if there was no chance to get a decrypted message yet.
 func (m Message) RawMessage() []byte {
 	return m.decryptedPayload
 }
 
 func (m Message) clone() *Message {
 	return &Message{
+		chatID:           m.chatID,
 		recipient:        m.recipient,
 		sigPubKey:        m.sigPubKey,
 		transportMeta:    m.transportMeta,
@@ -277,10 +383,12 @@ func (m *Message) Decode(dec Encoder) error {
 
 	switch v := val.(type) {
 	case protocol.Message:
-		v.ID = m.ID()
+		v.ID = m.ProtocolID()
+		if v.ID == nil {
+			return errUndefinedProtocolID
+		}
 		m.protocolMessage = v
 	case protocol.PairMessage:
-		v.ID = m.ID()
 		m.protocolMessage = v
 	}
 

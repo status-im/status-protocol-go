@@ -36,18 +36,24 @@ func NewLegacyMessenger(
 // SendRaw takes encoded data, encrypts it and sends through the wire.
 // DEPRECATED
 func (m *LegacyMessenger) SendRaw(ctx context.Context, chat Chat, data []byte) ([]byte, *whisper.NewMessage, error) {
-	message := &Message{
-		sigPubKey: &m.identity.PublicKey,
-		transportMeta: transportMeta{
-			chatID: chat.ID,
-			public: chat.ChatType == ChatTypePublic,
-		},
-		decryptedPayload: data,
+	var (
+		message *Message
+		err     error
+	)
+	if chat.ChatType == ChatTypePublic {
+		message, err = newRawPublicMessage(&m.identity.PublicKey, chat.ID, data)
+	} else {
+		message, err = newRawPrivateMessage(&m.identity.PublicKey, chat.PublicKey, data)
 	}
+	if err != nil {
+		return nil, nil, err
+	}
+
 	if err := m.sendRaw(message); err != nil {
 		return nil, nil, err
 	}
-	return message.ID(), message.transportMeta.newMessage, nil
+
+	return message.ProtocolID(), message.transportMeta.newMessage, nil
 }
 
 func (m *Messenger) sendRaw(message *Message) error {

@@ -213,7 +213,10 @@ func NewMessenger(
 		c.onSendContactCodeHandler = func(messageSpec *encryption.ProtocolMessageSpec) {
 			slogger := logger.With(zap.String("site", "onSendContactCodeHandler"))
 			slogger.Info("received a SendContactCode request")
-			message := newContactCodeMessage(&identity.PublicKey)
+			message, err := newContactCodeMessage(&identity.PublicKey)
+			if err != nil {
+				slogger.Error("failed to create a contact message", zap.Error(err))
+			}
 			if err := message.Send(nil); err != nil {
 				slogger.Warn("failed to send a contact code", zap.Error(err))
 			}
@@ -449,7 +452,7 @@ func (m *Messenger) Send(ctx context.Context, chat Chat, data []byte) ([]byte, e
 		return nil, ErrChatIDEmpty
 	}
 
-	clock, err := m.persistence.LastMessageClock(&m.identity.PublicKey, chat.ID)
+	clock, err := m.persistence.LastMessageClock(chat.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -461,12 +464,15 @@ func (m *Messenger) Send(ctx context.Context, chat Chat, data []byte) ([]byte, e
 
 	if chat.PublicKey != nil {
 		protocolMessage = protocol.CreatePrivateTextMessage(data, clock, chat.ID)
-		message = newPrivateMessage(&m.identity.PublicKey, chat.PublicKey, protocolMessage)
+		message, err = newPrivateMessage(&m.identity.PublicKey, chat.PublicKey, protocolMessage)
 	} else if chat.Name != "" {
 		protocolMessage := protocol.CreatePublicTextMessage(data, clock, chat.ID)
-		message = newPublicMessage(&m.identity.PublicKey, chat.ID, protocolMessage)
+		message, err = newPublicMessage(&m.identity.PublicKey, chat.ID, protocolMessage)
 	} else {
-		return nil, errors.New("chat is neither public nor private")
+		err = errors.New("chat is neither public nor private")
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	if err := m.send(message); err != nil {
@@ -474,21 +480,21 @@ func (m *Messenger) Send(ctx context.Context, chat Chat, data []byte) ([]byte, e
 	}
 
 	// Track sent message.
-	m.transport.Track([][]byte{message.ID()}, message.transportMeta.hash, *message.transportMeta.newMessage)
+	m.transport.Track([][]byte{message.ProtocolID()}, message.transportMeta.hash, *message.transportMeta.newMessage)
 
 	// Cache private messages to return them in Retrieve().
-	if !message.transportMeta.public {
+	if !message.Public() {
 		m.ownMessages = append(m.ownMessages, message)
 	}
 
 	if m.messagesPersistenceEnabled {
-		err := m.persistence.SaveMessages(&m.identity.PublicKey, message)
+		err := m.persistence.SaveMessages(message)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	return message.ID(), nil
+	return message.ProtocolID(), nil
 }
 
 func (m *Messenger) send(message *Message) error {
@@ -531,7 +537,14 @@ func (m *Messenger) RetrieveNew(ctx context.Context) ([]*Message, error) {
 	}
 
 	if m.messagesPersistenceEnabled {
-		if err := m.persistence.SaveMessages(&m.identity.PublicKey, allMessages...); err != nil {
+		// Save only user messages. We don't save other messages like PairMessage.
+		var userMessages []*Message
+		for _, m := range allMessages {
+			if m.IsUserMessage() {
+				userMessages = append(userMessages, m)
+			}
+		}
+		if err := m.persistence.SaveMessages(userMessages...); err != nil {
 			return nil, errors.Wrap(err, "failed to save retrieved messages")
 		}
 	}
@@ -539,8 +552,8 @@ func (m *Messenger) RetrieveNew(ctx context.Context) ([]*Message, error) {
 	// Confirm only if persistence is enabled and message is not public.
 	if m.messagesPersistenceEnabled {
 		for _, message := range allMessages {
-			if !message.transportMeta.public {
-				if err := m.encryptor.ConfirmMessageProcessed(message.ID()); err != nil {
+			if !message.Public() && message.IsUserMessage() {
+				if err := m.encryptor.ConfirmMessageProcessed(message.ProtocolID()); err != nil {
 					m.logger.Error("failed to confirm processed message", zap.Error(err))
 				}
 			}
@@ -647,11 +660,11 @@ func (m *Messenger) retrieveSaved(ctx context.Context, c RetrieveConfig) ([]*Mes
 	if c.last24Hours {
 		to := time.Now()
 		from := to.Add(-time.Hour * 24)
-		return m.persistence.Messages(&m.identity.PublicKey, from, to, "")
+		return m.persistence.Messages(from, to)
 	}
 
 	if !c.latest {
-		return m.persistence.Messages(&m.identity.PublicKey, c.From, c.To, "")
+		return m.persistence.Messages(c.From, c.To)
 	}
 
 	m.logger.Error("invalid config reached retrieveSaved()")

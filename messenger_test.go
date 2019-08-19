@@ -101,7 +101,7 @@ func (s *MessengerSuite) TestRetrievePublic() {
 
 	// Verify message fields.
 	message := messages[0]
-	s.NotEmpty(message.ID)
+	s.NotEmpty(message.ProtocolID())
 	s.Equal(&s.privateKey.PublicKey, message.SigPubKey()) // this is OUR message
 }
 
@@ -131,7 +131,7 @@ func (s *MessengerSuite) TestRetrievePrivate() {
 
 	// Verify message fields.
 	message := messages[0]
-	s.NotEmpty(message.ID)
+	s.NotEmpty(message.ProtocolID())
 	s.Equal(&s.privateKey.PublicKey, message.SigPubKey()) // this is OUR message
 }
 

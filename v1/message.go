@@ -64,10 +64,14 @@ type Message struct {
 	Content   Content       `json:"content"`
 
 	// not protocol defined fields
-	ID []byte `json:"-"`
+	ID []byte `json:"-"` // used only for JSON serialization
 }
 
 func (m *Message) MarshalJSON() ([]byte, error) {
+	if m.ID == nil {
+		return nil, errors.New("message ID is not set")
+	}
+
 	type MessageAlias Message
 	item := struct {
 		*MessageAlias
