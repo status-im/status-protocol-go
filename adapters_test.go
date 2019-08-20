@@ -215,7 +215,7 @@ func (s *AdaptersSuite) TestHandleDecodedMessagesWrapped() {
 
 	s.Require().Equal(1, len(decodedMessages))
 	s.Require().Equal(&authorKey.PublicKey, decodedMessages[0].SigPubKey())
-	s.Require().Equal(protocol.MessageID(&authorKey.PublicKey, encodedPayload), decodedMessages[0].ID)
+	s.Require().Equal(protocol.MessageID(&authorKey.PublicKey, wrappedPayload), decodedMessages[0].ID)
 	s.Require().Equal(encodedPayload, decodedMessages[0].DecryptedPayload)
 	s.Require().Equal(testMessageStruct, decodedMessages[0].ParsedMessage)
 }
@@ -257,7 +257,7 @@ func (s *AdaptersSuite) TestHandleDecodedMessagesDatasync() {
 	s.Require().Equal(testMessageStruct, decodedMessages[0].ParsedMessage)
 
 	s.Require().Equal(&authorKey.PublicKey, decodedMessages[1].SigPubKey())
-	s.Require().Equal(protocol.MessageID(&authorKey.PublicKey, encodedPayload), decodedMessages[1].ID)
+	s.Require().Equal(protocol.MessageID(&authorKey.PublicKey, wrappedPayload), decodedMessages[1].ID)
 	s.Require().Equal(encodedPayload, decodedMessages[1].DecryptedPayload)
 	s.Require().Equal(testMessageStruct, decodedMessages[1].ParsedMessage)
 }
@@ -305,7 +305,7 @@ func (s *AdaptersSuite) TestHandleDecodedMessagesDatasyncEncrypted() {
 	s.Require().Equal(testMessageStruct, decodedMessages[0].ParsedMessage)
 
 	s.Require().Equal(&authorKey.PublicKey, decodedMessages[1].SigPubKey())
-	s.Require().Equal(protocol.MessageID(&authorKey.PublicKey, encodedPayload), decodedMessages[1].ID)
+	s.Require().Equal(protocol.MessageID(&authorKey.PublicKey, wrappedPayload), decodedMessages[1].ID)
 	s.Require().Equal(encodedPayload, decodedMessages[1].DecryptedPayload)
 	s.Require().Equal(testMessageStruct, decodedMessages[1].ParsedMessage)
 }
