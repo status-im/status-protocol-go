@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/status-im/status-protocol-go/types"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/pkg/errors"
@@ -68,7 +70,7 @@ type WhisperServiceTransport struct {
 	envelopesMonitor *EnvelopesMonitor
 }
 
-// NewWhisperService returns a new WhisperServiceTransport.
+// NewWhisperServiceTransport returns a new WhisperServiceTransport.
 func NewWhisperServiceTransport(
 	shh *whisper.Whisper,
 	privateKey *ecdsa.PrivateKey,
@@ -83,10 +85,10 @@ func NewWhisperServiceTransport(
 	}
 
 	var envelopesMonitor *EnvelopesMonitor
-	if envelopesMonitorConfig != nil {
-		envelopesMonitor = NewEnvelopesMonitor(shh, envelopesMonitorConfig)
-		envelopesMonitor.Start()
-	}
+	// if envelopesMonitorConfig != nil {
+	// 	envelopesMonitor = NewEnvelopesMonitor(shh, envelopesMonitorConfig)
+	// 	envelopesMonitor.Start()
+	// }
 	return &WhisperServiceTransport{
 		shh:              shh,
 		shhAPI:           whisper.NewPublicWhisperAPI(shh),
@@ -117,7 +119,7 @@ func (a *WhisperServiceTransport) Reset() error {
 	return a.chats.Reset()
 }
 
-func (a *WhisperServiceTransport) ProcessNegotiatedSecret(secret NegotiatedSecret) error {
+func (a *WhisperServiceTransport) ProcessNegotiatedSecret(secret statusprototypes.NegotiatedSecret) error {
 	_, err := a.chats.LoadNegotiated(secret)
 	return err
 }
@@ -145,14 +147,8 @@ func (a *WhisperServiceTransport) LeavePrivate(publicKey *ecdsa.PublicKey) error
 	return a.chats.Remove(chats...)
 }
 
-type ChatMessages struct {
-	Messages []*whisper.ReceivedMessage
-	Public   bool
-	ChatID   string
-}
-
-func (a *WhisperServiceTransport) RetrieveAllMessages() ([]ChatMessages, error) {
-	chatMessages := make(map[string]ChatMessages)
+func (a *WhisperServiceTransport) RetrieveAllMessages() ([]statusprototypes.WhisperChatMessages, error) {
+	chatMessages := make(map[string]statusprototypes.WhisperChatMessages)
 
 	for _, chat := range a.chats.Chats() {
 		f := a.shh.GetFilter(chat.FilterID)
@@ -166,7 +162,7 @@ func (a *WhisperServiceTransport) RetrieveAllMessages() ([]ChatMessages, error) 
 		messages.Messages = append(messages.Messages, f.Retrieve()...)
 	}
 
-	var result []ChatMessages
+	var result []statusprototypes.WhisperChatMessages
 	for _, messages := range chatMessages {
 		result = append(result, messages)
 	}
@@ -258,7 +254,7 @@ func (a *WhisperServiceTransport) SendPrivateWithSharedSecret(ctx context.Contex
 		return nil, err
 	}
 
-	chat, err := a.chats.LoadNegotiated(NegotiatedSecret{
+	chat, err := a.chats.LoadNegotiated(statusprototypes.NegotiatedSecret{
 		PublicKey: publicKey,
 		Key:       secret,
 	})

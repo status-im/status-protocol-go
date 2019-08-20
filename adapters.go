@@ -7,6 +7,8 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/status-im/status-protocol-go/types"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
@@ -34,7 +36,7 @@ const (
 // layers.
 type whisperAdapter struct {
 	privateKey *ecdsa.PrivateKey
-	transport  *transport.WhisperServiceTransport
+	transport  transport.WhisperServiceTransportInterface
 	protocol   *encryption.Protocol
 	datasync   *datasync.DataSync
 	logger     *zap.Logger
@@ -44,7 +46,7 @@ type whisperAdapter struct {
 
 func newWhisperAdapter(
 	pk *ecdsa.PrivateKey,
-	t *transport.WhisperServiceTransport,
+	t transport.WhisperServiceTransportInterface,
 	p *encryption.Protocol,
 	d *datasync.DataSync,
 	featureFlags featureFlags,
@@ -88,26 +90,20 @@ func (a *whisperAdapter) LeavePrivate(publicKey *ecdsa.PublicKey) error {
 	return a.transport.LeavePrivate(publicKey)
 }
 
-type ChatMessages struct {
-	Messages []*protocol.Message
-	Public   bool
-	ChatID   string
-}
-
-func (a *whisperAdapter) RetrieveAllMessages() ([]ChatMessages, error) {
+func (a *whisperAdapter) RetrieveAllMessages() ([]statusprototypes.ChatMessages, error) {
 	chatMessages, err := a.transport.RetrieveAllMessages()
 	if err != nil {
 		return nil, err
 	}
 
-	var result []ChatMessages
+	var result []statusprototypes.ChatMessages
 	for _, messages := range chatMessages {
 		protoMessages, err := a.handleRetrievedMessages(messages.Messages)
 		if err != nil {
 			return nil, err
 		}
 
-		result = append(result, ChatMessages{
+		result = append(result, statusprototypes.ChatMessages{
 			Messages: protoMessages,
 			Public:   messages.Public,
 			ChatID:   messages.ChatID,
@@ -185,31 +181,31 @@ func (a *whisperAdapter) handleRetrievedMessages(messages []*whisper.ReceivedMes
 }
 
 // DEPRECATED
-func (a *whisperAdapter) RetrieveRawAll() (map[transport.Filter][]*protocol.StatusMessage, error) {
-	chatWithMessages, err := a.transport.RetrieveRawAll()
-	if err != nil {
-		return nil, err
-	}
+// func (a *whisperAdapter) RetrieveRawAll() (map[transport.Filter][]*protocol.StatusMessage, error) {
+// 	chatWithMessages, err := a.transport.RetrieveRawAll()
+// 	if err != nil {
+// 		return nil, err
+// 	}
 
-	logger := a.logger.With(zap.String("site", "RetrieveRawAll"))
-	result := make(map[transport.Filter][]*protocol.StatusMessage)
+// 	logger := a.logger.With(zap.String("site", "RetrieveRawAll"))
+// 	result := make(map[transport.Filter][]*protocol.StatusMessage)
 
-	for chat, messages := range chatWithMessages {
-		for _, message := range messages {
-			shhMessage := whisper.ToWhisperMessage(message)
-			statusMessages, err := a.handleMessages(shhMessage, false)
-			if err != nil {
-				logger.Info("failed to decode messages", zap.Error(err))
-				continue
-			}
+// 	for chat, messages := range chatWithMessages {
+// 		for _, message := range messages {
+// 			shhMessage := whisper.ToWhisperMessage(message)
+// 			statusMessages, err := a.handleMessages(shhMessage, false)
+// 			if err != nil {
+// 				logger.Info("failed to decode messages", zap.Error(err))
+// 				continue
+// 			}
 
-			result[chat] = append(result[chat], statusMessages...)
+// 			result[chat] = append(result[chat], statusMessages...)
 
-		}
-	}
+// 		}
+// 	}
 
-	return result, nil
-}
+// 	return result, nil
+// }
 
 // handleMessages expects a whisper message as input, and it will go through
 // a series of transformations until the message is parsed into an application
@@ -595,7 +591,7 @@ func (a *whisperAdapter) handleSharedSecrets(secrets []*sharedsecret.Secret) err
 	for _, secret := range secrets {
 		logger.Debug("received shared secret", zap.Binary("identity", crypto.FromECDSAPub(secret.Identity)))
 
-		fSecret := transport.NegotiatedSecret{
+		fSecret := statusprototypes.NegotiatedSecret{
 			PublicKey: secret.Identity,
 			Key:       secret.Key,
 		}

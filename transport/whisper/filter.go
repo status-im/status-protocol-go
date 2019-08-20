@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/status-im/status-protocol-go/types"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/pkg/errors"
 	whisper "github.com/status-im/whisper/whisperv6"
@@ -28,11 +30,6 @@ type whisperFilter struct {
 	FilterID string
 	Topic    whisper.TopicType
 	SymKeyID string
-}
-
-type NegotiatedSecret struct {
-	PublicKey *ecdsa.PublicKey
-	Key       []byte
 }
 
 // TODO: revise fields encoding/decoding. Some are encoded using hexutil and some using encoding/hex.
@@ -63,7 +60,7 @@ func (c *Filter) IsPublic() bool {
 }
 
 type filtersManager struct {
-	whisper     *whisper.Whisper
+	whisper     statusprototypes.WhisperInterface
 	persistence *sqlitePersistence
 	privateKey  *ecdsa.PrivateKey
 	keys        map[string][]byte // a cache of symmetric manager derived from passwords
@@ -76,7 +73,7 @@ type filtersManager struct {
 }
 
 // newFiltersManager returns a new filtersManager.
-func newFiltersManager(db *sql.DB, w *whisper.Whisper, privateKey *ecdsa.PrivateKey, logger *zap.Logger) (*filtersManager, error) {
+func newFiltersManager(db *sql.DB, w statusprototypes.WhisperInterface, privateKey *ecdsa.PrivateKey, logger *zap.Logger) (*filtersManager, error) {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
@@ -288,7 +285,7 @@ func (s *filtersManager) loadPartitioned(publicKey *ecdsa.PublicKey, listen bool
 }
 
 // LoadNegotiated loads a negotiated secret as a filter.
-func (s *filtersManager) LoadNegotiated(secret NegotiatedSecret) (*Filter, error) {
+func (s *filtersManager) LoadNegotiated(secret statusprototypes.NegotiatedSecret) (*Filter, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 

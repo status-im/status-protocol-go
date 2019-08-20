@@ -9,7 +9,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pkg/errors"
-	whisper "github.com/status-im/whisper/whisperv6"
 
 	"github.com/status-im/status-protocol-go/datasync"
 	datasyncpeer "github.com/status-im/status-protocol-go/datasync/peer"
@@ -17,6 +16,7 @@ import (
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
 	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
 	"github.com/status-im/status-protocol-go/sqlite"
+	"github.com/status-im/status-protocol-go/types"
 	transport "github.com/status-im/status-protocol-go/transport/whisper"
 	protocol "github.com/status-im/status-protocol-go/v1"
 	datasyncnode "github.com/vacp2p/mvds/node"
@@ -164,7 +164,7 @@ func WithEnvelopesMonitorConfig(emc *transport.EnvelopesMonitorConfig) Option {
 
 func NewMessenger(
 	identity *ecdsa.PrivateKey,
-	shh *whisper.Whisper,
+	shh statusprototypes.WhisperInterface,
 	installationID string,
 	opts ...Option,
 ) (*Messenger, error) {
@@ -244,12 +244,12 @@ func NewMessenger(
 	}
 
 	// Initialize transport layer.
-	t, err := transport.NewWhisperServiceTransport(
+	t, err := transport.NewNimbusWhisperServiceTransport(
 		shh,
 		identity,
 		database,
 		nil,
-		c.envelopesMonitorConfig,
+		nil,
 		logger,
 	)
 	if err != nil {
@@ -589,9 +589,9 @@ func (m *Messenger) retrieveSaved(ctx context.Context, chatID string, c Retrieve
 }
 
 // DEPRECATED
-func (m *Messenger) RetrieveRawAll() (map[transport.Filter][]*protocol.StatusMessage, error) {
-	return m.adapter.RetrieveRawAll()
-}
+// func (m *Messenger) RetrieveRawAll() (map[transport.Filter][]*protocol.StatusMessage, error) {
+// 	return m.adapter.RetrieveRawAll()
+// }
 
 // DEPRECATED
 func (m *Messenger) LoadFilters(chats []*transport.Filter) ([]*transport.Filter, error) {
