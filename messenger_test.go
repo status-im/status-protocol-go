@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"encoding/hex"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -145,7 +144,7 @@ func (s *MessengerSuite) TestChatPersistencePublic() {
 	}
 
 	s.Require().NoError(s.m.SaveChat(chat))
-	savedChats, err := s.m.Chats(0, 10)
+	savedChats, err := s.m.Chats()
 	s.Require().NoError(err)
 	s.Require().Equal(1, len(savedChats))
 
@@ -172,12 +171,12 @@ func (s *MessengerSuite) TestDeleteChat() {
 	}
 
 	s.Require().NoError(s.m.SaveChat(chat))
-	savedChats, err := s.m.Chats(0, 10)
+	savedChats, err := s.m.Chats()
 	s.Require().NoError(err)
 	s.Require().Equal(1, len(savedChats))
 
 	s.Require().NoError(s.m.DeleteChat(chatID))
-	savedChats, err = s.m.Chats(0, 10)
+	savedChats, err = s.m.Chats()
 	s.Require().NoError(err)
 	s.Require().Equal(0, len(savedChats))
 }
@@ -198,7 +197,7 @@ func (s *MessengerSuite) TestChatPersistenceUpdate() {
 	}
 
 	s.Require().NoError(s.m.SaveChat(chat))
-	savedChats, err := s.m.Chats(0, 10)
+	savedChats, err := s.m.Chats()
 	s.Require().NoError(err)
 	s.Require().Equal(1, len(savedChats))
 
@@ -209,7 +208,7 @@ func (s *MessengerSuite) TestChatPersistenceUpdate() {
 
 	chat.Name = "updated-name"
 	s.Require().NoError(s.m.SaveChat(chat))
-	updatedChats, err := s.m.Chats(0, 10)
+	updatedChats, err := s.m.Chats()
 	s.Require().NoError(err)
 	s.Require().Equal(1, len(updatedChats))
 
@@ -217,37 +216,6 @@ func (s *MessengerSuite) TestChatPersistenceUpdate() {
 	expectedUpdatedChat := &chat
 
 	s.Require().Equal(expectedUpdatedChat, actualUpdatedChat)
-}
-
-func (s *MessengerSuite) TestChatPagination() {
-	for i := 0; i <= 20; i++ {
-		chat := Chat{
-			ID:                     fmt.Sprintf("chat-name-%d", i),
-			Name:                   "chat-name",
-			Color:                  "#fffff",
-			Active:                 true,
-			ChatType:               ChatTypePublic,
-			Timestamp:              int64(i),
-			LastClockValue:         20,
-			DeletedAtClockValue:    30,
-			UnviewedMessagesCount:  40,
-			LastMessageContentType: "something",
-			LastMessageContent:     "something-else",
-		}
-
-		s.Require().NoError(s.m.SaveChat(chat))
-	}
-	firstPageChats, err := s.m.Chats(0, 10)
-	s.Require().NoError(err)
-	s.Require().Equal(10, len(firstPageChats))
-	s.Require().Equal(int64(20), firstPageChats[0].Timestamp)
-	s.Require().Equal(int64(11), firstPageChats[9].Timestamp)
-
-	secondPageChats, err := s.m.Chats(10, -1)
-	s.Require().NoError(err)
-	s.Require().Equal(11, len(secondPageChats))
-	s.Require().Equal(int64(10), secondPageChats[0].Timestamp)
-	s.Require().Equal(int64(0), secondPageChats[10].Timestamp)
 }
 
 func (s *MessengerSuite) TestChatPersistenceOneToOne() {
@@ -272,7 +240,7 @@ func (s *MessengerSuite) TestChatPersistenceOneToOne() {
 	s.Require().NoError(err)
 
 	s.Require().NoError(s.m.SaveChat(chat))
-	savedChats, err := s.m.Chats(0, 10)
+	savedChats, err := s.m.Chats()
 	s.Require().NoError(err)
 	s.Require().Equal(1, len(savedChats))
 
@@ -337,7 +305,7 @@ func (s *MessengerSuite) TestChatPersistencePrivateGroupChat() {
 		LastMessageContent:     "something-else",
 	}
 	s.Require().NoError(s.m.SaveChat(chat))
-	savedChats, err := s.m.Chats(0, 10)
+	savedChats, err := s.m.Chats()
 	s.Require().NoError(err)
 	s.Require().Equal(1, len(savedChats))
 
@@ -506,7 +474,7 @@ func (s *MessengerSuite) TestBlockContact() {
 	s.Require().Equal("blocked", savedContacts[0].Name)
 
 	// The chat is deleted
-	actualChats, err := s.m.Chats(0, -1)
+	actualChats, err := s.m.Chats()
 	s.Require().NoError(err)
 	s.Require().Equal(2, len(actualChats))
 
