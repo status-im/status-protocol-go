@@ -17,7 +17,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/status-im/status-protocol-go/sqlite"
-	migrations "github.com/status-im/status-protocol-go/transport/whisper/migrations"
 )
 
 func TestFiltersManagerSuite(t *testing.T) {
@@ -72,12 +71,7 @@ func (s *FiltersManagerSuite) SetupTest() {
 		s.manager = append(s.manager, testKey)
 	}
 
-	db, err := sqlite.Open(s.dbPath, "filter-key", sqlite.MigrationConfig{
-		AssetNames: migrations.AssetNames(),
-		AssetGetter: func(name string) ([]byte, error) {
-			return migrations.Asset(name)
-		},
-	})
+	db, err := sqlite.Open(s.dbPath, "filter-key")
 	s.Require().NoError(err)
 
 	whisper := whisper.New(nil)

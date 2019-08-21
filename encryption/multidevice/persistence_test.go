@@ -5,7 +5,6 @@ import (
 	"os"
 	"testing"
 
-	migrations "github.com/status-im/status-protocol-go/encryption/migrations"
 	"github.com/status-im/status-protocol-go/sqlite"
 	"github.com/stretchr/testify/suite"
 )
@@ -28,12 +27,7 @@ type SQLLitePersistenceTestSuite struct {
 func (s *SQLLitePersistenceTestSuite) SetupTest() {
 	os.Remove(dbPath)
 
-	db, err := sqlite.Open(dbPath, "test-key", sqlite.MigrationConfig{
-		AssetNames: migrations.AssetNames(),
-		AssetGetter: func(name string) ([]byte, error) {
-			return migrations.Asset(name)
-		},
-	})
+	db, err := sqlite.Open(dbPath, "test-key")
 	s.Require().NoError(err)
 
 	s.service = newSQLitePersistence(db)
