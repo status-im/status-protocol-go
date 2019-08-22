@@ -338,10 +338,21 @@ func (m *Messenger) Init() error {
 		if !chat.Active {
 			continue
 		}
-		if chat.ChatType == ChatTypePublic {
+		switch chat.ChatType {
+		case ChatTypePublic:
 			publicChatIDs = append(publicChatIDs, chat.ID)
-		} else if chat.ChatType == ChatTypeOneToOne {
+		case ChatTypeOneToOne:
 			publicKeys = append(publicKeys, chat.PublicKey)
+		case ChatTypePrivateGroupChat:
+			for _, member := range chat.Members {
+				publicKey, err := member.PublicKey()
+				if err != nil {
+					return errors.Wrapf(err, "invalid public key for member %s in chat %s", member.ID, chat.Name)
+				}
+				publicKeys = append(publicKeys, publicKey)
+			}
+		default:
+			return errors.New("invalid chat type")
 		}
 	}
 

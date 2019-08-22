@@ -65,7 +65,7 @@ func (c Contact) IsBlocked() bool {
 	return existsInStringSlice(c.SystemTags, contactBlocked)
 }
 
-// exists checks if a string is in a set.
+// existsInStringSlice checks if a string is in a set.
 func existsInStringSlice(set []string, find string) bool {
 	for _, s := range set {
 		if s == find {
