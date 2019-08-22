@@ -87,12 +87,12 @@ func (s *MessengerSuite) TestRetrievePublic() {
 	time.Sleep(time.Millisecond * 500)
 
 	// Retrieve chat
-	messages, err := s.m.Retrieve(context.Background(), chat, RetrieveLatest)
+	messages, err := s.m.RetrieveAll(context.Background(), RetrieveLatest)
 	s.NoError(err)
 	s.Len(messages, 1)
 
 	// Retrieve again to test skipping already existing err.
-	messages, err = s.m.Retrieve(context.Background(), chat, RetrieveLastDay)
+	messages, err = s.m.RetrieveAll(context.Background(), RetrieveLastDay)
 	s.NoError(err)
 	s.Require().Len(messages, 1)
 
@@ -114,12 +114,12 @@ func (s *MessengerSuite) TestRetrievePrivate() {
 	time.Sleep(time.Millisecond * 500)
 
 	// Retrieve chat
-	messages, err := s.m.Retrieve(context.Background(), chat, RetrieveLatest)
+	messages, err := s.m.RetrieveAll(context.Background(), RetrieveLatest)
 	s.NoError(err)
 	s.Len(messages, 1)
 
 	// Retrieve again to test skipping already existing err.
-	messages, err = s.m.Retrieve(context.Background(), chat, RetrieveLastDay)
+	messages, err = s.m.RetrieveAll(context.Background(), RetrieveLastDay)
 	s.NoError(err)
 	s.Len(messages, 1)
 

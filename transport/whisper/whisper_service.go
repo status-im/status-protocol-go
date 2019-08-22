@@ -113,7 +113,7 @@ func (a *WhisperServiceTransport) RemoveFilters(chats []*Filter) error {
 	return a.chats.Remove(chats...)
 }
 
-func (a *WhisperServiceTransport) Reset() error {
+func (a *WhisperServiceTransport) ResetFilters() error {
 	return a.chats.Reset()
 }
 
@@ -136,7 +136,11 @@ func (a *WhisperServiceTransport) LeavePublic(chatID string) error {
 }
 
 func (a *WhisperServiceTransport) JoinPrivate(publicKey *ecdsa.PublicKey) error {
-	_, err := a.chats.LoadContactCode(publicKey)
+	_, err := a.chats.LoadDiscovery()
+	if err != nil {
+		return err
+	}
+	_, err = a.chats.LoadContactCode(publicKey)
 	return err
 }
 
@@ -160,10 +164,11 @@ func (a *WhisperServiceTransport) RetrieveAllMessages() ([]ChatMessages, error) 
 			return nil, errors.New("failed to return a filter")
 		}
 
-		messages := chatMessages[chat.ChatID]
-		messages.ChatID = chat.ChatID
-		messages.Public = chat.IsPublic()
-		messages.Messages = append(messages.Messages, f.Retrieve()...)
+		ch := chatMessages[chat.ChatID]
+		ch.ChatID = chat.ChatID
+		ch.Public = chat.IsPublic()
+		ch.Messages = append(ch.Messages, f.Retrieve()...)
+		chatMessages[chat.ChatID] = ch
 	}
 
 	var result []ChatMessages
@@ -323,10 +328,11 @@ func (a *WhisperServiceTransport) Track(identifiers [][]byte, hash []byte, newMe
 	}
 }
 
-func (a *WhisperServiceTransport) Stop() {
+func (a *WhisperServiceTransport) Stop() error {
 	if a.envelopesMonitor != nil {
 		a.envelopesMonitor.Stop()
 	}
+	return nil
 }
 
 // MessagesRequest is a RequestMessages() request payload.

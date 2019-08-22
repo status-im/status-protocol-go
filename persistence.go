@@ -335,19 +335,30 @@ func (db sqlitePersistence) SaveContact(contact Contact, tx *sql.Tx) error {
 }
 
 // Messages returns messages for a given contact, in a given period. Ordered by a timestamp.
-func (db sqlitePersistence) Messages(chatID string, from, to time.Time) (result []*protocol.Message, err error) {
+func (db sqlitePersistence) Messages(from, to time.Time) (result []*protocol.Message, err error) {
 	rows, err := db.db.Query(`SELECT
-id, content_type, message_type, text, clock, timestamp, content_chat_id, content_text, public_key, flags
-FROM user_messages WHERE chat_id = ? AND timestamp >= ? AND timestamp <= ? ORDER BY timestamp`,
-		chatID, protocol.TimestampInMsFromTime(from), protocol.TimestampInMsFromTime(to))
+			id, 
+			content_type, 
+			message_type, 
+			text, 
+			clock, 
+			timestamp, 
+			content_chat_id, 
+			content_text, 
+			public_key, 
+			flags
+		FROM user_messages 
+		WHERE timestamp >= ? AND timestamp <= ? 
+		ORDER BY timestamp`,
+		protocol.TimestampInMsFromTime(from),
+		protocol.TimestampInMsFromTime(to),
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var (
-		rst = []*protocol.Message{}
-	)
+	var rst []*protocol.Message
 	for rows.Next() {
 		msg := protocol.Message{
 			Content: protocol.Content{},
@@ -458,7 +469,7 @@ func (db sqlitePersistence) UnreadMessages(chatID string) ([]*protocol.Message, 
 	return result, nil
 }
 
-func (db sqlitePersistence) SaveMessages(chatID string, messages []*protocol.Message) (last int64, err error) {
+func (db sqlitePersistence) SaveMessages(messages []*protocol.Message) (last int64, err error) {
 	var (
 		tx   *sql.Tx
 		stmt *sql.Stmt
@@ -491,7 +502,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 			pkey, err = marshalECDSAPub(msg.SigPubKey)
 		}
 		rst, err = stmt.Exec(
-			msg.ID, chatID, msg.ContentT, msg.MessageT, msg.Text,
+			msg.ID, msg.ChatID, msg.ContentT, msg.MessageT, msg.Text,
 			msg.Clock, msg.Timestamp, msg.Content.ChatID, msg.Content.Text,
 			pkey, msg.Flags)
 		if err != nil {
