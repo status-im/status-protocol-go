@@ -1,8 +1,6 @@
 package publisher
 
 import (
-	"database/sql"
-	"io/ioutil"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -22,14 +20,8 @@ type PublisherTestSuite struct {
 }
 
 func (p *PublisherTestSuite) SetupTest(installationID string) {
-	dir, err := ioutil.TempDir("", "publisher-test")
-	p.Require().NoError(err)
-
-	db, err := sql.Open("sqlite3", dir)
-	p.Require().NoError(err)
-
 	p.logger = tt.MustCreateTestLogger()
-	p.publisher = New(db, p.logger)
+	p.publisher = New(p.logger)
 }
 
 func (p *PublisherTestSuite) TearDownTest() {
