@@ -7,11 +7,14 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/crypto"
-
-	"go.uber.org/zap"
-
 	"github.com/pkg/errors"
 	whisper "github.com/status-im/whisper/whisperv6"
+	"go.uber.org/zap"
+
+	datasyncnode "github.com/vacp2p/mvds/node"
+	datasyncpeers "github.com/vacp2p/mvds/peers"
+	datasyncstate "github.com/vacp2p/mvds/state"
+	datasyncstore "github.com/vacp2p/mvds/store"
 
 	"github.com/status-im/status-protocol-go/datasync"
 	datasyncpeer "github.com/status-im/status-protocol-go/datasync/peer"
@@ -21,10 +24,6 @@ import (
 	"github.com/status-im/status-protocol-go/sqlite"
 	transport "github.com/status-im/status-protocol-go/transport/whisper"
 	protocol "github.com/status-im/status-protocol-go/v1"
-	datasyncnode "github.com/vacp2p/mvds/node"
-	datasyncpeers "github.com/vacp2p/mvds/peers"
-	datasyncstate "github.com/vacp2p/mvds/state"
-	datasyncstore "github.com/vacp2p/mvds/store"
 )
 
 var (

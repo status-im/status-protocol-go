@@ -10,13 +10,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/status-im/status-protocol-go/tt"
-
+	whisper "github.com/status-im/whisper/whisperv6"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
-
-	"github.com/ethereum/go-ethereum/crypto"
-	whisper "github.com/status-im/whisper/whisperv6"
 )
 
 func TestMessengerSuite(t *testing.T) {

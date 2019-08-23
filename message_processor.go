@@ -5,19 +5,18 @@ import (
 	"crypto/ecdsa"
 	"time"
 
-	"github.com/status-im/status-protocol-go/encryption/multidevice"
-
-	"github.com/golang/protobuf/proto"
-	"github.com/status-im/status-protocol-go/encryption"
-	transport "github.com/status-im/status-protocol-go/transport/whisper"
-
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
-	"github.com/status-im/status-protocol-go/datasync"
-	datasyncpeer "github.com/status-im/status-protocol-go/datasync/peer"
-	protocol "github.com/status-im/status-protocol-go/v1"
 	whisper "github.com/status-im/whisper/whisperv6"
 	"go.uber.org/zap"
+
+	"github.com/status-im/status-protocol-go/datasync"
+	datasyncpeer "github.com/status-im/status-protocol-go/datasync/peer"
+	"github.com/status-im/status-protocol-go/encryption"
+	"github.com/status-im/status-protocol-go/encryption/multidevice"
+	transport "github.com/status-im/status-protocol-go/transport/whisper"
+	protocol "github.com/status-im/status-protocol-go/v1"
 )
 
 // Whisper message properties.

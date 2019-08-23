@@ -7,27 +7,26 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/golang/protobuf/proto"
+	whisper "github.com/status-im/whisper/whisperv6"
+	"github.com/stretchr/testify/suite"
+	"go.uber.org/zap"
+
+	"github.com/status-im/status-protocol-go/datasync"
+	datasyncpeer "github.com/status-im/status-protocol-go/datasync/peer"
 	"github.com/status-im/status-protocol-go/encryption"
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
 	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
 	"github.com/status-im/status-protocol-go/sqlite"
+	transport "github.com/status-im/status-protocol-go/transport/whisper"
 	protocol "github.com/status-im/status-protocol-go/v1"
 
-	"github.com/status-im/status-protocol-go/datasync"
-	datasyncpeer "github.com/status-im/status-protocol-go/datasync/peer"
-	transport "github.com/status-im/status-protocol-go/transport/whisper"
-	whisper "github.com/status-im/whisper/whisperv6"
 	datasyncnode "github.com/vacp2p/mvds/node"
 	datasyncpeers "github.com/vacp2p/mvds/peers"
 	datasyncproto "github.com/vacp2p/mvds/protobuf"
 	datasyncstate "github.com/vacp2p/mvds/state"
 	datasyncstore "github.com/vacp2p/mvds/store"
-
-	"github.com/ethereum/go-ethereum/crypto"
-	"go.uber.org/zap"
-
-	"github.com/stretchr/testify/suite"
 )
 
 func TestMessageProcessorSuite(t *testing.T) {
