@@ -6,8 +6,6 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/ethereum/go-ethereum/log"
-
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/pkg/errors"
 	whisper "github.com/status-im/whisper/whisperv6"
@@ -611,7 +609,7 @@ func (m *Messenger) RetrieveAllByChat(ctx context.Context, c RetrieveConfig) (ma
 	for _, message := range messages {
 		chat := mapMessageToChat(message, chats)
 		if chat == nil {
-			log.Error("[Messenger::RetrieveAllByChat] failed to map message to chat")
+			m.logger.Error("failed to map a message to chat")
 			continue
 		}
 		result[chat] = append(result[chat], message)
