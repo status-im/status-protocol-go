@@ -6,6 +6,8 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/ethereum/go-ethereum/log"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/pkg/errors"
 	whisper "github.com/status-im/whisper/whisperv6"
@@ -592,6 +594,41 @@ func (m *Messenger) RetrieveAll(ctx context.Context, c RetrieveConfig) ([]*proto
 	m.ownMessages = nil
 
 	return result, nil
+}
+
+func (m *Messenger) RetrieveAllByChat(ctx context.Context, c RetrieveConfig) (map[*Chat][]*protocol.Message, error) {
+	messages, err := m.RetrieveAll(ctx, c)
+	if err != nil {
+		return nil, err
+	}
+
+	chats, err := m.Chats()
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[*Chat][]*protocol.Message)
+	for _, message := range messages {
+		chat := mapMessageToChat(message, chats)
+		if chat == nil {
+			log.Error("[Messenger::RetrieveAllByChat] failed to map message to chat")
+			continue
+		}
+		result[chat] = append(result[chat], message)
+	}
+	return result, nil
+}
+
+func mapMessageToChat(message *protocol.Message, chats []*Chat) *Chat {
+	for _, chat := range chats {
+		if isPubKeyEqual(chat.PublicKey, message.SigPubKey) {
+			return chat
+		}
+		if chat.ID == message.ChatID {
+			return chat
+		}
+	}
+	return nil
 }
 
 func (m *Messenger) retrieveSaved(ctx context.Context, c RetrieveConfig) (messages []*protocol.Message, err error) {
