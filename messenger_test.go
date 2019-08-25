@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common/hexutil"
+
 	"github.com/status-im/status-protocol-go/tt"
 
 	"github.com/stretchr/testify/suite"
@@ -62,6 +64,143 @@ func (s *MessengerSuite) TearDownTest() {
 	s.Require().NoError(s.m.Shutdown())
 	_ = os.Remove(s.tmpFile.Name())
 	_ = s.logger.Sync()
+}
+
+func (s *MessengerSuite) TestInit() {
+	testCases := []struct {
+		Name         string
+		Prep         func()
+		AddedFilters int
+	}{
+		{
+			Name:         "no chats and contacts",
+			Prep:         func() {},
+			AddedFilters: 3,
+		},
+		{
+			Name: "active public chat",
+			Prep: func() {
+				publicChat := Chat{
+					ChatType: ChatTypePublic,
+					ID:       "some-public-chat",
+					Active:   true,
+				}
+				err := s.m.SaveChat(publicChat)
+				s.Require().NoError(err)
+			},
+			AddedFilters: 1,
+		},
+		{
+			Name: "active one-to-one chat",
+			Prep: func() {
+				key, err := crypto.GenerateKey()
+				s.Require().NoError(err)
+				privateChat := Chat{
+					ID:        hexutil.Encode(crypto.FromECDSAPub(&key.PublicKey)),
+					ChatType:  ChatTypeOneToOne,
+					PublicKey: &key.PublicKey,
+					Active:    true,
+				}
+				err = s.m.SaveChat(privateChat)
+				s.Require().NoError(err)
+			},
+			AddedFilters: 1,
+		},
+		{
+			Name: "active group chat",
+			Prep: func() {
+				key1, err := crypto.GenerateKey()
+				s.Require().NoError(err)
+				key2, err := crypto.GenerateKey()
+				s.Require().NoError(err)
+				groupChat := Chat{
+					ChatType: ChatTypePrivateGroupChat,
+					Active:   true,
+					Members: []ChatMember{
+						{
+							ID: hexutil.Encode(crypto.FromECDSAPub(&key1.PublicKey)),
+						},
+						{
+							ID: hexutil.Encode(crypto.FromECDSAPub(&key2.PublicKey)),
+						},
+					},
+				}
+				err = s.m.SaveChat(groupChat)
+				s.Require().NoError(err)
+			},
+			AddedFilters: 2,
+		},
+		{
+			Name: "inactive chat",
+			Prep: func() {
+				publicChat := Chat{
+					ChatType: ChatTypePublic,
+					ID:       "some-public-chat-2",
+					Active:   false,
+				}
+				err := s.m.SaveChat(publicChat)
+				s.Require().NoError(err)
+			},
+			AddedFilters: 0,
+		},
+		{
+			Name: "added contact",
+			Prep: func() {
+				key, err := crypto.GenerateKey()
+				s.Require().NoError(err)
+				contact := Contact{
+					ID:         hexutil.Encode(crypto.FromECDSAPub(&key.PublicKey)),
+					Name:       "Some Contact",
+					SystemTags: []string{contactAdded},
+				}
+				err = s.m.SaveContact(contact)
+				s.Require().NoError(err)
+			},
+			AddedFilters: 1,
+		},
+		{
+			Name: "added and blocked contact",
+			Prep: func() {
+				key, err := crypto.GenerateKey()
+				s.Require().NoError(err)
+				contact := Contact{
+					ID:         hexutil.Encode(crypto.FromECDSAPub(&key.PublicKey)),
+					Name:       "Some Contact",
+					SystemTags: []string{contactAdded, contactBlocked},
+				}
+				err = s.m.SaveContact(contact)
+				s.Require().NoError(err)
+			},
+			AddedFilters: 0,
+		},
+		{
+			Name: "added by them contact",
+			Prep: func() {
+				key, err := crypto.GenerateKey()
+				s.Require().NoError(err)
+				contact := Contact{
+					ID:         hexutil.Encode(crypto.FromECDSAPub(&key.PublicKey)),
+					Name:       "Some Contact",
+					SystemTags: []string{contactRequestReceived},
+				}
+				err = s.m.SaveContact(contact)
+				s.Require().NoError(err)
+			},
+			AddedFilters: 0,
+		},
+	}
+
+	expectedFilters := 0
+	for _, tc := range testCases {
+		s.Run(tc.Name, func() {
+			tc.Prep()
+			err := s.m.Init()
+			s.Require().NoError(err)
+			filters := s.m.adapter.transport.Filters()
+			expectedFilters += tc.AddedFilters
+			s.Equal(expectedFilters, len(filters))
+		})
+	}
 }
 
 func (s *MessengerSuite) TestSendPublic() {

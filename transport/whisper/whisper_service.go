@@ -104,7 +104,6 @@ func NewWhisperServiceTransport(
 		shh:              shh,
 		shhAPI:           whisper.NewPublicWhisperAPI(shh),
 		envelopesMonitor: envelopesMonitor,
-
 		keysManager: &whisperServiceKeysManager{
 			shh:               shh,
 			privateKey:        privateKey,
@@ -126,6 +125,10 @@ func NewWhisperServiceTransport(
 
 func (a *WhisperServiceTransport) InitFilters(chatIDs []string, publicKeys []*ecdsa.PublicKey) ([]*Filter, error) {
 	return a.filters.Init(chatIDs, publicKeys, a.genericDiscoveryTopicEnabled)
+}
+
+func (a *WhisperServiceTransport) Filters() []*Filter {
+	return a.filters.Filters()
 }
 
 // DEPRECATED
