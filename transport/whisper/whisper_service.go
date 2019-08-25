@@ -56,16 +56,27 @@ func (m *whisperServiceKeysManager) RawSymKey(id string) ([]byte, error) {
 	return m.shh.GetSymKey(id)
 }
 
+type Option func(*WhisperServiceTransport) error
+
+func SetGenericDiscoveryTopicSupport(val bool) Option {
+	return func(t *WhisperServiceTransport) error {
+		t.genericDiscoveryTopicEnabled = val
+		return nil
+	}
+}
+
 // WhisperServiceTransport is a transport based on Whisper service.
 type WhisperServiceTransport struct {
 	shh         *whisper.Whisper
 	shhAPI      *whisper.PublicWhisperAPI // only PublicWhisperAPI implements logic to send messages
 	keysManager *whisperServiceKeysManager
-	chats       *filtersManager
+	filters     *filtersManager
 	logger      *zap.Logger
 
 	mailservers      []string
 	envelopesMonitor *EnvelopesMonitor
+
+	genericDiscoveryTopicEnabled bool
 }
 
 // NewWhisperService returns a new WhisperServiceTransport.
@@ -76,8 +87,9 @@ func NewWhisperServiceTransport(
 	mailservers []string,
 	envelopesMonitorConfig *EnvelopesMonitorConfig,
 	logger *zap.Logger,
+	opts ...Option,
 ) (*WhisperServiceTransport, error) {
-	chats, err := newFiltersManager(db, shh, privateKey, logger)
+	filtersManager, err := newFiltersManager(db, shh, privateKey, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -87,66 +99,82 @@ func NewWhisperServiceTransport(
 		envelopesMonitor = NewEnvelopesMonitor(shh, envelopesMonitorConfig)
 		envelopesMonitor.Start()
 	}
-	return &WhisperServiceTransport{
+
+	t := &WhisperServiceTransport{
 		shh:              shh,
 		shhAPI:           whisper.NewPublicWhisperAPI(shh),
 		envelopesMonitor: envelopesMonitor,
-
 		keysManager: &whisperServiceKeysManager{
 			shh:               shh,
 			privateKey:        privateKey,
 			passToSymKeyCache: make(map[string]string),
 		},
-		chats:       chats,
+		filters:     filtersManager,
 		mailservers: mailservers,
 		logger:      logger.With(zap.Namespace("WhisperServiceTransport")),
-	}, nil
+	}
+
+	for _, opt := range opts {
+		if err := opt(t); err != nil {
+			return nil, err
+		}
+	}
+
+	return t, nil
+}
+
+func (a *WhisperServiceTransport) InitFilters(chatIDs []string, publicKeys []*ecdsa.PublicKey) ([]*Filter, error) {
+	return a.filters.Init(chatIDs, publicKeys, a.genericDiscoveryTopicEnabled)
+}
+
+func (a *WhisperServiceTransport) Filters() []*Filter {
+	return a.filters.Filters()
 }
 
 // DEPRECATED
-func (a *WhisperServiceTransport) LoadFilters(chats []*Filter, genericDiscoveryTopicEnabled bool) ([]*Filter, error) {
-	return a.chats.InitWithChats(chats, genericDiscoveryTopicEnabled)
+func (a *WhisperServiceTransport) LoadFilters(filters []*Filter) ([]*Filter, error) {
+	return a.filters.InitWithFilters(filters, a.genericDiscoveryTopicEnabled)
 }
 
 // DEPRECATED
-func (a *WhisperServiceTransport) RemoveFilters(chats []*Filter) error {
-	return a.chats.Remove(chats...)
+func (a *WhisperServiceTransport) RemoveFilters(filters []*Filter) error {
+	return a.filters.Remove(filters...)
 }
 
-func (a *WhisperServiceTransport) ResetFilters() error {
-	return a.chats.Reset()
+func (a *WhisperServiceTransport) Reset() error {
+	return a.filters.Reset()
 }
 
 func (a *WhisperServiceTransport) ProcessNegotiatedSecret(secret NegotiatedSecret) error {
-	_, err := a.chats.LoadNegotiated(secret)
+	_, err := a.filters.LoadNegotiated(secret)
 	return err
 }
 
 func (a *WhisperServiceTransport) JoinPublic(chatID string) error {
-	_, err := a.chats.LoadPublic(chatID)
+	_, err := a.filters.LoadPublic(chatID)
 	return err
 }
 
 func (a *WhisperServiceTransport) LeavePublic(chatID string) error {
-	chat := a.chats.ChatByID(chatID)
+	chat := a.filters.Filter(chatID)
 	if chat != nil {
 		return nil
 	}
-	return a.chats.Remove(chat)
+	return a.filters.Remove(chat)
 }
 
 func (a *WhisperServiceTransport) JoinPrivate(publicKey *ecdsa.PublicKey) error {
-	_, err := a.chats.LoadDiscovery()
+	_, err := a.filters.LoadDiscovery()
 	if err != nil {
 		return err
 	}
-	_, err = a.chats.LoadContactCode(publicKey)
+	_, err = a.filters.LoadContactCode(publicKey)
 	return err
 }
 
 func (a *WhisperServiceTransport) LeavePrivate(publicKey *ecdsa.PublicKey) error {
-	chats := a.chats.ChatsByPublicKey(publicKey)
-	return a.chats.Remove(chats...)
+	filters := a.filters.FiltersByPublicKey(publicKey)
+	return a.filters.Remove(filters...)
 }
 
 type ChatMessages struct {
@@ -158,17 +186,17 @@ type ChatMessages struct {
 func (a *WhisperServiceTransport) RetrieveAllMessages() ([]ChatMessages, error) {
 	chatMessages := make(map[string]ChatMessages)
 
-	for _, chat := range a.chats.Chats() {
-		f := a.shh.GetFilter(chat.FilterID)
+	for _, filter := range a.filters.Filters() {
+		f := a.shh.GetFilter(filter.FilterID)
 		if f == nil {
 			return nil, errors.New("failed to return a filter")
 		}
 
-		ch := chatMessages[chat.ChatID]
-		ch.ChatID = chat.ChatID
-		ch.Public = chat.IsPublic()
+		ch := chatMessages[filter.ChatID]
+		ch.ChatID = filter.ChatID
+		ch.Public = filter.IsPublic()
 		ch.Messages = append(ch.Messages, f.Retrieve()...)
-		chatMessages[chat.ChatID] = ch
+		chatMessages[filter.ChatID] = ch
 	}
 
 	var result []ChatMessages
@@ -179,12 +207,12 @@ func (a *WhisperServiceTransport) RetrieveAllMessages() ([]ChatMessages, error) 
 }
 
 func (a *WhisperServiceTransport) RetrievePublicMessages(chatID string) ([]*whisper.ReceivedMessage, error) {
-	chat, err := a.chats.LoadPublic(chatID)
+	filter, err := a.filters.LoadPublic(chatID)
 	if err != nil {
 		return nil, err
 	}
 
-	f := a.shh.GetFilter(chat.FilterID)
+	f := a.shh.GetFilter(filter.FilterID)
 	if f == nil {
 		return nil, errors.New("failed to return a filter")
 	}
@@ -193,8 +221,8 @@ func (a *WhisperServiceTransport) RetrievePublicMessages(chatID string) ([]*whis
 }
 
 func (a *WhisperServiceTransport) RetrievePrivateMessages(publicKey *ecdsa.PublicKey) ([]*whisper.ReceivedMessage, error) {
-	chats := a.chats.ChatsByPublicKey(publicKey)
-	discoveryChats, err := a.chats.Init(nil, nil, true)
+	chats := a.filters.FiltersByPublicKey(publicKey)
+	discoveryChats, err := a.filters.Init(nil, nil, true)
 	if err != nil {
 		return nil, err
 	}
@@ -217,14 +245,14 @@ func (a *WhisperServiceTransport) RetrievePrivateMessages(publicKey *ecdsa.Publi
 func (a *WhisperServiceTransport) RetrieveRawAll() (map[Filter][]*whisper.ReceivedMessage, error) {
 	result := make(map[Filter][]*whisper.ReceivedMessage)
 
-	allChats := a.chats.Chats()
-	for _, chat := range allChats {
-		f := a.shh.GetFilter(chat.FilterID)
+	allFilters := a.filters.Filters()
+	for _, filter := range allFilters {
+		f := a.shh.GetFilter(filter.FilterID)
 		if f == nil {
 			return nil, errors.New("failed to return a filter")
 		}
 
-		result[*chat] = append(result[*chat], f.Retrieve()...)
+		result[*filter] = append(result[*filter], f.Retrieve()...)
 	}
 
 	return result, nil
@@ -247,13 +275,13 @@ func (a *WhisperServiceTransport) SendPublic(ctx context.Context, newMessage *wh
 		return nil, err
 	}
 
-	chat, err := a.chats.LoadPublic(chatName)
+	filter, err := a.filters.LoadPublic(chatName)
 	if err != nil {
 		return nil, err
 	}
 
-	newMessage.SymKeyID = chat.SymKeyID
-	newMessage.Topic = chat.Topic
+	newMessage.SymKeyID = filter.SymKeyID
+	newMessage.Topic = filter.Topic
 
 	return a.shhAPI.Post(ctx, *newMessage)
 }
@@ -263,7 +291,7 @@ func (a *WhisperServiceTransport) SendPrivateWithSharedSecret(ctx context.Contex
 		return nil, err
 	}
 
-	chat, err := a.chats.LoadNegotiated(NegotiatedSecret{
+	filter, err := a.filters.LoadNegotiated(NegotiatedSecret{
 		PublicKey: publicKey,
 		Key:       secret,
 	})
@@ -271,8 +299,8 @@ func (a *WhisperServiceTransport) SendPrivateWithSharedSecret(ctx context.Contex
 		return nil, err
 	}
 
-	newMessage.SymKeyID = chat.SymKeyID
-	newMessage.Topic = chat.Topic
+	newMessage.SymKeyID = filter.SymKeyID
+	newMessage.Topic = filter.Topic
 	newMessage.PublicKey = nil
 
 	return a.shhAPI.Post(ctx, *newMessage)
@@ -283,12 +311,12 @@ func (a *WhisperServiceTransport) SendPrivateWithPartitioned(ctx context.Context
 		return nil, err
 	}
 
-	chat, err := a.chats.LoadPartitioned(publicKey)
+	filter, err := a.filters.LoadPartitioned(publicKey)
 	if err != nil {
 		return nil, err
 	}
 
-	newMessage.Topic = chat.Topic
+	newMessage.Topic = filter.Topic
 	newMessage.PublicKey = crypto.FromECDSAPub(publicKey)
 
 	return a.shhAPI.Post(ctx, *newMessage)

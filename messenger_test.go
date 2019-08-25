@@ -4,12 +4,12 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"encoding/hex"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/status-im/status-protocol-go/tt"
 	whisper "github.com/status-im/whisper/whisperv6"
@@ -61,6 +61,143 @@ func (s *MessengerSuite) TearDownTest() {
 	s.Require().NoError(s.m.Shutdown())
 	_ = os.Remove(s.tmpFile.Name())
 	_ = s.logger.Sync()
+}
+
+func (s *MessengerSuite) TestInit() {
+	testCases := []struct {
+		Name         string
+		Prep         func()
+		AddedFilters int
+	}{
+		{
+			Name:         "no chats and contacts",
+			Prep:         func() {},
+			AddedFilters: 3,
+		},
+		{
+			Name: "active public chat",
+			Prep: func() {
+				publicChat := Chat{
+					ChatType: ChatTypePublic,
+					ID:       "some-public-chat",
+					Active:   true,
+				}
+				err := s.m.SaveChat(publicChat)
+				s.Require().NoError(err)
+			},
+			AddedFilters: 1,
+		},
+		{
+			Name: "active one-to-one chat",
+			Prep: func() {
+				key, err := crypto.GenerateKey()
+				s.Require().NoError(err)
+				privateChat := Chat{
+					ID:        hexutil.Encode(crypto.FromECDSAPub(&key.PublicKey)),
+					ChatType:  ChatTypeOneToOne,
+					PublicKey: &key.PublicKey,
+					Active:    true,
+				}
+				err = s.m.SaveChat(privateChat)
+				s.Require().NoError(err)
+			},
+			AddedFilters: 1,
+		},
+		{
+			Name: "active group chat",
+			Prep: func() {
+				key1, err := crypto.GenerateKey()
+				s.Require().NoError(err)
+				key2, err := crypto.GenerateKey()
+				s.Require().NoError(err)
+				groupChat := Chat{
+					ChatType: ChatTypePrivateGroupChat,
+					Active:   true,
+					Members: []ChatMember{
+						{
+							ID: hexutil.Encode(crypto.FromECDSAPub(&key1.PublicKey)),
+						},
+						{
+							ID: hexutil.Encode(crypto.FromECDSAPub(&key2.PublicKey)),
+						},
+					},
+				}
+				err = s.m.SaveChat(groupChat)
+				s.Require().NoError(err)
+			},
+			AddedFilters: 2,
+		},
+		{
+			Name: "inactive chat",
+			Prep: func() {
+				publicChat := Chat{
+					ChatType: ChatTypePublic,
+					ID:       "some-public-chat-2",
+					Active:   false,
+				}
+				err := s.m.SaveChat(publicChat)
+				s.Require().NoError(err)
+			},
+			AddedFilters: 0,
+		},
+		{
+			Name: "added contact",
+			Prep: func() {
+				key, err := crypto.GenerateKey()
+				s.Require().NoError(err)
+				contact := Contact{
+					ID:         hexutil.Encode(crypto.FromECDSAPub(&key.PublicKey)),
+					Name:       "Some Contact",
+					SystemTags: []string{contactAdded},
+				}
+				err = s.m.SaveContact(contact)
+				s.Require().NoError(err)
+			},
+			AddedFilters: 1,
+		},
+		{
+			Name: "added and blocked contact",
+			Prep: func() {
+				key, err := crypto.GenerateKey()
+				s.Require().NoError(err)
+				contact := Contact{
+					ID:         hexutil.Encode(crypto.FromECDSAPub(&key.PublicKey)),
+					Name:       "Some Contact",
+					SystemTags: []string{contactAdded, contactBlocked},
+				}
+				err = s.m.SaveContact(contact)
+				s.Require().NoError(err)
+			},
+			AddedFilters: 0,
+		},
+		{
+			Name: "added by them contact",
+			Prep: func() {
+				key, err := crypto.GenerateKey()
+				s.Require().NoError(err)
+				contact := Contact{
+					ID:         hexutil.Encode(crypto.FromECDSAPub(&key.PublicKey)),
+					Name:       "Some Contact",
+					SystemTags: []string{contactRequestReceived},
+				}
+				err = s.m.SaveContact(contact)
+				s.Require().NoError(err)
+			},
+			AddedFilters: 0,
+		},
+	}
+
+	expectedFilters := 0
+	for _, tc := range testCases {
+		s.Run(tc.Name, func() {
+			tc.Prep()
+			err := s.m.Init()
+			s.Require().NoError(err)
+			filters := s.m.transport.Filters()
+			expectedFilters += tc.AddedFilters
+			s.Equal(expectedFilters, len(filters))
+		})
+	}
 }
 
 func (s *MessengerSuite) TestSendPublic() {
@@ -143,7 +280,7 @@ func (s *MessengerSuite) TestChatPersistencePublic() {
 	}
 
 	s.Require().NoError(s.m.SaveChat(chat))
-	savedChats, err := s.m.Chats(0, 10)
+	savedChats, err := s.m.Chats()
 	s.Require().NoError(err)
 	s.Require().Equal(1, len(savedChats))
 
@@ -170,12 +307,12 @@ func (s *MessengerSuite) TestDeleteChat() {
 	}
 
 	s.Require().NoError(s.m.SaveChat(chat))
-	savedChats, err := s.m.Chats(0, 10)
+	savedChats, err := s.m.Chats()
 	s.Require().NoError(err)
 	s.Require().Equal(1, len(savedChats))
 
 	s.Require().NoError(s.m.DeleteChat(chatID))
-	savedChats, err = s.m.Chats(0, 10)
+	savedChats, err = s.m.Chats()
 	s.Require().NoError(err)
 	s.Require().Equal(0, len(savedChats))
 }
@@ -196,7 +333,7 @@ func (s *MessengerSuite) TestChatPersistenceUpdate() {
 	}
 
 	s.Require().NoError(s.m.SaveChat(chat))
-	savedChats, err := s.m.Chats(0, 10)
+	savedChats, err := s.m.Chats()
 	s.Require().NoError(err)
 	s.Require().Equal(1, len(savedChats))
 
@@ -207,7 +344,7 @@ func (s *MessengerSuite) TestChatPersistenceUpdate() {
 
 	chat.Name = "updated-name"
 	s.Require().NoError(s.m.SaveChat(chat))
-	updatedChats, err := s.m.Chats(0, 10)
+	updatedChats, err := s.m.Chats()
 	s.Require().NoError(err)
 	s.Require().Equal(1, len(updatedChats))
 
@@ -215,37 +352,6 @@ func (s *MessengerSuite) TestChatPersistenceUpdate() {
 	expectedUpdatedChat := &chat
 
 	s.Require().Equal(expectedUpdatedChat, actualUpdatedChat)
-}
-
-func (s *MessengerSuite) TestChatPagination() {
-	for i := 0; i <= 20; i++ {
-		chat := Chat{
-			ID:                     fmt.Sprintf("chat-name-%d", i),
-			Name:                   "chat-name",
-			Color:                  "#fffff",
-			Active:                 true,
-			ChatType:               ChatTypePublic,
-			Timestamp:              int64(i),
-			LastClockValue:         20,
-			DeletedAtClockValue:    30,
-			UnviewedMessagesCount:  40,
-			LastMessageContentType: "something",
-			LastMessageContent:     "something-else",
-		}
-
-		s.Require().NoError(s.m.SaveChat(chat))
-	}
-	firstPageChats, err := s.m.Chats(0, 10)
-	s.Require().NoError(err)
-	s.Require().Equal(10, len(firstPageChats))
-	s.Require().Equal(int64(20), firstPageChats[0].Timestamp)
-	s.Require().Equal(int64(11), firstPageChats[9].Timestamp)
-
-	secondPageChats, err := s.m.Chats(10, -1)
-	s.Require().NoError(err)
-	s.Require().Equal(11, len(secondPageChats))
-	s.Require().Equal(int64(10), secondPageChats[0].Timestamp)
-	s.Require().Equal(int64(0), secondPageChats[10].Timestamp)
 }
 
 func (s *MessengerSuite) TestChatPersistenceOneToOne() {
@@ -270,7 +376,7 @@ func (s *MessengerSuite) TestChatPersistenceOneToOne() {
 	s.Require().NoError(err)
 
 	s.Require().NoError(s.m.SaveChat(chat))
-	savedChats, err := s.m.Chats(0, 10)
+	savedChats, err := s.m.Chats()
 	s.Require().NoError(err)
 	s.Require().Equal(1, len(savedChats))
 
@@ -335,7 +441,7 @@ func (s *MessengerSuite) TestChatPersistencePrivateGroupChat() {
 		LastMessageContent:     "something-else",
 	}
 	s.Require().NoError(s.m.SaveChat(chat))
-	savedChats, err := s.m.Chats(0, 10)
+	savedChats, err := s.m.Chats()
 	s.Require().NoError(err)
 	s.Require().Equal(1, len(savedChats))
 
@@ -504,7 +610,7 @@ func (s *MessengerSuite) TestBlockContact() {
 	s.Require().Equal("blocked", savedContacts[0].Name)
 
 	// The chat is deleted
-	actualChats, err := s.m.Chats(0, -1)
+	actualChats, err := s.m.Chats()
 	s.Require().NoError(err)
 	s.Require().Equal(2, len(actualChats))
 
