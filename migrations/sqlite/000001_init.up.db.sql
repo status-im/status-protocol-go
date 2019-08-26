@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS user_messages (
     content_chat_id TEXT,
     content_text TEXT,
     public_key BLOB,
+    public BOOLEAN,
     flags INT NOT NULL DEFAULT 0
 );
 

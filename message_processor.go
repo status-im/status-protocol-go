@@ -152,11 +152,11 @@ func (p *messageProcessor) SendPrivateRaw(
 	return messageID, nil
 }
 
-func (p *messageProcessor) SendPublic(ctx context.Context, chatName, chatID string, data []byte, clock int64) ([]byte, error) {
+func (p *messageProcessor) SendPublic(ctx context.Context, chatID string, data []byte, clock int64) ([]byte, error) {
 	logger := p.logger.With(zap.String("site", "SendPublic"))
-	logger.Debug("sending a public message", zap.String("chat-name", chatName))
+	logger.Debug("sending a public message", zap.String("chatID", chatID))
 
-	message := protocol.CreatePublicTextMessage(data, clock, chatName)
+	message := protocol.CreatePublicTextMessage(data, clock, chatID)
 
 	encodedMessage, err := p.encodeMessage(message)
 	if err != nil {
@@ -178,7 +178,7 @@ func (p *messageProcessor) SendPublic(ctx context.Context, chatName, chatID stri
 		return nil, err
 	}
 
-	hash, err := p.transport.SendPublic(ctx, &newMessage, chatName)
+	hash, err := p.transport.SendPublic(ctx, &newMessage, chatID)
 	if err != nil {
 		return nil, err
 	}
@@ -218,49 +218,49 @@ func (p *messageProcessor) SendPublicRaw(ctx context.Context, chatName string, d
 	return messageID, nil
 }
 
-func (p *messageProcessor) Process(messages []*whisper.ReceivedMessage) ([]*protocol.Message, error) {
-	logger := p.logger.With(zap.String("site", "handleRetrievedMessages"))
+func (p *messageProcessor) Process(message *whisper.ReceivedMessage, public bool) ([]*protocol.Message, error) {
+	logger := p.logger.With(zap.String("site", "Process"))
 
-	decodedMessages := make([]*protocol.Message, 0, len(messages))
-	for _, item := range messages {
-		shhMessage := whisper.ToWhisperMessage(item)
+	var decodedMessages []*protocol.Message
 
-		hlogger := logger.With(zap.Binary("hash", shhMessage.Hash))
-		hlogger.Debug("handling a received message")
+	shhMessage := whisper.ToWhisperMessage(message)
 
-		statusMessages, err := p.handleMessages(shhMessage, true)
-		if err != nil {
-			hlogger.Info("failed to decode messages", zap.Error(err))
-			continue
-		}
+	hlogger := logger.With(zap.Binary("hash", shhMessage.Hash))
+	hlogger.Debug("handling a received message")
 
-		for _, statusMessage := range statusMessages {
-			switch m := statusMessage.ParsedMessage.(type) {
-			case protocol.Message:
-				m.ID = statusMessage.ID
-				m.SigPubKey = statusMessage.SigPubKey()
-				decodedMessages = append(decodedMessages, &m)
-			case protocol.PairMessage:
-				fromOurDevice := isPubKeyEqual(statusMessage.SigPubKey(), &p.identity.PublicKey)
-				if !fromOurDevice {
-					hlogger.Debug("received PairMessage from not our device, skipping")
-					break
-				}
+	statusMessages, err := p.handleMessages(shhMessage, true)
+	if err != nil {
+		return nil, err
+	}
 
-				metadata := &multidevice.InstallationMetadata{
-					Name:       m.Name,
-					FCMToken:   m.FCMToken,
-					DeviceType: m.DeviceType,
-				}
-				err := p.protocol.SetInstallationMetadata(&p.identity.PublicKey, m.InstallationID, metadata)
-				if err != nil {
-					return nil, err
-				}
-			default:
-				hlogger.Error("skipped a public message of unsupported type")
+	for _, statusMessage := range statusMessages {
+		switch m := statusMessage.ParsedMessage.(type) {
+		case protocol.Message:
+			m.ID = statusMessage.ID
+			m.SigPubKey = statusMessage.SigPubKey()
+			m.Public = public
+			decodedMessages = append(decodedMessages, &m)
+		case protocol.PairMessage:
+			fromOurDevice := isPubKeyEqual(statusMessage.SigPubKey(), &p.identity.PublicKey)
+			if !fromOurDevice {
+				hlogger.Debug("received PairMessage from not our device, skipping")
+				break
 			}
+
+			metadata := &multidevice.InstallationMetadata{
+				Name:       m.Name,
+				FCMToken:   m.FCMToken,
+				DeviceType: m.DeviceType,
+			}
+			err := p.protocol.SetInstallationMetadata(&p.identity.PublicKey, m.InstallationID, metadata)
+			if err != nil {
+				return nil, err
+			}
+		default:
+			hlogger.Error("skipped a public message of unsupported type")
 		}
 	}
+
 	return decodedMessages, nil
 }
 

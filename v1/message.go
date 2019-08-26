@@ -78,7 +78,6 @@ type Message struct {
 	Flags     Flags            `json:"-"`
 	ID        []byte           `json:"-"`
 	SigPubKey *ecdsa.PublicKey `json:"-"`
-	ChatID    string           `json:"-"`
 	Public    bool             `json:"-"`
 }
 

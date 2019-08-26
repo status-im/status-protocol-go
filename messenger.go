@@ -495,7 +495,7 @@ func (m *Messenger) Send(ctx context.Context, chat Chat, data []byte) ([]byte, e
 		return nil, ErrChatIDEmpty
 	}
 
-	clock, err := m.persistence.LastMessageClock(chat.ID)
+	clock, err := m.persistence.LastMessageClock(chatID)
 	if err != nil {
 		return nil, err
 	}
@@ -505,13 +505,13 @@ func (m *Messenger) Send(ctx context.Context, chat Chat, data []byte) ([]byte, e
 	if chat.PublicKey != nil {
 		logger.Debug("sending private message", zap.Binary("publicKey", crypto.FromECDSAPub(chat.PublicKey)))
 
-		hash, message, err := m.processor.SendPrivate(ctx, chat.PublicKey, chat.ID, data, clock)
+		id, message, err := m.processor.SendPrivate(ctx, chat.PublicKey, chatID, data, clock)
 		if err != nil {
 			return nil, err
 		}
 
 		// Save our message because it won't be received from the transport layer.
-		message.ID = hash // a Message need ID to be properly stored in the db
+		message.ID = id // a Message need ID to be properly stored in the db
 		message.SigPubKey = &m.identity.PublicKey
 
 		if m.messagesPersistenceEnabled {
@@ -524,10 +524,10 @@ func (m *Messenger) Send(ctx context.Context, chat Chat, data []byte) ([]byte, e
 		// Cache it to be returned in Retrieve().
 		m.ownMessages = append(m.ownMessages, message)
 
-		return hash, nil
+		return id, nil
 	} else if chat.Name != "" {
 		logger.Debug("sending public message", zap.String("chatName", chat.Name))
-		return m.processor.SendPublic(ctx, chat.Name, chat.ID, data, clock)
+		return m.processor.SendPublic(ctx, chatID, data, clock)
 	}
 	return nil, errors.New("chat is neither public nor private")
 }
@@ -567,9 +567,8 @@ func (m *Messenger) RetrieveAll(ctx context.Context, c RetrieveConfig) ([]*proto
 
 	var result []*protocol.Message
 
-	for _, chat := range latest {
-		logger.Debug("processing chat", zap.String("chatID", chat.ChatID))
-		protoMessages, err := m.processor.Process(chat.Messages)
+	for _, message := range latest {
+		protoMessages, err := m.processor.Process(message.Message, message.Public)
 		if err != nil {
 			return nil, err
 		}
@@ -592,41 +591,6 @@ func (m *Messenger) RetrieveAll(ctx context.Context, c RetrieveConfig) ([]*proto
 	m.ownMessages = nil
 
 	return result, nil
-}
-
-func (m *Messenger) RetrieveAllByChat(ctx context.Context, c RetrieveConfig) (map[*Chat][]*protocol.Message, error) {
-	messages, err := m.RetrieveAll(ctx, c)
-	if err != nil {
-		return nil, err
-	}
-
-	chats, err := m.Chats()
-	if err != nil {
-		return nil, err
-	}
-
-	result := make(map[*Chat][]*protocol.Message)
-	for _, message := range messages {
-		chat := mapMessageToChat(message, chats)
-		if chat == nil {
-			m.logger.Error("failed to map a message to chat")
-			continue
-		}
-		result[chat] = append(result[chat], message)
-	}
-	return result, nil
-}
-
-func mapMessageToChat(message *protocol.Message, chats []*Chat) *Chat {
-	for _, chat := range chats {
-		if isPubKeyEqual(chat.PublicKey, message.SigPubKey) {
-			return chat
-		}
-		if chat.ID == message.ChatID {
-			return chat
-		}
-	}
-	return nil
 }
 
 func (m *Messenger) retrieveSaved(ctx context.Context, c RetrieveConfig) (messages []*protocol.Message, err error) {

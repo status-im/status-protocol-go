@@ -346,6 +346,7 @@ func (db sqlitePersistence) Messages(from, to time.Time) (result []*protocol.Mes
 			content_chat_id, 
 			content_text, 
 			public_key, 
+			public,
 			flags
 		FROM user_messages 
 		WHERE timestamp >= ? AND timestamp <= ? 
@@ -366,7 +367,7 @@ func (db sqlitePersistence) Messages(from, to time.Time) (result []*protocol.Mes
 		pkey := []byte{}
 		err = rows.Scan(
 			&msg.ID, &msg.ContentT, &msg.MessageT, &msg.Text, &msg.Clock,
-			&msg.Timestamp, &msg.Content.ChatID, &msg.Content.Text, &pkey, &msg.Flags)
+			&msg.Timestamp, &msg.Content.ChatID, &msg.Content.Text, &pkey, &msg.Public, &msg.Flags)
 		if err != nil {
 			return nil, err
 		}
@@ -383,7 +384,7 @@ func (db sqlitePersistence) Messages(from, to time.Time) (result []*protocol.Mes
 
 func (db sqlitePersistence) NewMessages(chatID string, rowid int64) ([]*protocol.Message, error) {
 	rows, err := db.db.Query(`SELECT
-id, content_type, message_type, text, clock, timestamp, content_chat_id, content_text, public_key, flags
+id, content_type, message_type, text, clock, timestamp, content_chat_id, content_text, public_key, public, flags
 FROM user_messages WHERE chat_id = ? AND rowid >= ? ORDER BY clock`,
 		chatID, rowid)
 	if err != nil {
@@ -401,7 +402,7 @@ FROM user_messages WHERE chat_id = ? AND rowid >= ? ORDER BY clock`,
 		pkey := []byte{}
 		err = rows.Scan(
 			&msg.ID, &msg.ContentT, &msg.MessageT, &msg.Text, &msg.Clock,
-			&msg.Timestamp, &msg.Content.ChatID, &msg.Content.Text, &pkey, &msg.Flags)
+			&msg.Timestamp, &msg.Content.ChatID, &msg.Content.Text, &pkey, &msg.Public, &msg.Flags)
 		if err != nil {
 			return nil, err
 		}
@@ -430,6 +431,7 @@ func (db sqlitePersistence) UnreadMessages(chatID string) ([]*protocol.Message, 
 			content_chat_id,
 			content_text,
 			public_key,
+			public,
 			flags
 		FROM
 			user_messages
@@ -453,7 +455,7 @@ func (db sqlitePersistence) UnreadMessages(chatID string) ([]*protocol.Message, 
 		pkey := []byte{}
 		err = rows.Scan(
 			&msg.ID, &msg.ContentT, &msg.MessageT, &msg.Text, &msg.Clock,
-			&msg.Timestamp, &msg.Content.ChatID, &msg.Content.Text, &pkey, &msg.Flags)
+			&msg.Timestamp, &msg.Content.ChatID, &msg.Content.Text, &pkey, &msg.Public, &msg.Flags)
 		if err != nil {
 			return nil, err
 		}
@@ -479,8 +481,8 @@ func (db sqlitePersistence) SaveMessages(messages []*protocol.Message) (last int
 		return
 	}
 	stmt, err = tx.Prepare(`INSERT INTO user_messages(
-id, chat_id, content_type, message_type, text, clock, timestamp, content_chat_id, content_text, public_key, flags)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+id, chat_id, content_type, message_type, text, clock, timestamp, content_chat_id, content_text, public_key, public, flags)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return
 	}
@@ -502,9 +504,9 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 			pkey, err = marshalECDSAPub(msg.SigPubKey)
 		}
 		rst, err = stmt.Exec(
-			msg.ID, msg.ChatID, msg.ContentT, msg.MessageT, msg.Text,
+			msg.ID, msg.Content.ChatID, msg.ContentT, msg.MessageT, msg.Text,
 			msg.Clock, msg.Timestamp, msg.Content.ChatID, msg.Content.Text,
-			pkey, msg.Flags)
+			pkey, msg.Public, msg.Flags)
 		if err != nil {
 			if err.Error() == uniqueIDContstraint {
 				// skip duplicated messages
