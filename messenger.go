@@ -471,6 +471,19 @@ func (m *Messenger) Chats() ([]*Chat, error) {
 	return m.persistence.Chats()
 }
 
+func (m *Messenger) chatByID(id string) (*Chat, error) {
+	chats, err := m.persistence.Chats()
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range chats {
+		if c.ID == id {
+			return c, nil
+		}
+	}
+	return nil, errors.New("chat not found")
+}
+
 func (m *Messenger) DeleteChat(chatID string) error {
 	return m.persistence.DeleteChat(chatID)
 }
@@ -487,15 +500,16 @@ func (m *Messenger) Contacts() ([]*Contact, error) {
 	return m.persistence.Contacts()
 }
 
-func (m *Messenger) Send(ctx context.Context, chat Chat, data []byte) ([]byte, error) {
-	logger := m.logger.With(zap.String("site", "Send"), zap.String("chatID", chat.ID))
+func (m *Messenger) Send(ctx context.Context, chatID string, data []byte) ([]byte, error) {
+	logger := m.logger.With(zap.String("site", "Send"), zap.String("chatID", chatID))
 
-	chatID := chat.ID
-	if chatID == "" {
-		return nil, ErrChatIDEmpty
+	// A valid added chat is required.
+	chat, err := m.chatByID(chatID)
+	if err != nil {
+		return nil, err
 	}
 
-	clock, err := m.persistence.LastMessageClock(chatID)
+	clock, err := m.persistence.LastMessageClock(chat.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -505,7 +519,7 @@ func (m *Messenger) Send(ctx context.Context, chat Chat, data []byte) ([]byte, e
 	if chat.PublicKey != nil {
 		logger.Debug("sending private message", zap.Binary("publicKey", crypto.FromECDSAPub(chat.PublicKey)))
 
-		id, message, err := m.processor.SendPrivate(ctx, chat.PublicKey, chatID, data, clock)
+		id, message, err := m.processor.SendPrivate(ctx, chat.PublicKey, chat.ID, data, clock)
 		if err != nil {
 			return nil, err
 		}
@@ -527,7 +541,7 @@ func (m *Messenger) Send(ctx context.Context, chat Chat, data []byte) ([]byte, e
 		return id, nil
 	} else if chat.Name != "" {
 		logger.Debug("sending public message", zap.String("chatName", chat.Name))
-		return m.processor.SendPublic(ctx, chatID, data, clock)
+		return m.processor.SendPublic(ctx, chat.ID, data, clock)
 	}
 	return nil, errors.New("chat is neither public nor private")
 }
