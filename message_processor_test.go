@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/golang/protobuf/proto"
@@ -13,8 +12,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 
-	"github.com/status-im/status-protocol-go/datasync"
-	datasyncpeer "github.com/status-im/status-protocol-go/datasync/peer"
 	"github.com/status-im/status-protocol-go/encryption"
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
 	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
@@ -22,11 +19,7 @@ import (
 	transport "github.com/status-im/status-protocol-go/transport/whisper"
 	protocol "github.com/status-im/status-protocol-go/v1"
 
-	datasyncnode "github.com/vacp2p/mvds/node"
-	datasyncpeers "github.com/vacp2p/mvds/peers"
 	datasyncproto "github.com/vacp2p/mvds/protobuf"
-	datasyncstate "github.com/vacp2p/mvds/state"
-	datasyncstore "github.com/vacp2p/mvds/store"
 )
 
 func TestMessageProcessorSuite(t *testing.T) {
@@ -57,37 +50,17 @@ func (s *MessageProcessorSuite) SetupTest() {
 
 	var err error
 
-	s.tmpDir, err = ioutil.TempDir("", "")
+	s.logger, err = zap.NewDevelopment()
 	s.Require().NoError(err)
 
-	s.logger, err = zap.NewDevelopment()
+	s.tmpDir, err = ioutil.TempDir("", "")
 	s.Require().NoError(err)
 
 	identity, err := crypto.GenerateKey()
 	s.Require().NoError(err)
 
-	names, getter, err := prepareMigrations(defaultMigrations)
+	database, err := sqlite.Open(filepath.Join(s.tmpDir, "processor-test.sql"), "some-key")
 	s.Require().NoError(err)
-	database, err := sqlite.Open(filepath.Join(s.tmpDir, "processor-test.sql"), "some-key", sqlite.MigrationConfig{
-		AssetNames:  names,
-		AssetGetter: getter,
-	})
-	s.Require().NoError(err)
-
-	dataSyncTransport := datasync.NewDataSyncNodeTransport()
-	dataSyncStore := datasyncstore.NewDummyStore()
-	dataSyncNode := datasyncnode.NewNode(
-		&dataSyncStore,
-		dataSyncTransport,
-		datasyncstate.NewSyncState(), // @todo sqlite syncstate
-		datasync.CalculateSendTime,
-		0,
-		datasyncpeer.PublicKeyToPeerID(identity.PublicKey),
-		datasyncnode.BATCH,
-		datasyncpeers.NewMemoryPersistence(),
-	)
-	datasync := datasync.New(dataSyncNode, dataSyncTransport, true, s.logger)
-	dataSyncNode.Start(100 * time.Second)
 
 	onNewInstallations := func([]*multidevice.Installation) {}
 	onNewSharedSecret := func([]*sharedsecret.Secret) {}
@@ -118,14 +91,15 @@ func (s *MessageProcessorSuite) SetupTest() {
 	)
 	s.Require().NoError(err)
 
-	s.processor = &messageProcessor{
-		identity:     identity,
-		datasync:     datasync,
-		protocol:     encryptionProtocol,
-		transport:    whisperTransport,
-		logger:       s.logger,
-		featureFlags: featureFlags{},
-	}
+	s.processor, err = newMessageProcessor(
+		identity,
+		database,
+		encryptionProtocol,
+		whisperTransport,
+		s.logger,
+		featureFlags{},
+	)
+	s.Require().NoError(err)
 }
 
 func (s *MessageProcessorSuite) TearDownTest() {
@@ -265,12 +239,7 @@ func (s *MessageProcessorSuite) TestHandleDecodedMessagesDatasyncEncrypted() {
 	s.Require().NoError(err)
 
 	// Create sender encryption protocol.
-	names, getter, err := prepareMigrations(defaultMigrations)
-	s.Require().NoError(err)
-	senderDatabase, err := sqlite.Open(filepath.Join(s.tmpDir, "sender.db.sql"), "some-key", sqlite.MigrationConfig{
-		AssetNames:  names,
-		AssetGetter: getter,
-	})
+	senderDatabase, err := sqlite.Open(filepath.Join(s.tmpDir, "sender.db.sql"), "")
 	s.Require().NoError(err)
 	senderEncryptionProtocol := encryption.New(
 		senderDatabase,

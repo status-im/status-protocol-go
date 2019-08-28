@@ -3,6 +3,7 @@ package statusproto
 import (
 	"context"
 	"crypto/ecdsa"
+	"database/sql"
 	"time"
 
 	"github.com/ethereum/go-ethereum/crypto"
@@ -18,10 +19,7 @@ import (
 	transport "github.com/status-im/status-protocol-go/transport/whisper"
 	protocol "github.com/status-im/status-protocol-go/v1"
 	datasyncnode "github.com/vacp2p/mvds/node"
-	datasyncpeers "github.com/vacp2p/mvds/peers"
 	datasyncproto "github.com/vacp2p/mvds/protobuf"
-	datasyncstate "github.com/vacp2p/mvds/state"
-	datasyncstore "github.com/vacp2p/mvds/store"
 )
 
 // Whisper message properties.
@@ -43,24 +41,24 @@ type messageProcessor struct {
 
 func newMessageProcessor(
 	identity *ecdsa.PrivateKey,
+	database *sql.DB,
 	enc *encryption.Protocol,
 	transport *transport.WhisperServiceTransport,
 	logger *zap.Logger,
 	features featureFlags,
-) *messageProcessor {
+) (*messageProcessor, error) {
 
 	dataSyncTransport := datasync.NewDataSyncNodeTransport()
-	dataSyncStore := datasyncstore.NewDummyStore()
-	dataSyncNode := datasyncnode.NewNode(
-		&dataSyncStore,
+	dataSyncNode, err := datasyncnode.NewPersistentNode(
+		database,
 		dataSyncTransport,
-		datasyncstate.NewSyncState(), // @todo sqlite syncstate
-		datasync.CalculateSendTime,
-		0,
 		datasyncpeer.PublicKeyToPeerID(identity.PublicKey),
 		datasyncnode.BATCH,
-		datasyncpeers.NewMemoryPersistence(),
+		datasync.CalculateSendTime,
 	)
+	if err != nil {
+		return nil, err
+	}
 	ds := datasync.New(dataSyncNode, dataSyncTransport, features.datasync, logger)
 
 	p := &messageProcessor{
@@ -81,7 +79,7 @@ func newMessageProcessor(
 		ds.Start(300 * time.Millisecond)
 	}
 
-	return p
+	return p, nil
 }
 
 func (p *messageProcessor) Stop() {

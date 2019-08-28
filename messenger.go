@@ -66,8 +66,10 @@ type dbConfig struct {
 
 type config struct {
 	onNewInstallationsHandler func([]*multidevice.Installation)
-	// DEPRECATED: no need to expose it
-	onNewSharedSecretHandler func([]*sharedsecret.Secret)
+	// This needs to be exposed until we move here mailserver logic
+	// as otherwise the client is not notified of a new filter and
+	// won't be pulling messages from mailservers until it reloads the chats/filters
+	onNegotiatedFilters func([]*transport.Filter)
 	// DEPRECATED: no need to expose it
 	onSendContactCodeHandler func(*encryption.ProtocolMessageSpec)
 
@@ -94,9 +96,9 @@ func WithOnNewInstallationsHandler(h func([]*multidevice.Installation)) Option {
 	}
 }
 
-func WithOnNewSharedSecret(h func([]*sharedsecret.Secret)) Option {
+func WithOnNegotiatedFilters(h func([]*transport.Filter)) Option {
 	return func(c *config) error {
-		c.onNewSharedSecretHandler = h
+		c.onNegotiatedFilters = h
 		return nil
 	}
 }
@@ -193,12 +195,15 @@ func NewMessenger(
 			}
 		}
 	}
-	if c.onNewSharedSecretHandler == nil {
-		c.onNewSharedSecretHandler = func(secrets []*sharedsecret.Secret) {
-			if err := messenger.handleSharedSecrets(secrets); err != nil {
-				slogger := logger.With(zap.String("site", "onNewSharedSecretHandler"))
-				slogger.Warn("failed to process secrets", zap.Error(err))
-			}
+	onNewSharedSecretHandler := func(secrets []*sharedsecret.Secret) {
+		filters, err := messenger.handleSharedSecrets(secrets)
+		if err != nil {
+			slogger := logger.With(zap.String("site", "onNewSharedSecretHandler"))
+			slogger.Warn("failed to process secrets", zap.Error(err))
+		}
+
+		if c.onNegotiatedFilters != nil {
+			c.onNegotiatedFilters(filters)
 		}
 	}
 	if c.onSendContactCodeHandler == nil {
@@ -237,11 +242,7 @@ func NewMessenger(
 	}
 
 	// Apply migrations for all components.
-	migrationNames, migrationGetter, err := prepareMigrations(defaultMigrations)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to prepare migrations")
-	}
-	err = sqlite.ApplyMigrations(database, migrationNames, migrationGetter)
+	err := sqlite.Migrate(database)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to apply migrations")
 	}
@@ -265,18 +266,22 @@ func NewMessenger(
 		database,
 		installationID,
 		c.onNewInstallationsHandler,
-		c.onNewSharedSecretHandler,
+		onNewSharedSecretHandler,
 		c.onSendContactCodeHandler,
 		logger,
 	)
 
-	processor := newMessageProcessor(
+	processor, err := newMessageProcessor(
 		identity,
+		database,
 		encryptionProtocol,
 		t,
 		logger,
 		c.featureFlags,
 	)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create messageProcessor")
+	}
 
 	messenger = &Messenger{
 		identity:                   identity,
@@ -386,19 +391,22 @@ func (m *Messenger) Shutdown() (err error) {
 	return
 }
 
-func (m *Messenger) handleSharedSecrets(secrets []*sharedsecret.Secret) error {
+func (m *Messenger) handleSharedSecrets(secrets []*sharedsecret.Secret) ([]*transport.Filter, error) {
 	logger := m.logger.With(zap.String("site", "handleSharedSecrets"))
+	var result []*transport.Filter
 	for _, secret := range secrets {
 		logger.Debug("received shared secret", zap.Binary("identity", crypto.FromECDSAPub(secret.Identity)))
 		fSecret := transport.NegotiatedSecret{
 			PublicKey: secret.Identity,
 			Key:       secret.Key,
 		}
-		if err := m.transport.ProcessNegotiatedSecret(fSecret); err != nil {
-			return err
+		filter, err := m.transport.ProcessNegotiatedSecret(fSecret)
+		if err != nil {
+			return nil, err
 		}
+		result = append(result, filter)
 	}
-	return nil
+	return result, nil
 }
 
 func (m *Messenger) EnableInstallation(id string) error {

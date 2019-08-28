@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/status-im/status-protocol-go/encryption/migrations"
 	"github.com/status-im/status-protocol-go/sqlite"
 
 	"github.com/ethereum/go-ethereum/crypto"
@@ -50,10 +49,7 @@ func (s *EncryptionServiceTestSuite) initDatabases(config encryptorConfig) {
 	s.bobDBPath, err = ioutil.TempFile("", "bob.db.sql")
 	s.Require().NoError(err)
 
-	db, err := sqlite.Open(s.aliceDBPath.Name(), "alice-key", sqlite.MigrationConfig{
-		AssetNames:  migrations.AssetNames(),
-		AssetGetter: migrations.Asset,
-	})
+	db, err := sqlite.Open(s.aliceDBPath.Name(), "alice-key")
 	s.Require().NoError(err)
 	config.InstallationID = aliceInstallationID
 	s.alice = NewWithEncryptorConfig(
@@ -66,10 +62,7 @@ func (s *EncryptionServiceTestSuite) initDatabases(config encryptorConfig) {
 		s.logger.With(zap.String("user", "alice")),
 	)
 
-	db, err = sqlite.Open(s.bobDBPath.Name(), "bob-key", sqlite.MigrationConfig{
-		AssetNames:  migrations.AssetNames(),
-		AssetGetter: migrations.Asset,
-	})
+	db, err = sqlite.Open(s.bobDBPath.Name(), "bob-key")
 	s.Require().NoError(err)
 	config.InstallationID = bobInstallationID
 	s.bob = NewWithEncryptorConfig(

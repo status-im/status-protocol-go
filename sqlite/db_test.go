@@ -17,7 +17,7 @@ func TestOpen(t *testing.T) {
 	dbPath := filepath.Join(dir, "db.sql")
 
 	// Open the db for the first time.
-	db, err := open(dbPath, "some-key", reducedKdfIterationsNumber, nil)
+	db, err := open(dbPath, "some-key", reducedKdfIterationsNumber)
 	require.NoError(t, err)
 
 	// Insert some data.
@@ -30,11 +30,6 @@ func TestOpen(t *testing.T) {
 	// Open again with different key should fail
 	// because the file already exists and it should not
 	// be recreated.
-	db, err = open(dbPath, "different-key", reducedKdfIterationsNumber, nil)
-	require.NoError(t, err)
-
-	row := db.QueryRow(`SELECT name FROM test WHERE name = 'abc'`)
-	var name string
-	err = row.Scan(&name)
-	require.EqualError(t, err, "file is encrypted or is not a database")
+	_, err = open(dbPath, "different-key", reducedKdfIterationsNumber)
+	require.Error(t, err)
 }
