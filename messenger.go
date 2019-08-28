@@ -11,13 +11,6 @@ import (
 	whisper "github.com/status-im/whisper/whisperv6"
 	"go.uber.org/zap"
 
-	datasyncnode "github.com/vacp2p/mvds/node"
-	datasyncpeers "github.com/vacp2p/mvds/peers"
-	datasyncstate "github.com/vacp2p/mvds/state"
-	datasyncstore "github.com/vacp2p/mvds/store"
-
-	"github.com/status-im/status-protocol-go/datasync"
-	datasyncpeer "github.com/status-im/status-protocol-go/datasync/peer"
 	"github.com/status-im/status-protocol-go/encryption"
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
 	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
@@ -277,41 +270,27 @@ func NewMessenger(
 		logger,
 	)
 
-	// Initialize data sync.
-	dataSyncTransport := datasync.NewDataSyncNodeTransport()
-	dataSyncStore := datasyncstore.NewDummyStore()
-	dataSyncNode := datasyncnode.NewNode(
-		&dataSyncStore,
-		dataSyncTransport,
-		datasyncstate.NewSyncState(), // @todo sqlite syncstate
-		datasync.CalculateSendTime,
-		0,
-		datasyncpeer.PublicKeyToPeerID(identity.PublicKey),
-		datasyncnode.BATCH,
-		datasyncpeers.NewMemoryPersistence(),
+	processor := newMessageProcessor(
+		identity,
+		encryptionProtocol,
+		t,
+		logger,
+		c.featureFlags,
 	)
-	datasync := datasync.New(dataSyncNode, dataSyncTransport, c.featureFlags.datasync, logger)
 
 	messenger = &Messenger{
-		identity:    identity,
-		persistence: &sqlitePersistence{db: database},
-		transport:   t,
-		encryptor:   encryptionProtocol,
-		processor: &messageProcessor{
-			identity:     identity,
-			datasync:     datasync,
-			protocol:     encryptionProtocol,
-			transport:    t,
-			logger:       logger,
-			featureFlags: c.featureFlags,
-		},
+		identity:                   identity,
+		persistence:                &sqlitePersistence{db: database},
+		transport:                  t,
+		encryptor:                  encryptionProtocol,
+		processor:                  processor,
 		featureFlags:               c.featureFlags,
 		messagesPersistenceEnabled: c.messagesPersistenceEnabled,
 		shutdownTasks: []func() error{
 			database.Close,
 			t.Reset,
 			t.Stop,
-			func() error { datasync.Stop(); return nil },
+			func() error { processor.Stop(); return nil },
 			// Currently this often fails, seems like it's safe to ignore them
 			// https://github.com/uber-go/zap/issues/328
 			func() error { _ = logger.Sync; return nil },
@@ -323,9 +302,6 @@ func NewMessenger(
 	// TODO: consider removing identity as an argument to Start().
 	if err := encryptionProtocol.Start(identity); err != nil {
 		return nil, err
-	}
-	if c.featureFlags.datasync {
-		dataSyncNode.Start(300 * time.Millisecond)
 	}
 
 	logger.Debug("messages persistence", zap.Bool("enabled", c.messagesPersistenceEnabled))
