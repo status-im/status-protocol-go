@@ -48,23 +48,20 @@ func newMessageProcessor(
 	logger *zap.Logger,
 	features featureFlags,
 ) *messageProcessor {
-	var ds *datasync.DataSync
 
-	if features.datasync {
-		dataSyncTransport := datasync.NewDataSyncNodeTransport()
-		dataSyncStore := datasyncstore.NewDummyStore()
-		dataSyncNode := datasyncnode.NewNode(
-			&dataSyncStore,
-			dataSyncTransport,
-			datasyncstate.NewSyncState(), // @todo sqlite syncstate
-			datasync.CalculateSendTime,
-			0,
-			datasyncpeer.PublicKeyToPeerID(identity.PublicKey),
-			datasyncnode.BATCH,
-			datasyncpeers.NewMemoryPersistence(),
-		)
-		ds = datasync.New(dataSyncNode, dataSyncTransport, true, logger)
-	}
+	dataSyncTransport := datasync.NewDataSyncNodeTransport()
+	dataSyncStore := datasyncstore.NewDummyStore()
+	dataSyncNode := datasyncnode.NewNode(
+		&dataSyncStore,
+		dataSyncTransport,
+		datasyncstate.NewSyncState(), // @todo sqlite syncstate
+		datasync.CalculateSendTime,
+		0,
+		datasyncpeer.PublicKeyToPeerID(identity.PublicKey),
+		datasyncnode.BATCH,
+		datasyncpeers.NewMemoryPersistence(),
+	)
+	ds := datasync.New(dataSyncNode, dataSyncTransport, features.datasync, logger)
 
 	p := &messageProcessor{
 		identity:     identity,
@@ -79,23 +76,16 @@ func newMessageProcessor(
 	// With DataSync enabled, messages are added to the DataSync
 	// but actual encrypt and send calls are postponed.
 	// sendDataSync is responsible for encrypting and sending postponed messages.
-	if ds != nil {
+	if features.datasync {
 		ds.Init(p.sendDataSync)
+		ds.Start(300 * time.Millisecond)
 	}
 
 	return p
 }
 
-func (p *messageProcessor) Start() {
-	if p.datasync != nil {
-		p.datasync.Start(300 * time.Millisecond)
-	}
-}
-
 func (p *messageProcessor) Stop() {
-	if p.datasync != nil {
-		p.datasync.Stop()
-	}
+	p.datasync.Stop() // idempotent op
 }
 
 func (p *messageProcessor) SendPrivate(
