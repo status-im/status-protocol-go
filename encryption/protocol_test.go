@@ -7,7 +7,6 @@ import (
 
 	"github.com/status-im/status-protocol-go/tt"
 
-	migrations "github.com/status-im/status-protocol-go/encryption/migrations"
 	"github.com/status-im/status-protocol-go/sqlite"
 
 	"github.com/ethereum/go-ethereum/crypto"
@@ -47,10 +46,7 @@ func (s *ProtocolServiceTestSuite) SetupTest() {
 	addedBundlesHandler := func(addedBundles []*multidevice.Installation) {}
 	onNewSharedSecretHandler := func(secret []*sharedsecret.Secret) {}
 
-	db, err := sqlite.Open(s.aliceDBPath.Name(), aliceDBKey, sqlite.MigrationConfig{
-		AssetNames:  migrations.AssetNames(),
-		AssetGetter: migrations.Asset,
-	})
+	db, err := sqlite.Open(s.aliceDBPath.Name(), aliceDBKey)
 	s.Require().NoError(err)
 	s.alice = New(
 		db,
@@ -61,10 +57,7 @@ func (s *ProtocolServiceTestSuite) SetupTest() {
 		s.logger.With(zap.String("user", "alice")),
 	)
 
-	db, err = sqlite.Open(s.bobDBPath.Name(), bobDBKey, sqlite.MigrationConfig{
-		AssetNames:  migrations.AssetNames(),
-		AssetGetter: migrations.Asset,
-	})
+	db, err = sqlite.Open(s.bobDBPath.Name(), bobDBKey)
 	s.Require().NoError(err)
 	s.bob = New(
 		db,

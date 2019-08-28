@@ -341,14 +341,7 @@ func openTestDB() (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	names, getter, err := prepareMigrations(defaultMigrations)
-	if err != nil {
-		return nil, err
-	}
-	return sqlite.Open(dbPath.Name(), "", sqlite.MigrationConfig{
-		AssetNames:  names,
-		AssetGetter: getter,
-	})
+	return sqlite.Open(dbPath.Name(), "")
 }
 
 func insertMinimalMessage(p sqlitePersistence, id string) error {

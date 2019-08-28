@@ -22,10 +22,7 @@ import (
 	"github.com/status-im/status-protocol-go/datasync"
 	datasyncpeer "github.com/status-im/status-protocol-go/datasync/peer"
 	datasyncnode "github.com/vacp2p/mvds/node"
-	datasyncpeers "github.com/vacp2p/mvds/peers"
 	datasyncproto "github.com/vacp2p/mvds/protobuf"
-	datasyncstate "github.com/vacp2p/mvds/state"
-	datasyncstore "github.com/vacp2p/mvds/store"
 
 	protocol "github.com/status-im/status-protocol-go/v1"
 	whisper "github.com/status-im/whisper/whisperv6"
@@ -69,12 +66,7 @@ func (s *AdaptersSuite) SetupTest() {
 	s.tmpDir, err = ioutil.TempDir("", "adapters-test")
 	s.Require().NoError(err)
 
-	names, getter, err := prepareMigrations(defaultMigrations)
-	s.Require().NoError(err)
-	database, err := sqlite.Open(filepath.Join(s.tmpDir, "transport.db.sql"), "some-key", sqlite.MigrationConfig{
-		AssetNames:  names,
-		AssetGetter: getter,
-	})
+	database, err := sqlite.Open(filepath.Join(s.tmpDir, "transport.db.sql"), "some-key")
 	s.Require().NoError(err)
 
 	s.privateKey, err = crypto.GenerateKey()
@@ -109,10 +101,7 @@ func (s *AdaptersSuite) SetupTest() {
 		logger,
 	)
 
-	senderDatabase, err := sqlite.Open(filepath.Join(s.tmpDir, "sender.db.sql"), "some-key", sqlite.MigrationConfig{
-		AssetNames:  names,
-		AssetGetter: getter,
-	})
+	senderDatabase, err := sqlite.Open(filepath.Join(s.tmpDir, "sender.db.sql"), "some-key")
 	s.Require().NoError(err)
 	s.senderEncryptionProtocol = encryption.New(
 		senderDatabase,
@@ -124,17 +113,14 @@ func (s *AdaptersSuite) SetupTest() {
 	)
 
 	dataSyncTransport := datasync.NewDataSyncNodeTransport()
-	dataSyncStore := datasyncstore.NewDummyStore()
-	dataSyncNode := datasyncnode.NewNode(
-		&dataSyncStore,
+	dataSyncNode, err := datasyncnode.NewPersistentNode(
+		senderDatabase,
 		dataSyncTransport,
-		datasyncstate.NewSyncState(), // @todo sqlite syncstate
-		datasync.CalculateSendTime,
-		0,
 		datasyncpeer.PublicKeyToPeerID(s.privateKey.PublicKey),
 		datasyncnode.BATCH,
-		datasyncpeers.NewMemoryPersistence(),
+		datasync.CalculateSendTime,
 	)
+	s.Require().NoError(err)
 
 	datasync := datasync.New(dataSyncNode, dataSyncTransport, true, logger)
 

@@ -20,9 +20,6 @@ import (
 	transport "github.com/status-im/status-protocol-go/transport/whisper"
 	protocol "github.com/status-im/status-protocol-go/v1"
 	datasyncnode "github.com/vacp2p/mvds/node"
-	datasyncpeers "github.com/vacp2p/mvds/peers"
-	datasyncstate "github.com/vacp2p/mvds/state"
-	datasyncstore "github.com/vacp2p/mvds/store"
 )
 
 var (
@@ -71,8 +68,10 @@ type dbConfig struct {
 
 type config struct {
 	onNewInstallationsHandler func([]*multidevice.Installation)
-	// DEPRECATED: no need to expose it
-	onNewSharedSecretHandler func([]*sharedsecret.Secret)
+	// This needs to be exposed until we move here mailserver logic
+	// as otherwise the client is not notified of a new filter and
+	// won't be pulling messages from mailservers until it reloads the chats/filters
+	onNegotiatedFilters func([]*transport.Filter)
 	// DEPRECATED: no need to expose it
 	onSendContactCodeHandler func(*encryption.ProtocolMessageSpec)
 
@@ -99,9 +98,9 @@ func WithOnNewInstallationsHandler(h func([]*multidevice.Installation)) Option {
 	}
 }
 
-func WithOnNewSharedSecret(h func([]*sharedsecret.Secret)) Option {
+func WithOnNegotiatedFilters(h func([]*transport.Filter)) Option {
 	return func(c *config) error {
-		c.onNewSharedSecretHandler = h
+		c.onNegotiatedFilters = h
 		return nil
 	}
 }
@@ -198,12 +197,15 @@ func NewMessenger(
 			}
 		}
 	}
-	if c.onNewSharedSecretHandler == nil {
-		c.onNewSharedSecretHandler = func(secrets []*sharedsecret.Secret) {
-			if err := messenger.handleSharedSecrets(secrets); err != nil {
-				slogger := logger.With(zap.String("site", "onNewSharedSecretHandler"))
-				slogger.Warn("failed to process secrets", zap.Error(err))
-			}
+	onNewSharedSecretHandler := func(secrets []*sharedsecret.Secret) {
+		filters, err := messenger.handleSharedSecrets(secrets)
+		if err != nil {
+			slogger := logger.With(zap.String("site", "onNewSharedSecretHandler"))
+			slogger.Warn("failed to process secrets", zap.Error(err))
+		}
+
+		if c.onNegotiatedFilters != nil {
+			c.onNegotiatedFilters(filters)
 		}
 	}
 	if c.onSendContactCodeHandler == nil {
@@ -234,11 +236,7 @@ func NewMessenger(
 	}
 
 	// Apply migrations for all components.
-	migrationNames, migrationGetter, err := prepareMigrations(defaultMigrations)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to prepare migrations")
-	}
-	err = sqlite.ApplyMigrations(database, migrationNames, migrationGetter)
+	err := sqlite.Migrate(database)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to apply migrations")
 	}
@@ -251,6 +249,7 @@ func NewMessenger(
 		nil,
 		c.envelopesMonitorConfig,
 		logger,
+		transport.SetGenericDiscoveryTopicSupport(c.featureFlags.genericDiscoveryTopicEnabled),
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create a WhisperServiceTransport")
@@ -261,24 +260,24 @@ func NewMessenger(
 		database,
 		installationID,
 		c.onNewInstallationsHandler,
-		c.onNewSharedSecretHandler,
+		onNewSharedSecretHandler,
 		c.onSendContactCodeHandler,
 		logger,
 	)
 
 	// Initialize data sync.
 	dataSyncTransport := datasync.NewDataSyncNodeTransport()
-	dataSyncStore := datasyncstore.NewDummyStore()
-	dataSyncNode := datasyncnode.NewNode(
-		&dataSyncStore,
+	dataSyncNode, err := datasyncnode.NewPersistentNode(
+		database,
 		dataSyncTransport,
-		datasyncstate.NewSyncState(), // @todo sqlite syncstate
-		datasync.CalculateSendTime,
-		0,
 		datasyncpeer.PublicKeyToPeerID(identity.PublicKey),
 		datasyncnode.BATCH,
-		datasyncpeers.NewMemoryPersistence(),
+		datasync.CalculateSendTime,
 	)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create a persistent datasync node")
+	}
+
 	datasync := datasync.New(dataSyncNode, dataSyncTransport, c.featureFlags.datasync, logger)
 
 	adapter := newWhisperAdapter(identity, t, encryptionProtocol, datasync, c.featureFlags, logger)
@@ -317,6 +316,66 @@ func NewMessenger(
 	return messenger, nil
 }
 
+// Init analyzes chats and contacts in order to setup filters
+// which are responsible for retrieving messages.
+func (m *Messenger) Init() error {
+	logger := m.logger.With(zap.String("site", "Init"))
+
+	var (
+		publicChatIDs []string
+		publicKeys    []*ecdsa.PublicKey
+	)
+
+	// Get chat IDs and public keys from the existing chats.
+	// TODO: Get only active chats by the query.
+	chats, err := m.Chats()
+	if err != nil {
+		return err
+	}
+	for _, chat := range chats {
+		if !chat.Active {
+			continue
+		}
+		switch chat.ChatType {
+		case ChatTypePublic:
+			publicChatIDs = append(publicChatIDs, chat.ID)
+		case ChatTypeOneToOne:
+			publicKeys = append(publicKeys, chat.PublicKey)
+		case ChatTypePrivateGroupChat:
+			for _, member := range chat.Members {
+				publicKey, err := member.PublicKey()
+				if err != nil {
+					return errors.Wrapf(err, "invalid public key for member %s in chat %s", member.ID, chat.Name)
+				}
+				publicKeys = append(publicKeys, publicKey)
+			}
+		default:
+			return errors.New("invalid chat type")
+		}
+	}
+
+	// Get chat IDs and public keys from the contacts.
+	contacts, err := m.Contacts()
+	if err != nil {
+		return err
+	}
+	for _, contact := range contacts {
+		// We only need filters for contacts added by us and not blocked.
+		if !contact.IsAdded() || contact.IsBlocked() {
+			continue
+		}
+		publicKey, err := contact.PublicKey()
+		if err != nil {
+			logger.Error("failed to get contact's public key", zap.Error(err))
+			continue
+		}
+		publicKeys = append(publicKeys, publicKey)
+	}
+
+	_, err = m.adapter.transport.InitFilters(publicChatIDs, publicKeys)
+	return err
+}
+
 // Shutdown takes care of ensuring a clean shutdown of Messenger
 func (m *Messenger) Shutdown() (err error) {
 	for _, task := range m.shutdownTasks {
@@ -334,7 +393,7 @@ func (m *Messenger) Shutdown() (err error) {
 	return
 }
 
-func (m *Messenger) handleSharedSecrets(secrets []*sharedsecret.Secret) error {
+func (m *Messenger) handleSharedSecrets(secrets []*sharedsecret.Secret) ([]*transport.Filter, error) {
 	return m.adapter.handleSharedSecrets(secrets)
 }
 
@@ -396,8 +455,8 @@ func (m *Messenger) SaveChat(chat Chat) error {
 	return m.persistence.SaveChat(chat)
 }
 
-func (m *Messenger) Chats(from, to int) ([]*Chat, error) {
-	return m.persistence.Chats(from, to)
+func (m *Messenger) Chats() ([]*Chat, error) {
+	return m.persistence.Chats()
 }
 
 func (m *Messenger) DeleteChat(chatID string) error {
@@ -594,13 +653,13 @@ func (m *Messenger) RetrieveRawAll() (map[transport.Filter][]*protocol.StatusMes
 }
 
 // DEPRECATED
-func (m *Messenger) LoadFilters(chats []*transport.Filter) ([]*transport.Filter, error) {
-	return m.adapter.transport.LoadFilters(chats, m.featureFlags.genericDiscoveryTopicEnabled)
+func (m *Messenger) LoadFilters(filters []*transport.Filter) ([]*transport.Filter, error) {
+	return m.adapter.transport.LoadFilters(filters)
 }
 
 // DEPRECATED
-func (m *Messenger) RemoveFilters(chats []*transport.Filter) error {
-	return m.adapter.transport.RemoveFilters(chats)
+func (m *Messenger) RemoveFilters(filters []*transport.Filter) error {
+	return m.adapter.transport.RemoveFilters(filters)
 }
 
 // DEPRECATED
