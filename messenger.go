@@ -273,6 +273,7 @@ func NewMessenger(
 		datasyncpeer.PublicKeyToPeerID(identity.PublicKey),
 		datasyncnode.BATCH,
 		datasync.CalculateSendTime,
+		logger,
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create a persistent datasync node")

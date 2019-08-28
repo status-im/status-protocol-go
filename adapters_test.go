@@ -119,6 +119,7 @@ func (s *AdaptersSuite) SetupTest() {
 		datasyncpeer.PublicKeyToPeerID(s.privateKey.PublicKey),
 		datasyncnode.BATCH,
 		datasync.CalculateSendTime,
+		logger,
 	)
 	s.Require().NoError(err)
 
