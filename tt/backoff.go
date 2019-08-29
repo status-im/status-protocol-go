@@ -3,7 +3,7 @@ package tt
 import (
 	"time"
 
-	"github.com/cenkalti/backoff"
+	"github.com/cenkalti/backoff/v3"
 )
 
 func RetryWithBackOff(o func() error) error {
