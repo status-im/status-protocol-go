@@ -281,7 +281,6 @@ func (db sqlitePersistence) SaveContact(contact Contact, tx *sql.Tx) error {
 			if err == nil {
 				err = tx.Commit()
 				return
-
 			}
 			// don't shadow original error
 			_ = tx.Rollback()
@@ -346,7 +345,6 @@ func (db sqlitePersistence) Messages(from, to time.Time) (result []*protocol.Mes
 			content_chat_id, 
 			content_text, 
 			public_key, 
-			public,
 			flags
 		FROM user_messages 
 		WHERE timestamp >= ? AND timestamp <= ? 
@@ -367,7 +365,7 @@ func (db sqlitePersistence) Messages(from, to time.Time) (result []*protocol.Mes
 		pkey := []byte{}
 		err = rows.Scan(
 			&msg.ID, &msg.ContentT, &msg.MessageT, &msg.Text, &msg.Clock,
-			&msg.Timestamp, &msg.Content.ChatID, &msg.Content.Text, &pkey, &msg.Public, &msg.Flags)
+			&msg.Timestamp, &msg.Content.ChatID, &msg.Content.Text, &pkey, &msg.Flags)
 		if err != nil {
 			return nil, err
 		}
@@ -402,7 +400,7 @@ FROM user_messages WHERE chat_id = ? AND rowid >= ? ORDER BY clock`,
 		pkey := []byte{}
 		err = rows.Scan(
 			&msg.ID, &msg.ContentT, &msg.MessageT, &msg.Text, &msg.Clock,
-			&msg.Timestamp, &msg.Content.ChatID, &msg.Content.Text, &pkey, &msg.Public, &msg.Flags)
+			&msg.Timestamp, &msg.Content.ChatID, &msg.Content.Text, &pkey, &msg.Flags)
 		if err != nil {
 			return nil, err
 		}
@@ -455,7 +453,7 @@ func (db sqlitePersistence) UnreadMessages(chatID string) ([]*protocol.Message, 
 		pkey := []byte{}
 		err = rows.Scan(
 			&msg.ID, &msg.ContentT, &msg.MessageT, &msg.Text, &msg.Clock,
-			&msg.Timestamp, &msg.Content.ChatID, &msg.Content.Text, &pkey, &msg.Public, &msg.Flags)
+			&msg.Timestamp, &msg.Content.ChatID, &msg.Content.Text, &pkey, &msg.Flags)
 		if err != nil {
 			return nil, err
 		}
@@ -480,21 +478,21 @@ func (db sqlitePersistence) SaveMessages(messages []*protocol.Message) (last int
 	if err != nil {
 		return
 	}
-	stmt, err = tx.Prepare(`INSERT INTO user_messages(
-id, chat_id, content_type, message_type, text, clock, timestamp, content_chat_id, content_text, public_key, public, flags)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-	if err != nil {
-		return
-	}
 	defer func() {
 		if err == nil {
 			err = tx.Commit()
 			return
-
 		}
 		// don't shadow original error
 		_ = tx.Rollback()
 	}()
+
+	stmt, err = tx.Prepare(`INSERT INTO user_messages(
+id, chat_id, content_type, message_type, text, clock, timestamp, content_chat_id, content_text, public_key, flags)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return
+	}
 
 	var rst sql.Result
 
@@ -506,7 +504,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 		rst, err = stmt.Exec(
 			msg.ID, msg.Content.ChatID, msg.ContentT, msg.MessageT, msg.Text,
 			msg.Clock, msg.Timestamp, msg.Content.ChatID, msg.Content.Text,
-			pkey, msg.Public, msg.Flags)
+			pkey, msg.Flags)
 		if err != nil {
 			if err.Error() == uniqueIDContstraint {
 				// skip duplicated messages

@@ -582,7 +582,7 @@ func (m *Messenger) RetrieveAll(ctx context.Context, c RetrieveConfig) ([]*proto
 	var result []*protocol.Message
 
 	for _, message := range latest {
-		protoMessages, err := m.processor.Process(message.Message, message.Public)
+		protoMessages, err := m.processor.Process(message.Message)
 		if err != nil {
 			return nil, err
 		}

@@ -213,6 +213,7 @@ func (s *MessengerSuite) TestSendPrivate() {
 	s.NoError(err)
 	chat := CreateOneToOneChat("XXX", &recipientKey.PublicKey)
 	err = s.m.SaveChat(chat)
+	s.NoError(err)
 	_, err = s.m.Send(context.Background(), chat.ID, []byte("test"))
 	s.NoError(err)
 }

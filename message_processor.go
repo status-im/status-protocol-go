@@ -218,7 +218,7 @@ func (p *messageProcessor) SendPublicRaw(ctx context.Context, chatName string, d
 	return messageID, nil
 }
 
-func (p *messageProcessor) Process(message *whisper.ReceivedMessage, public bool) ([]*protocol.Message, error) {
+func (p *messageProcessor) Process(message *whisper.ReceivedMessage) ([]*protocol.Message, error) {
 	logger := p.logger.With(zap.String("site", "Process"))
 
 	var decodedMessages []*protocol.Message
@@ -238,7 +238,6 @@ func (p *messageProcessor) Process(message *whisper.ReceivedMessage, public bool
 		case protocol.Message:
 			m.ID = statusMessage.ID
 			m.SigPubKey = statusMessage.SigPubKey()
-			m.Public = public
 			decodedMessages = append(decodedMessages, &m)
 		case protocol.PairMessage:
 			fromOurDevice := isPubKeyEqual(statusMessage.SigPubKey(), &p.identity.PublicKey)
