@@ -92,7 +92,7 @@ github.com/syndtr/goleveldb/leveldb/filter
 github.com/syndtr/goleveldb/leveldb/journal
 github.com/syndtr/goleveldb/leveldb/memdb
 github.com/syndtr/goleveldb/leveldb/table
-# github.com/vacp2p/mvds v0.0.0-20190705123435-a8dc37599bf99958b0ea19431c9bb7a47bd7fa8f
+# github.com/vacp2p/mvds v0.0.21
 github.com/vacp2p/mvds/node
 github.com/vacp2p/mvds/protobuf
 github.com/vacp2p/mvds/state

@@ -10,14 +10,11 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
-
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/status-im/status-protocol-go/tt"
-
+	whisper "github.com/status-im/whisper/whisperv6"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
-
-	"github.com/ethereum/go-ethereum/crypto"
-	whisper "github.com/status-im/whisper/whisperv6"
 )
 
 func TestMessengerSuite(t *testing.T) {
@@ -196,7 +193,7 @@ func (s *MessengerSuite) TestInit() {
 			tc.Prep()
 			err := s.m.Init()
 			s.Require().NoError(err)
-			filters := s.m.adapter.transport.Filters()
+			filters := s.m.transport.Filters()
 			expectedFilters += tc.AddedFilters
 			s.Equal(expectedFilters, len(filters))
 		})
@@ -225,12 +222,12 @@ func (s *MessengerSuite) TestRetrievePublic() {
 	time.Sleep(time.Millisecond * 500)
 
 	// Retrieve chat
-	messages, err := s.m.Retrieve(context.Background(), chat, RetrieveLatest)
+	messages, err := s.m.RetrieveAll(context.Background(), RetrieveLatest)
 	s.NoError(err)
 	s.Len(messages, 1)
 
 	// Retrieve again to test skipping already existing err.
-	messages, err = s.m.Retrieve(context.Background(), chat, RetrieveLastDay)
+	messages, err = s.m.RetrieveAll(context.Background(), RetrieveLastDay)
 	s.NoError(err)
 	s.Require().Len(messages, 1)
 
@@ -252,12 +249,12 @@ func (s *MessengerSuite) TestRetrievePrivate() {
 	time.Sleep(time.Millisecond * 500)
 
 	// Retrieve chat
-	messages, err := s.m.Retrieve(context.Background(), chat, RetrieveLatest)
+	messages, err := s.m.RetrieveAll(context.Background(), RetrieveLatest)
 	s.NoError(err)
 	s.Len(messages, 1)
 
 	// Retrieve again to test skipping already existing err.
-	messages, err = s.m.Retrieve(context.Background(), chat, RetrieveLastDay)
+	messages, err = s.m.RetrieveAll(context.Background(), RetrieveLastDay)
 	s.NoError(err)
 	s.Len(messages, 1)
 
