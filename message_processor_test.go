@@ -18,7 +18,6 @@ import (
 	"github.com/status-im/status-protocol-go/sqlite"
 	transport "github.com/status-im/status-protocol-go/transport/whisper"
 	protocol "github.com/status-im/status-protocol-go/v1"
-
 	datasyncproto "github.com/vacp2p/mvds/protobuf"
 )
 

@@ -55,6 +55,7 @@ func newMessageProcessor(
 		datasyncpeer.PublicKeyToPeerID(identity.PublicKey),
 		datasyncnode.BATCH,
 		datasync.CalculateSendTime,
+		logger,
 	)
 	if err != nil {
 		return nil, err
