@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"encoding/hex"
+	"errors"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/status-im/status-protocol-go/tt"
+	statusproto "github.com/status-im/status-protocol-go/v1"
 	whisper "github.com/status-im/whisper/whisperv6"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
@@ -21,45 +23,70 @@ func TestMessengerSuite(t *testing.T) {
 	suite.Run(t, new(MessengerSuite))
 }
 
+func TestMessengerWithDataSyncEnabledSuite(t *testing.T) {
+	suite.Run(t, &MessengerSuite{enableDataSync: true})
+}
+
 type MessengerSuite struct {
 	suite.Suite
 
+	enableDataSync bool
+
 	m          *Messenger
-	tmpFile    *os.File
 	privateKey *ecdsa.PrivateKey
+	shh        *whisper.Whisper
+	tmpFiles   []*os.File
 	logger     *zap.Logger
 }
 
 func (s *MessengerSuite) SetupTest() {
-	var err error
-
 	s.logger = tt.MustCreateTestLogger()
-
-	s.tmpFile, err = ioutil.TempFile("", "messenger-test.sql")
-	s.Require().NoError(err)
-
-	s.privateKey, err = crypto.GenerateKey()
-	s.Require().NoError(err)
 
 	config := whisper.DefaultConfig
 	config.MinimumAcceptedPOW = 0
-	shh := whisper.New(&config)
-	s.Require().NoError(shh.Start(nil))
+	s.shh = whisper.New(&config)
+	s.Require().NoError(s.shh.Start(nil))
 
-	s.m, err = NewMessenger(
-		s.privateKey,
-		shh,
-		"installation-1",
+	s.m = s.newMessenger()
+	s.privateKey = s.m.identity
+}
+
+func (s *MessengerSuite) newMessenger() *Messenger {
+	tmpFile, err := ioutil.TempFile("", "")
+	s.Require().NoError(err)
+
+	privateKey, err := crypto.GenerateKey()
+	s.Require().NoError(err)
+
+	options := []Option{
 		WithCustomLogger(s.logger),
 		WithMessagesPersistenceEnabled(),
-		WithDatabaseConfig(s.tmpFile.Name(), "some-key"),
+		WithDatabaseConfig(tmpFile.Name(), "some-key"),
+	}
+	if s.enableDataSync {
+		options = append(options, WithDatasync())
+	}
+	m, err := NewMessenger(
+		privateKey,
+		s.shh,
+		"installation-1",
+		options...,
 	)
 	s.Require().NoError(err)
+
+	err = m.Init()
+	s.Require().NoError(err)
+
+	s.tmpFiles = append(s.tmpFiles, tmpFile)
+
+	return m
 }
 
 func (s *MessengerSuite) TearDownTest() {
 	s.Require().NoError(s.m.Shutdown())
-	_ = os.Remove(s.tmpFile.Name())
+	for _, f := range s.tmpFiles {
+		_ = os.Remove(f.Name())
+	}
 	_ = s.logger.Sync()
 }
 
@@ -212,7 +239,7 @@ func (s *MessengerSuite) TestSendPrivate() {
 	s.NoError(err)
 }
 
-func (s *MessengerSuite) TestRetrievePublic() {
+func (s *MessengerSuite) TestRetrieveOwnPublic() {
 	chat := Chat{ID: "status", Name: "status"}
 
 	_, err := s.m.Send(context.Background(), chat, []byte("test"))
@@ -237,16 +264,15 @@ func (s *MessengerSuite) TestRetrievePublic() {
 	s.Equal(&s.privateKey.PublicKey, message.SigPubKey) // this is OUR message
 }
 
-func (s *MessengerSuite) TestRetrievePrivate() {
+func (s *MessengerSuite) TestRetrieveOwnPrivate() {
 	publicContact, err := crypto.GenerateKey()
 	s.NoError(err)
 	chat := Chat{ID: "x", PublicKey: &publicContact.PublicKey}
 
-	_, err = s.m.Send(context.Background(), chat, []byte("test"))
+	messageID, err := s.m.Send(context.Background(), chat, []byte("test"))
 	s.NoError(err)
 
-	// Give Whisper some time to propagate message to filters.
-	time.Sleep(time.Millisecond * 500)
+	// No need to sleep because the message is returned from own messages in the processor.
 
 	// Retrieve chat
 	messages, err := s.m.RetrieveAll(context.Background(), RetrieveLatest)
@@ -260,8 +286,33 @@ func (s *MessengerSuite) TestRetrievePrivate() {
 
 	// Verify message fields.
 	message := messages[0]
-	s.NotEmpty(message.ID)
+	s.Equal(messageID, message.ID)
 	s.Equal(&s.privateKey.PublicKey, message.SigPubKey) // this is OUR message
+}
+
+func (s *MessengerSuite) TestRetrieveTheirPrivate() {
+	theirMessenger := s.newMessenger()
+	chat := Chat{ID: "x", PublicKey: &s.privateKey.PublicKey}
+	messageID, err := theirMessenger.Send(context.Background(), chat, []byte("test"))
+	s.NoError(err)
+
+	var messages []*statusproto.Message
+
+	err = tt.RetryWithBackOff(func() error {
+		var err error
+		messages, err = s.m.RetrieveAll(context.Background(), RetrieveLatest)
+		if err == nil && len(messages) == 0 {
+			err = errors.New("no messages")
+		}
+		return err
+	})
+	s.NoError(err)
+
+	// Validate received message.
+	s.Require().Len(messages, 1)
+	message := messages[0]
+	s.Equal(messageID, message.ID)
+	s.Equal(&theirMessenger.identity.PublicKey, message.SigPubKey)
 }
 
 func (s *MessengerSuite) TestChatPersistencePublic() {
