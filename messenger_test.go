@@ -201,21 +201,28 @@ func (s *MessengerSuite) TestInit() {
 }
 
 func (s *MessengerSuite) TestSendPublic() {
-	_, err := s.m.Send(context.Background(), Chat{Name: "status", ID: "status"}, []byte("test"))
+	chat := CreatePublicChat("test-chat")
+	err := s.m.SaveChat(chat)
+	s.NoError(err)
+	_, err = s.m.Send(context.Background(), chat.ID, []byte("test"))
 	s.NoError(err)
 }
 
 func (s *MessengerSuite) TestSendPrivate() {
 	recipientKey, err := crypto.GenerateKey()
 	s.NoError(err)
-	_, err = s.m.Send(context.Background(), Chat{ID: "x", PublicKey: &recipientKey.PublicKey}, []byte("test"))
+	chat := CreateOneToOneChat("XXX", &recipientKey.PublicKey)
+	err = s.m.SaveChat(chat)
+	_, err = s.m.Send(context.Background(), chat.ID, []byte("test"))
 	s.NoError(err)
 }
 
 func (s *MessengerSuite) TestRetrievePublic() {
-	chat := Chat{ID: "status", Name: "status"}
+	chat := CreatePublicChat("status")
+	err := s.m.SaveChat(chat)
+	s.NoError(err)
 
-	_, err := s.m.Send(context.Background(), chat, []byte("test"))
+	_, err = s.m.Send(context.Background(), chat.ID, []byte("test"))
 	s.NoError(err)
 
 	// Give Whisper some time to propagate message to filters.
@@ -238,11 +245,13 @@ func (s *MessengerSuite) TestRetrievePublic() {
 }
 
 func (s *MessengerSuite) TestRetrievePrivate() {
-	publicContact, err := crypto.GenerateKey()
+	recipientKey, err := crypto.GenerateKey()
 	s.NoError(err)
-	chat := Chat{ID: "x", PublicKey: &publicContact.PublicKey}
+	chat := CreateOneToOneChat("XXX", &recipientKey.PublicKey)
+	err = s.m.SaveChat(chat)
+	s.NoError(err)
 
-	_, err = s.m.Send(context.Background(), chat, []byte("test"))
+	_, err = s.m.Send(context.Background(), chat.ID, []byte("test"))
 	s.NoError(err)
 
 	// Give Whisper some time to propagate message to filters.

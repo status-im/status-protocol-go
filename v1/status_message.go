@@ -4,8 +4,6 @@ import (
 	"crypto/ecdsa"
 	"log"
 
-	"github.com/pkg/errors"
-
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/golang/protobuf/proto"
