@@ -6,12 +6,17 @@ import (
 	"encoding/hex"
 	"io/ioutil"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
+	"github.com/status-im/status-protocol-go/sqlite"
+
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
+	_ "github.com/mutecomm/go-sqlcipher" // require go-sqlcipher that overrides default implementation
 	"github.com/status-im/status-protocol-go/tt"
+	protocol "github.com/status-im/status-protocol-go/v1"
 	whisper "github.com/status-im/whisper/whisperv6"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
@@ -19,6 +24,10 @@ import (
 
 func TestMessengerSuite(t *testing.T) {
 	suite.Run(t, new(MessengerSuite))
+}
+
+func TestPostProcessorSuite(t *testing.T) {
+	suite.Run(t, new(PostProcessorSuite))
 }
 
 type MessengerSuite struct {
@@ -719,4 +728,66 @@ func (s *MessengerSuite) TestContactPersistenceUpdate() {
 func (s *MessengerSuite) TestSharedSecretHandler() {
 	_, err := s.m.handleSharedSecrets(nil)
 	s.NoError(err)
+}
+
+type PostProcessorSuite struct {
+	suite.Suite
+
+	postProcessor *postProcessor
+	logger        *zap.Logger
+}
+
+func (s *PostProcessorSuite) SetupTest() {
+	s.logger = tt.MustCreateTestLogger()
+
+	privateKey, err := crypto.GenerateKey()
+	s.Require().NoError(err)
+
+	db, err := sqlite.OpenInMemory()
+	s.Require().NoError(err)
+
+	s.postProcessor = &postProcessor{
+		myPublicKey: &privateKey.PublicKey,
+		persistence: &sqlitePersistence{db: db},
+		logger:      s.logger,
+		matchChat:   true,
+		persist:     true,
+	}
+}
+
+func (s *PostProcessorSuite) TearDownTest() {
+	_ = s.logger.Sync()
+}
+
+func (s *PostProcessorSuite) TestRun() {
+	testCases := []struct {
+		Name    string
+		Chat    Chat
+		Message protocol.Message
+	}{
+		{
+			Name:    "public chat",
+			Chat:    CreatePublicChat("test-chat"),
+			Message: protocol.CreatePublicTextMessage([]byte("test"), 0, "test-chat"),
+		},
+		// TODO: add more cases
+	}
+
+	for idx, tc := range testCases {
+		s.Run(tc.Name, func() {
+			err := s.postProcessor.persistence.SaveChat(tc.Chat)
+			s.Require().NoError(err)
+
+			// ChatID is not set at the beginning.
+			message := tc.Message
+			s.Empty(message.ChatID)
+
+			message.ID = []byte(strconv.Itoa(idx)) // manually set the ID because messages does not go through messageProcessor
+			messages, err := s.postProcessor.Run([]*protocol.Message{&message})
+			s.NoError(err)
+			s.Equal(tc.Chat.ID, message.ChatID)
+			s.Require().Len(messages, 1)
+			s.EqualValues(&message, messages[0])
+		})
+	}
 }

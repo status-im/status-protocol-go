@@ -111,3 +111,12 @@ func CreatePublicChat(name string) Chat {
 		ChatType: ChatTypePublic,
 	}
 }
+
+func findChatByID(chatID string, chats []*Chat) *Chat {
+	for _, c := range chats {
+		if c.ID == chatID {
+			return c
+		}
+	}
+	return nil
+}

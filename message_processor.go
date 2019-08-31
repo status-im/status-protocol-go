@@ -266,7 +266,8 @@ func (p *messageProcessor) Process(message *whisper.ReceivedMessage) ([]*protoco
 // handleMessages expects a whisper message as input, and it will go through
 // a series of transformations until the message is parsed into an application
 // layer message, or in case of Raw methods, the processing stops at the layer
-// before
+// before.
+// It returns an error only if the processing of required steps failed.
 func (p *messageProcessor) handleMessages(shhMessage *whisper.Message, applicationLayer bool) ([]*protocol.StatusMessage, error) {
 	logger := p.logger.With(zap.String("site", "handleMessages"))
 	hlogger := logger.With(zap.Binary("hash", shhMessage.Hash))
