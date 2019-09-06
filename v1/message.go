@@ -78,7 +78,6 @@ type Message struct {
 	Flags     Flags            `json:"-"`
 	ID        []byte           `json:"-"`
 	SigPubKey *ecdsa.PublicKey `json:"-"`
-	Public    bool             `json:"-"` // TODO: remove
 	ChatID    string           `json:"-"` // reference to Chat.ID; not connected to Content.ChatID which is set by sender
 }
 

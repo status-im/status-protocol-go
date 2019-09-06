@@ -473,6 +473,10 @@ func (m *Messenger) Chats() ([]*Chat, error) {
 	return m.persistence.Chats()
 }
 
+func (m *Messenger) DeleteChat(chatID string) error {
+	return m.persistence.DeleteChat(chatID)
+}
+
 func (m *Messenger) chatByID(id string) (*Chat, error) {
 	chats, err := m.persistence.Chats()
 	if err != nil {
@@ -484,10 +488,6 @@ func (m *Messenger) chatByID(id string) (*Chat, error) {
 		}
 	}
 	return nil, errors.New("chat not found")
-}
-
-func (m *Messenger) DeleteChat(chatID string) error {
-	return m.persistence.DeleteChat(chatID)
 }
 
 func (m *Messenger) SaveContact(contact Contact) error {
