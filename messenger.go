@@ -727,6 +727,8 @@ func (m *Messenger) UpdateMessageOutgoingStatus(id, newOutgoingStatus string) er
 }
 
 // postProcessor performs a set of actions on newly retrieved messages.
+// If persist is true, it saves the messages into the database.
+// If matchChat is true, it matches each messages against a Chat instance.
 type postProcessor struct {
 	myPublicKey *ecdsa.PublicKey
 	persistence *sqlitePersistence
