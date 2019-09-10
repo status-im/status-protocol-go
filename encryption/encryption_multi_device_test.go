@@ -330,7 +330,7 @@ func (s *EncryptionServiceMultiDeviceSuite) TestMaxDevicesRefreshedBundle() {
 	msg2, err := alice1.BuildDirectMessage(aliceKey, &bobKey.PublicKey, []byte("test"))
 	s.Require().NoError(err)
 
-	alice1Bundle = msg2.Message.GetBundle()
+	alice1Bundle = msg2.Message.GetBundles()[0]
 
 	// Bob processes the bundle
 	_, err = bob1.ProcessPublicBundle(bobKey, alice1Bundle)

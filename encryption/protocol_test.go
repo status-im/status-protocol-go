@@ -104,7 +104,7 @@ func (s *ProtocolServiceTestSuite) TestBuildDirectMessage() {
 	msg := msgSpec.Message
 	s.NotNil(msg, "It creates a messages")
 
-	s.NotNilf(msg.GetBundle(), "It adds a bundle to the message")
+	s.NotNilf(msg.GetBundles(), "It adds a bundle to the message")
 
 	directMessage := msg.GetDirectMessage()
 	s.NotNilf(directMessage, "It sets the direct message")
@@ -156,7 +156,7 @@ func (s *ProtocolServiceTestSuite) TestSecretNegotiation() {
 	s.NoError(err)
 	s.NotNil(msgSpec, "It creates a message spec")
 
-	bundle := msgSpec.Message.GetBundle()
+	bundle := msgSpec.Message.GetBundles()[0]
 	s.Require().NotNil(bundle)
 
 	signedPreKeys := bundle.GetSignedPreKeys()
