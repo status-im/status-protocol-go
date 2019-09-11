@@ -579,7 +579,10 @@ func (m *Messenger) RetrieveAll(ctx context.Context, c RetrieveConfig) ([]*proto
 		return nil, err
 	}
 
-	postProcess := newPostProcessor(m, true, true)
+	postProcess := newPostProcessor(m, postProcessorConfig{
+		MatchChat: true,
+		Persist:   true,
+	})
 	result, err = postProcess.Run(result)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to post process messages")
@@ -730,17 +733,20 @@ type postProcessor struct {
 	persistence *sqlitePersistence
 	logger      *zap.Logger
 
-	matchChat bool
-	persist   bool
+	config postProcessorConfig
 }
 
-func newPostProcessor(m *Messenger, matchChat, persist bool) *postProcessor {
+type postProcessorConfig struct {
+	MatchChat bool // match each messages to a chat; may result in a new chat creation
+	Persist   bool // if true, all sent and received user messages will be persisted
+}
+
+func newPostProcessor(m *Messenger, config postProcessorConfig) *postProcessor {
 	return &postProcessor{
 		myPublicKey: &m.identity.PublicKey,
 		persistence: m.persistence,
 		logger:      m.logger,
-		matchChat:   matchChat,
-		persist:     persist,
+		config:      config,
 	}
 }
 
@@ -752,10 +758,10 @@ func (p *postProcessor) Run(messages []*protocol.Message) ([]*protocol.Message, 
 	var fns []func([]*protocol.Message) ([]*protocol.Message, error)
 
 	// Order is important. Persisting messages should be always at the end.
-	if p.matchChat {
+	if p.config.MatchChat {
 		fns = append(fns, p.matchMessages)
 	}
-	if p.persist {
+	if p.config.Persist {
 		fns = append(fns, p.saveMessages)
 	}
 
