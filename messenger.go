@@ -579,11 +579,7 @@ func (m *Messenger) RetrieveAll(ctx context.Context, c RetrieveConfig) ([]*proto
 		return nil, err
 	}
 
-	postProcess := &postProcessor{
-		matchChat: true,
-		persist:   true,
-	}
-	postProcess.InitWithMessenger(m)
+	postProcess := newPostProcessor(m, true, true)
 	result, err = postProcess.Run(result)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to post process messages")
@@ -734,27 +730,24 @@ type postProcessor struct {
 	persistence *sqlitePersistence
 	logger      *zap.Logger
 
-	chats []*Chat
-
 	matchChat bool
 	persist   bool
 }
 
-func (p *postProcessor) InitWithMessenger(m *Messenger) {
-	p.myPublicKey = &m.identity.PublicKey
-	p.persistence = m.persistence
-	p.logger = m.logger
+func newPostProcessor(m *Messenger, matchChat, persist bool) *postProcessor {
+	return &postProcessor{
+		myPublicKey: &m.identity.PublicKey,
+		persistence: m.persistence,
+		logger:      m.logger,
+		matchChat:   matchChat,
+		persist:     persist,
+	}
 }
 
 func (p *postProcessor) Run(messages []*protocol.Message) ([]*protocol.Message, error) {
 	var err error
 
-	p.chats, err = p.persistence.Chats()
-	if err != nil {
-		return nil, err
-	}
-
-	p.logger.Debug("running post processor", zap.Int("chats", len(p.chats)))
+	p.logger.Debug("running post processor")
 
 	var fns []func([]*protocol.Message) ([]*protocol.Message, error)
 
@@ -785,9 +778,14 @@ func (p *postProcessor) saveMessages(messages []*protocol.Message) ([]*protocol.
 }
 
 func (p *postProcessor) matchMessages(messages []*protocol.Message) ([]*protocol.Message, error) {
+	chats, err := p.persistence.Chats()
+	if err != nil {
+		return nil, err
+	}
+
 	result := make([]*protocol.Message, 0, len(messages))
 	for _, message := range messages {
-		chat, err := p.matchMessage(message, p.chats)
+		chat, err := p.matchMessage(message, chats)
 		if err != nil {
 			p.logger.Error("failed to match a chat to a message", zap.Error(err))
 			continue
