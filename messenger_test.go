@@ -805,8 +805,10 @@ func (s *PostProcessorSuite) SetupTest() {
 		myPublicKey: &privateKey.PublicKey,
 		persistence: &sqlitePersistence{db: db},
 		logger:      s.logger,
-		matchChat:   true,
-		persist:     true,
+		config: postProcessorConfig{
+			MatchChat: true,
+			Persist:   true,
+		},
 	}
 }
 
@@ -815,32 +817,74 @@ func (s *PostProcessorSuite) TearDownTest() {
 }
 
 func (s *PostProcessorSuite) TestRun() {
+	key1, err := crypto.GenerateKey()
+	s.Require().NoError(err)
+	key2, err := crypto.GenerateKey()
+	s.Require().NoError(err)
+
 	testCases := []struct {
-		Name    string
-		Chat    Chat
-		Message protocol.Message
+		Name           string
+		Chat           Chat // Chat to create
+		Message        protocol.Message
+		SigPubKey      *ecdsa.PublicKey
+		ExpectedChatID string
 	}{
 		{
-			Name:    "public chat",
-			Chat:    CreatePublicChat("test-chat"),
-			Message: protocol.CreatePublicTextMessage([]byte("test"), 0, "test-chat"),
+			Name:           "Public chat",
+			Chat:           CreatePublicChat("test-chat"),
+			Message:        protocol.CreatePublicTextMessage([]byte("test"), 0, "test-chat"),
+			SigPubKey:      &key1.PublicKey,
+			ExpectedChatID: "test-chat",
 		},
-		// TODO: add more cases
+		{
+			Name:           "Private message from myself with existing chat",
+			Chat:           CreateOneToOneChat("test-private-chat", &key1.PublicKey),
+			Message:        protocol.CreatePrivateTextMessage([]byte("test"), 0, oneToOneChatID(&key1.PublicKey)),
+			SigPubKey:      &key1.PublicKey,
+			ExpectedChatID: oneToOneChatID(&key1.PublicKey),
+		},
+		{
+			Name:           "Private message from other with existing chat",
+			Chat:           CreateOneToOneChat("test-private-chat", &key2.PublicKey),
+			Message:        protocol.CreatePrivateTextMessage([]byte("test"), 0, oneToOneChatID(&key1.PublicKey)),
+			SigPubKey:      &key2.PublicKey,
+			ExpectedChatID: oneToOneChatID(&key2.PublicKey),
+		},
+		{
+			Name:           "Private message from myself without chat",
+			Message:        protocol.CreatePrivateTextMessage([]byte("test"), 0, oneToOneChatID(&key1.PublicKey)),
+			SigPubKey:      &key1.PublicKey,
+			ExpectedChatID: oneToOneChatID(&key1.PublicKey),
+		},
+		{
+			Name:           "Private message from other without chat",
+			Message:        protocol.CreatePrivateTextMessage([]byte("test"), 0, oneToOneChatID(&key1.PublicKey)),
+			SigPubKey:      &key2.PublicKey,
+			ExpectedChatID: oneToOneChatID(&key2.PublicKey),
+		},
+		// TODO: add test for group messages
 	}
 
 	for idx, tc := range testCases {
 		s.Run(tc.Name, func() {
-			err := s.postProcessor.persistence.SaveChat(tc.Chat)
-			s.Require().NoError(err)
+			if tc.Chat.ID != "" {
+				err := s.postProcessor.persistence.SaveChat(tc.Chat)
+				s.Require().NoError(err)
+				defer func() {
+					err := s.postProcessor.persistence.DeleteChat(tc.Chat.ID)
+					s.Require().NoError(err)
+				}()
+			}
 
-			// ChatID is not set at the beginning.
 			message := tc.Message
+			message.SigPubKey = tc.SigPubKey
+			// ChatID is not set at the beginning.
 			s.Empty(message.ChatID)
 
 			message.ID = []byte(strconv.Itoa(idx)) // manually set the ID because messages does not go through messageProcessor
 			messages, err := s.postProcessor.Run([]*protocol.Message{&message})
 			s.NoError(err)
-			s.Equal(tc.Chat.ID, message.ChatID)
+			s.Equal(tc.ExpectedChatID, message.ChatID)
 			s.Require().Len(messages, 1)
 			s.EqualValues(&message, messages[0])
 		})

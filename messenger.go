@@ -753,7 +753,7 @@ func newPostProcessor(m *Messenger, config postProcessorConfig) *postProcessor {
 func (p *postProcessor) Run(messages []*protocol.Message) ([]*protocol.Message, error) {
 	var err error
 
-	p.logger.Debug("running post processor")
+	p.logger.Debug("running post processor", zap.Int("messages", len(messages)))
 
 	var fns []func([]*protocol.Message) ([]*protocol.Message, error)
 
@@ -815,10 +815,16 @@ func (p *postProcessor) matchMessage(message *protocol.Message, chats []*Chat) (
 		return chat, nil
 	case message.MessageT == protocol.MessageTypePrivate && isPubKeyEqual(message.SigPubKey, p.myPublicKey):
 		// It's a private message coming from us so we rely on Message.Content.ChatID.
+		// If chat does not exist, it should be created to support multidevice synchronization.
 		chatID := message.Content.ChatID
 		chat := findChatByID(chatID, chats)
 		if chat == nil {
-			return nil, errors.New("received a message from myself for non-existing chat")
+			// TODO: this should be a three-word name used in the mobile client
+			newChat := CreateOneToOneChat(chatID[:8], message.SigPubKey)
+			if err := p.persistence.SaveChat(newChat); err != nil {
+				return nil, errors.Wrap(err, "failed to save newly created chat")
+			}
+			chat = &newChat
 		}
 		return chat, nil
 	case message.MessageT == protocol.MessageTypePrivate:
@@ -827,6 +833,7 @@ func (p *postProcessor) matchMessage(message *protocol.Message, chats []*Chat) (
 		chatID := hexutil.Encode(crypto.FromECDSAPub(message.SigPubKey))
 		chat := findChatByID(chatID, chats)
 		if chat == nil {
+			// TODO: this should be a three-word name used in the mobile client
 			newChat := CreateOneToOneChat(chatID[:8], message.SigPubKey)
 			if err := p.persistence.SaveChat(newChat); err != nil {
 				return nil, errors.Wrap(err, "failed to save newly created chat")
