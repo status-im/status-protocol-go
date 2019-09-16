@@ -4,6 +4,9 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"database/sql"
+	"encoding/hex"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -15,6 +18,8 @@ import (
 	"github.com/status-im/status-protocol-go/encryption"
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
 	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
+	"github.com/status-im/status-protocol-go/identity/alias"
+	"github.com/status-im/status-protocol-go/identity/identicon"
 	"github.com/status-im/status-protocol-go/sqlite"
 	transport "github.com/status-im/status-protocol-go/transport/whisper"
 	protocol "github.com/status-im/status-protocol-go/v1"
@@ -495,6 +500,20 @@ func (m *Messenger) chatByID(id string) (*Chat, error) {
 }
 
 func (m *Messenger) SaveContact(contact Contact) error {
+	identicon, err := identicon.GenerateBase64(contact.ID)
+	if err != nil {
+		return err
+	}
+
+	contact.Identicon = identicon
+
+	name, err := alias.GenerateFromPublicKeyString(contact.ID)
+	if err != nil {
+		return err
+	}
+
+	contact.Alias = name
+
 	return m.persistence.SaveContact(contact, nil)
 }
 
@@ -662,11 +681,50 @@ func (m *Messenger) RetrieveRawAll() (map[transport.Filter][]*protocol.StatusMes
 				logger.Info("failed to decode messages", zap.Error(err))
 				continue
 			}
+
 			result[chat] = append(result[chat], statusMessages...)
 		}
 	}
 
+	err = m.saveContacts(result)
+	if err != nil {
+		return nil, err
+	}
+
 	return result, nil
+}
+
+func (m *Messenger) saveContacts(messages map[transport.Filter][]*protocol.StatusMessage) error {
+	allContactsMap := make(map[string]bool)
+	var allContacts []Contact
+	for _, chatMessages := range messages {
+		for _, message := range chatMessages {
+			publicKey := message.SigPubKey()
+			address := strings.ToLower(crypto.PubkeyToAddress(*publicKey).Hex())
+
+			if _, ok := allContactsMap[address]; ok {
+				continue
+			}
+			id := fmt.Sprintf("0x%s", hex.EncodeToString(crypto.FromECDSAPub(publicKey)))
+
+			identicon, err := identicon.GenerateBase64(id)
+			if err != nil {
+				continue
+			}
+
+			contact := Contact{
+				ID:        id,
+				Address:   address[2:],
+				Alias:     alias.GenerateFromPublicKey(message.SigPubKey()),
+				Identicon: identicon,
+			}
+
+			allContactsMap[address] = true
+			allContacts = append(allContacts, contact)
+
+		}
+	}
+	return m.persistence.SetContactsGeneratedData(allContacts)
 }
 
 // DEPRECATED
@@ -860,4 +918,14 @@ func (p *postProcessor) matchMessage(message *protocol.Message, chats []*Chat) (
 	default:
 		return nil, errors.New("can not match a chat because there is no valid case")
 	}
+}
+
+// Identicon returns an identicon based on the input string
+func Identicon(id string) (string, error) {
+	return identicon.GenerateBase64(id)
+}
+
+// GenerateAlias name returns the generated name given a public key hex encoded prefixed with 0x
+func GenerateAlias(id string) (string, error) {
+	return alias.GenerateFromPublicKeyString(id)
 }
