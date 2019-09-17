@@ -100,6 +100,28 @@ func (s *MessengerSuite) TearDownTest() {
 	_ = s.logger.Sync()
 }
 
+func (s *MessengerSuite) TestInMemoryDatabase() {
+	key, err := crypto.GenerateKey()
+	s.Require().NoError(err)
+	m, err := NewMessenger(
+		key,
+		s.shh,
+		"installation-1",
+	)
+	s.Require().NoError(err)
+	// Verify the in-memory database works.
+	err = m.persistence.SaveChat(Chat{
+		ID:       "abc",
+		Name:     "abc",
+		Active:   true,
+		ChatType: ChatTypePublic,
+	})
+	s.Require().NoError(err)
+	result, err := m.persistence.Chats()
+	s.Require().NoError(err)
+	s.Require().Len(result, 1)
+}
+
 func (s *MessengerSuite) TestInit() {
 	testCases := []struct {
 		Name         string
