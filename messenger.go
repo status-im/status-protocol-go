@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
-
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/pkg/errors"
 	whisper "github.com/status-im/whisper/whisperv6"
@@ -24,6 +23,8 @@ import (
 var (
 	ErrChatIDEmpty    = errors.New("chat ID is empty")
 	ErrNotImplemented = errors.New("not implemented")
+
+	errChatNotFound = errors.New("chat not found")
 )
 
 // Messenger is a entity managing chats and messages.
@@ -487,7 +488,7 @@ func (m *Messenger) chatByID(id string) (*Chat, error) {
 			return c, nil
 		}
 	}
-	return nil, errors.New("chat not found")
+	return nil, errChatNotFound
 }
 
 func (m *Messenger) SaveContact(contact Contact) error {
