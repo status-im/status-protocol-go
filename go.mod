@@ -6,7 +6,7 @@ require (
 	github.com/aristanetworks/goarista v0.0.0-20190704150520-f44d68189fd7 // indirect
 	github.com/cenkalti/backoff/v3 v3.0.0
 	github.com/deckarep/golang-set v1.7.1 // indirect
-	github.com/ethereum/go-ethereum v1.8.27
+	github.com/ethereum/go-ethereum v1.9.4
 	github.com/golang/protobuf v1.3.2
 	github.com/jinzhu/copier v0.0.0-20190625015134-976e0346caa8
 	github.com/mutecomm/go-sqlcipher v0.0.0-20190227152316-55dbde17881f
