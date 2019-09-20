@@ -7,13 +7,17 @@ import (
 	"errors"
 	"io/ioutil"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
+	"github.com/status-im/status-protocol-go/sqlite"
+
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
+	_ "github.com/mutecomm/go-sqlcipher" // require go-sqlcipher that overrides default implementation
 	"github.com/status-im/status-protocol-go/tt"
-	statusproto "github.com/status-im/status-protocol-go/v1"
+	protocol "github.com/status-im/status-protocol-go/v1"
 	whisper "github.com/status-im/whisper/whisperv6"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
@@ -25,6 +29,10 @@ func TestMessengerSuite(t *testing.T) {
 
 func TestMessengerWithDataSyncEnabledSuite(t *testing.T) {
 	suite.Run(t, &MessengerSuite{enableDataSync: true})
+}
+
+func TestPostProcessorSuite(t *testing.T) {
+	suite.Run(t, new(PostProcessorSuite))
 }
 
 type MessengerSuite struct {
@@ -230,21 +238,29 @@ func (s *MessengerSuite) TestInit() {
 }
 
 func (s *MessengerSuite) TestSendPublic() {
-	_, err := s.m.Send(context.Background(), Chat{Name: "status", ID: "status"}, []byte("test"))
+	chat := CreatePublicChat("test-chat")
+	err := s.m.SaveChat(chat)
+	s.NoError(err)
+	_, err = s.m.Send(context.Background(), chat.ID, []byte("test"))
 	s.NoError(err)
 }
 
 func (s *MessengerSuite) TestSendPrivate() {
 	recipientKey, err := crypto.GenerateKey()
 	s.NoError(err)
-	_, err = s.m.Send(context.Background(), Chat{ID: "x", PublicKey: &recipientKey.PublicKey}, []byte("test"))
+	chat := CreateOneToOneChat("XXX", &recipientKey.PublicKey)
+	err = s.m.SaveChat(chat)
+	s.NoError(err)
+	_, err = s.m.Send(context.Background(), chat.ID, []byte("test"))
 	s.NoError(err)
 }
 
 func (s *MessengerSuite) TestRetrieveOwnPublic() {
-	chat := Chat{ID: "status", Name: "status"}
+	chat := CreatePublicChat("status")
+	err := s.m.SaveChat(chat)
+	s.NoError(err)
 
-	_, err := s.m.Send(context.Background(), chat, []byte("test"))
+	_, err = s.m.Send(context.Background(), chat.ID, []byte("test"))
 	s.NoError(err)
 
 	// Give Whisper some time to propagate message to filters.
@@ -267,11 +283,13 @@ func (s *MessengerSuite) TestRetrieveOwnPublic() {
 }
 
 func (s *MessengerSuite) TestRetrieveOwnPrivate() {
-	publicContact, err := crypto.GenerateKey()
+	recipientKey, err := crypto.GenerateKey()
 	s.NoError(err)
-	chat := Chat{ID: "x", PublicKey: &publicContact.PublicKey}
+	chat := CreateOneToOneChat("XXX", &recipientKey.PublicKey)
+	err = s.m.SaveChat(chat)
+	s.NoError(err)
 
-	messageID, err := s.m.Send(context.Background(), chat, []byte("test"))
+	messageID, err := s.m.Send(context.Background(), chat.ID, []byte("test"))
 	s.NoError(err)
 
 	// No need to sleep because the message is returned from own messages in the processor.
@@ -294,11 +312,14 @@ func (s *MessengerSuite) TestRetrieveOwnPrivate() {
 
 func (s *MessengerSuite) TestRetrieveTheirPrivate() {
 	theirMessenger := s.newMessenger()
-	chat := Chat{ID: "x", PublicKey: &s.privateKey.PublicKey}
-	messageID, err := theirMessenger.Send(context.Background(), chat, []byte("test"))
+	chat := CreateOneToOneChat("XXX", &s.privateKey.PublicKey)
+	err := theirMessenger.SaveChat(chat)
 	s.NoError(err)
 
-	var messages []*statusproto.Message
+	messageID, err := theirMessenger.Send(context.Background(), chat.ID, []byte("test"))
+	s.NoError(err)
+
+	var messages []*protocol.Message
 
 	err = tt.RetryWithBackOff(func() error {
 		var err error
@@ -762,4 +783,110 @@ func (s *MessengerSuite) TestContactPersistenceUpdate() {
 func (s *MessengerSuite) TestSharedSecretHandler() {
 	_, err := s.m.handleSharedSecrets(nil)
 	s.NoError(err)
+}
+
+type PostProcessorSuite struct {
+	suite.Suite
+
+	postProcessor *postProcessor
+	logger        *zap.Logger
+}
+
+func (s *PostProcessorSuite) SetupTest() {
+	s.logger = tt.MustCreateTestLogger()
+
+	privateKey, err := crypto.GenerateKey()
+	s.Require().NoError(err)
+
+	db, err := sqlite.OpenInMemory()
+	s.Require().NoError(err)
+
+	s.postProcessor = &postProcessor{
+		myPublicKey: &privateKey.PublicKey,
+		persistence: &sqlitePersistence{db: db},
+		logger:      s.logger,
+		config: postProcessorConfig{
+			MatchChat: true,
+			Persist:   true,
+		},
+	}
+}
+
+func (s *PostProcessorSuite) TearDownTest() {
+	_ = s.logger.Sync()
+}
+
+func (s *PostProcessorSuite) TestRun() {
+	key1, err := crypto.GenerateKey()
+	s.Require().NoError(err)
+	key2, err := crypto.GenerateKey()
+	s.Require().NoError(err)
+
+	testCases := []struct {
+		Name           string
+		Chat           Chat // Chat to create
+		Message        protocol.Message
+		SigPubKey      *ecdsa.PublicKey
+		ExpectedChatID string
+	}{
+		{
+			Name:           "Public chat",
+			Chat:           CreatePublicChat("test-chat"),
+			Message:        protocol.CreatePublicTextMessage([]byte("test"), 0, "test-chat"),
+			SigPubKey:      &key1.PublicKey,
+			ExpectedChatID: "test-chat",
+		},
+		{
+			Name:           "Private message from myself with existing chat",
+			Chat:           CreateOneToOneChat("test-private-chat", &key1.PublicKey),
+			Message:        protocol.CreatePrivateTextMessage([]byte("test"), 0, oneToOneChatID(&key1.PublicKey)),
+			SigPubKey:      &key1.PublicKey,
+			ExpectedChatID: oneToOneChatID(&key1.PublicKey),
+		},
+		{
+			Name:           "Private message from other with existing chat",
+			Chat:           CreateOneToOneChat("test-private-chat", &key2.PublicKey),
+			Message:        protocol.CreatePrivateTextMessage([]byte("test"), 0, oneToOneChatID(&key1.PublicKey)),
+			SigPubKey:      &key2.PublicKey,
+			ExpectedChatID: oneToOneChatID(&key2.PublicKey),
+		},
+		{
+			Name:           "Private message from myself without chat",
+			Message:        protocol.CreatePrivateTextMessage([]byte("test"), 0, oneToOneChatID(&key1.PublicKey)),
+			SigPubKey:      &key1.PublicKey,
+			ExpectedChatID: oneToOneChatID(&key1.PublicKey),
+		},
+		{
+			Name:           "Private message from other without chat",
+			Message:        protocol.CreatePrivateTextMessage([]byte("test"), 0, oneToOneChatID(&key1.PublicKey)),
+			SigPubKey:      &key2.PublicKey,
+			ExpectedChatID: oneToOneChatID(&key2.PublicKey),
+		},
+		// TODO: add test for group messages
+	}
+
+	for idx, tc := range testCases {
+		s.Run(tc.Name, func() {
+			if tc.Chat.ID != "" {
+				err := s.postProcessor.persistence.SaveChat(tc.Chat)
+				s.Require().NoError(err)
+				defer func() {
+					err := s.postProcessor.persistence.DeleteChat(tc.Chat.ID)
+					s.Require().NoError(err)
+				}()
+			}
+
+			message := tc.Message
+			message.SigPubKey = tc.SigPubKey
+			// ChatID is not set at the beginning.
+			s.Empty(message.ChatID)
+
+			message.ID = []byte(strconv.Itoa(idx)) // manually set the ID because messages does not go through messageProcessor
+			messages, err := s.postProcessor.Run([]*protocol.Message{&message})
+			s.NoError(err)
+			s.Equal(tc.ExpectedChatID, message.ChatID)
+			s.Require().Len(messages, 1)
+			s.EqualValues(&message, messages[0])
+		})
+	}
 }

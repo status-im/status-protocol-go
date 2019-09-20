@@ -198,7 +198,7 @@ func (db sqlitePersistence) MessageByChatID(chatID string, currCursor string, li
 		args = append(args, currCursor)
 	}
 	// Build a new column `cursor` at the query time by having a fixed-sized clock value at the beginning
-	// concatenated with rowid. Results are sorted using this new column.
+	// concatenated with message ID. Results are sorted using this new column.
 	// This new column values can also be returned as a cursor for subsequent requests.
 	rows, err := db.db.Query(
 		fmt.Sprintf(`
