@@ -16,14 +16,14 @@ func NewMessageDecoder(r io.Reader) *transit.Decoder {
 	decoder := transit.NewDecoder(r)
 	decoder.AddHandler(messageTag, statusMessageHandler)
 	decoder.AddHandler(pairMessageTag, pairMessageHandler)
-	decoder.AddHandler(membershipUpdate, membershipUpdateMessageHandler)
+	decoder.AddHandler(membershipUpdateTag, membershipUpdateMessageHandler)
 	return decoder
 }
 
 const (
-	messageTag       = "c4"
-	pairMessageTag   = "p2"
-	membershipUpdate = "g5"
+	messageTag          = "c4"
+	pairMessageTag      = "p2"
+	membershipUpdateTag = "g5"
 )
 
 func statusMessageHandler(d transit.Decoder, value interface{}) (interface{}, error) {

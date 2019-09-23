@@ -38,3 +38,13 @@ func TestDecodeMembershipUpdateMessage(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, testMembershipUpdateMessageStruct, val)
 }
+
+func TestEncodeMembershipUpdateMessage(t *testing.T) {
+	data, err := EncodeMembershipUpdateMessage(testMembershipUpdateMessageStruct)
+	require.NoError(t, err)
+	// Decode it back to a struct and compare. Comparing bytes is not an option because,
+	// for example, map encoding is non-deterministic.
+	val, err := decodeTransitMessage(data)
+	require.NoError(t, err)
+	require.EqualValues(t, testMembershipUpdateMessageStruct, val)
+}
