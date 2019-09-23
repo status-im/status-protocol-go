@@ -16,7 +16,7 @@ var (
 	}
 )
 
-func TestDecodePairMessageMessage(t *testing.T) {
+func TestDecodePairMessage(t *testing.T) {
 	val, err := decodeTransitMessage(testPairMessageBytes)
 	require.NoError(t, err)
 	require.EqualValues(t, testPairMessageStruct, val)
