@@ -6,9 +6,9 @@ require (
 	github.com/aristanetworks/goarista v0.0.0-20190704150520-f44d68189fd7 // indirect
 	github.com/cenkalti/backoff/v3 v3.0.0
 	github.com/deckarep/golang-set v1.7.1 // indirect
-	github.com/docker/go-metrics v0.0.1 // indirect
 	github.com/ethereum/go-ethereum v1.8.27
 	github.com/golang/protobuf v1.3.2
+	github.com/google/uuid v1.1.1
 	github.com/jinzhu/copier v0.0.0-20190625015134-976e0346caa8
 	github.com/mutecomm/go-sqlcipher v0.0.0-20190227152316-55dbde17881f
 	github.com/onsi/ginkgo v1.8.0 // indirect
@@ -26,6 +26,7 @@ require (
 	go.uber.org/zap v1.10.0
 	golang.org/x/crypto v0.0.0-20190701094942-4def268fd1a4
 	golang.org/x/net v0.0.0-20190628185345-da137c7871d7 // indirect
+	golang.org/x/sys v0.0.0-20190801041406-cbf593c0f2f3 // indirect
 )
 
 replace github.com/ethereum/go-ethereum v1.8.27 => github.com/status-im/go-ethereum v1.8.27-status.4

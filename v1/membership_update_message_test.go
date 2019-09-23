@@ -1,8 +1,12 @@
 package statusproto
 
 import (
+	"strings"
 	"testing"
+	"unicode"
 
+	"github.com/ethereum/go-ethereum/crypto"
+	protocrypto "github.com/status-im/status-protocol-go/crypto"
 	"github.com/stretchr/testify/require"
 )
 
@@ -47,4 +51,57 @@ func TestEncodeMembershipUpdateMessage(t *testing.T) {
 	val, err := decodeTransitMessage(data)
 	require.NoError(t, err)
 	require.EqualValues(t, testMembershipUpdateMessageStruct, val)
+}
+
+func TestTupleMembershipUpdateEvent(t *testing.T) {
+	event1 := testMembershipUpdateMessageStruct.Updates[0].Events[0]
+	result1 := tupleMembershipUpdateEvent(event1)
+	require.EqualValues(t, [][]interface{}{
+		{"clock-value", event1.ClockValue},
+		{"name", "thathata"},
+		{"type", "chat-created"},
+	}, result1)
+
+	event2 := testMembershipUpdateMessageStruct.Updates[0].Events[1]
+	result2 := tupleMembershipUpdateEvent(event2)
+	require.EqualValues(t, [][]interface{}{
+		{"clock-value", event2.ClockValue},
+		{"members", event2.Members},
+		{"type", "members-added"},
+	}, result2)
+}
+
+func TestSignMembershipUpdate(t *testing.T) {
+	key, err := crypto.HexToECDSA("838fbdd1b670209a258b90af25653a018bc582c44c56e6290a973eebbeb15732")
+	require.NoError(t, err)
+	update := testMembershipUpdateMessageStruct.Updates[0]
+	err = SignMembershipUpdate(&update, key)
+	require.NoError(t, err)
+	expected, err := protocrypto.SignStringAsHex(
+		strings.Map(func(r rune) rune {
+			if unicode.IsSpace(r) {
+				return -1
+			}
+			return r
+		}, `
+			[
+				[
+					[
+						["clock-value", 156897373998501],
+						["name", "thathata"],
+						["type", "chat-created"]
+					],
+					[
+						["clock-value", 156897373998502],
+						["members", ["0x04aebe2bb01a988abe7d978662f21de7760486119876c680e5a559e38e086a2df6dad41c4e4d9079c03db3bced6cb70fca76afc5650e50ea19b81572046a813534"]],
+						["type", "members-added"]
+					]
+				],
+				"072ea460-84d3-53c5-9979-1ca36fb5d1020x0424a68f89ba5fcd5e0640c1e1f591d561fa4125ca4e2a43592bc4123eca10ce064e522c254bb83079ba404327f6eafc01ec90a1444331fe769d3f3a7f90b0dde1"
+			]
+		`),
+		key,
+	)
+	require.NoError(t, err)
+	require.Equal(t, expected, update.Signature)
 }
