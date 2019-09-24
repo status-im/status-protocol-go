@@ -1,6 +1,10 @@
 package whisper
 
 import (
+	"testing"
+
+	"go.uber.org/zap"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -19,11 +23,21 @@ type EnvelopesMonitorSuite struct {
 	monitor *EnvelopesMonitor
 }
 
+func TestEnvelopesMonitorSuite(t *testing.T) {
+	suite.Run(t, new(EnvelopesMonitorSuite))
+}
+
 func (s *EnvelopesMonitorSuite) SetupTest() {
-	s.monitor = &EnvelopesMonitor{
-		envelopes: map[common.Hash]EnvelopeState{},
-		batches:   map[common.Hash]map[common.Hash]struct{}{},
-	}
+	s.monitor = NewEnvelopesMonitor(
+		nil,
+		EnvelopesMonitorConfig{
+			EnvelopeEventsHandler:          nil,
+			MaxAttempts:                    0,
+			MailserverConfirmationsEnabled: false,
+			IsMailserver:                   func(enode.ID) bool { return false },
+			Logger:                         zap.NewNop(),
+		},
+	)
 }
 
 func (s *EnvelopesMonitorSuite) TestConfirmed() {
@@ -92,10 +106,14 @@ func (s *EnvelopesMonitorSuite) TestIgnoreNotFromMailserver() {
 }
 
 func (s *EnvelopesMonitorSuite) TestReceived() {
+	s.monitor.isMailserver = func(peer enode.ID) bool {
+		return true
+	}
 	s.monitor.Add(testIDs, testHash, whisper.NewMessage{})
 	s.Contains(s.monitor.envelopes, testHash)
 	s.monitor.handleEvent(whisper.EnvelopeEvent{
 		Event: whisper.EventEnvelopeReceived,
-		Hash:  testHash})
-	s.NotContains(s.monitor.envelopes, testHash)
+		Hash:  testHash,
+	})
+	s.Require().Equal(EnvelopeSent, s.monitor.GetState(testHash))
 }
