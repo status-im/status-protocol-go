@@ -260,7 +260,7 @@ func parseEvent(event map[interface{}]interface{}) (result MembershipUpdateEvent
 			return
 		}
 	}
-	// Members is optional
+	// Contacts is optional
 	if val, exists := event[transit.Keyword("members")]; exists {
 		var members *transit.Set
 		members, ok = val.(*transit.Set)

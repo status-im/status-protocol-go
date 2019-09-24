@@ -7,6 +7,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/crypto"
 	protocrypto "github.com/status-im/status-protocol-go/crypto"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -75,7 +76,7 @@ func TestSignMembershipUpdate(t *testing.T) {
 	key, err := crypto.HexToECDSA("838fbdd1b670209a258b90af25653a018bc582c44c56e6290a973eebbeb15732")
 	require.NoError(t, err)
 	update := testMembershipUpdateMessageStruct.Updates[0]
-	err = SignMembershipUpdate(&update, key)
+	err = update.Sign(key)
 	require.NoError(t, err)
 	expected, err := protocrypto.SignStringAsHex(
 		strings.Map(func(r rune) rune {
@@ -104,4 +105,28 @@ func TestSignMembershipUpdate(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.Equal(t, expected, update.Signature)
+}
+
+func TestGroupValidateEvent(t *testing.T) {
+	testCases := []struct {
+		Name   string
+		From   string
+		Group  Group
+		Event  MembershipUpdateEvent
+		Result bool
+	}{
+		{
+			Name:   "chat-created with empty admins and contacts",
+			From:   "",
+			Group:  Group{},
+			Event:  NewChatCreatedEvent("test", 0),
+			Result: true,
+		},
+		// TODO: add the rest of test cases
+	}
+
+	for _, tc := range testCases {
+		result := tc.Group.ValidateEvent("", tc.Event)
+		assert.Equal(t, tc.Result, result)
+	}
 }

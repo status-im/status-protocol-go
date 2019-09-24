@@ -46,7 +46,7 @@ type Chat struct {
 	LastMessageTimestamp   int64  `json:"lastMessageTimestamp"`
 
 	// Group chat fields
-	// Members are the members who have been invited to the group chat
+	// Contacts are the members who have been invited to the group chat
 	Members []ChatMember `json:"members"`
 	// MembershipUpdates is all the membership events in the chat
 	MembershipUpdates []ChatMembershipUpdate `json:"membershipUpdates"`
