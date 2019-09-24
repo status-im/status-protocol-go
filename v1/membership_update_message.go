@@ -160,7 +160,7 @@ func tupleMembershipUpdateEvent(update MembershipUpdateEvent) [][]interface{} {
 			fieldName = name
 		}
 		field := v.Field(i)
-		if field.IsValid() {
+		if !isZeroValue(field) {
 			result = append(result, []interface{}{fieldName, field.Interface()})
 		}
 	}
