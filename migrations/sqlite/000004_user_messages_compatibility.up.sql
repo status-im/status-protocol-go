@@ -3,7 +3,7 @@
 CREATE TABLE IF NOT EXISTS user_messages_legacy (
     id VARCHAR PRIMARY KEY ON CONFLICT REPLACE,
     whisper_timestamp INTEGER NOT NULL,
-    source BLOB NOT NULL,
+    source TEXT NOT NULL,
     destination BLOB,
     content VARCHAR NOT NULL,
     content_type VARCHAR NOT NULL,
