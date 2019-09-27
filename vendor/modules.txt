@@ -73,7 +73,7 @@ github.com/russolsen/transit
 github.com/shopspring/decimal
 # github.com/status-im/doubleratchet v2.0.0+incompatible
 github.com/status-im/doubleratchet
-# github.com/status-im/migrate/v4 v4.0.0-20190821140204-a9d340ec8fb76af4afda06acf01740d45d2661ed
+# github.com/status-im/migrate/v4 v4.0.0-20190822050738-a9d340ec8fb7
 github.com/status-im/migrate/v4
 github.com/status-im/migrate/v4/database/sqlcipher
 github.com/status-im/migrate/v4/source/go_bindata
