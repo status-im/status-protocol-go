@@ -151,7 +151,6 @@ func tupleMembershipUpdateEvent(update MembershipUpdateEvent) [][]interface{} {
 	sort.Slice(update.Members, func(i, j int) bool {
 		return update.Members[i] < update.Members[j]
 	})
-
 	v := reflect.ValueOf(update)
 	result := make([][]interface{}, 0, v.NumField())
 	for i := 0; i < v.NumField(); i++ {

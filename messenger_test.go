@@ -100,28 +100,6 @@ func (s *MessengerSuite) TearDownTest() {
 	_ = s.logger.Sync()
 }
 
-func (s *MessengerSuite) TestInMemoryDatabase() {
-	key, err := crypto.GenerateKey()
-	s.Require().NoError(err)
-	m, err := NewMessenger(
-		key,
-		s.shh,
-		"installation-1",
-	)
-	s.Require().NoError(err)
-	// Verify the in-memory database works.
-	err = m.persistence.SaveChat(Chat{
-		ID:       "abc",
-		Name:     "abc",
-		Active:   true,
-		ChatType: ChatTypePublic,
-	})
-	s.Require().NoError(err)
-	result, err := m.persistence.Chats()
-	s.Require().NoError(err)
-	s.Require().Len(result, 1)
-}
-
 func (s *MessengerSuite) TestInit() {
 	testCases := []struct {
 		Name         string
@@ -723,7 +701,8 @@ func (s *MessengerSuite) TestBlockContact() {
 
 func (s *MessengerSuite) TestContactPersistence() {
 	contact := Contact{
-		ID:          "contact-id",
+		ID: "0x0424a68f89ba5fcd5e0640c1e1f591d561fa4125ca4e2a43592bc4123eca10ce064e522c254bb83079ba404327f6eafc01ec90a1444331fe769d3f3a7f90b0dde1",
+
 		Address:     "contact-address",
 		Name:        "contact-name",
 		Photo:       "contact-photo",
@@ -751,12 +730,13 @@ func (s *MessengerSuite) TestContactPersistence() {
 
 	actualContact := savedContacts[0]
 	expectedContact := &contact
-
+	expectedContact.Alias = "Concrete Lavender Xiphias"
+	expectedContact.Identicon = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAIAAACRXR/mAAAAnElEQVR4nOzXQaqDMBRG4bZkLR10e12H23PgZuJUjJAcE8kdnG/44IXDhZ9iyjm/4vnMDrhmFmEWYRZhFpH6n1jW7fSX/+/b+WbQa5lFmEVUljhqZfSdoNcyizCLeNMvn3JTLeh+g17LLMIsorLElt2VK7v3X0dBr2UWYRaBfxNLfifOZhYRNGvAEp8Q9FpmEWYRZhFmEXsAAAD//5K5JFhu0M0nAAAAAElFTkSuQmCC"
 	s.Require().Equal(expectedContact, actualContact)
 }
 
 func (s *MessengerSuite) TestContactPersistenceUpdate() {
-	contactID := "0424a68f89ba5fcd5e0640c1e1f591d561fa4125ca4e2a43592bc4123eca10ce064e522c254bb83079ba404327f6eafc01ec90a1444331fe769d3f3a7f90b0dde1"
+	contactID := "0x0424a68f89ba5fcd5e0640c1e1f591d561fa4125ca4e2a43592bc4123eca10ce064e522c254bb83079ba404327f6eafc01ec90a1444331fe769d3f3a7f90b0dde1"
 
 	contact := Contact{
 		ID:          contactID,
@@ -787,6 +767,9 @@ func (s *MessengerSuite) TestContactPersistenceUpdate() {
 
 	actualContact := savedContacts[0]
 	expectedContact := &contact
+
+	expectedContact.Alias = "Concrete Lavender Xiphias"
+	expectedContact.Identicon = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAIAAACRXR/mAAAAnElEQVR4nOzXQaqDMBRG4bZkLR10e12H23PgZuJUjJAcE8kdnG/44IXDhZ9iyjm/4vnMDrhmFmEWYRZhFpH6n1jW7fSX/+/b+WbQa5lFmEVUljhqZfSdoNcyizCLeNMvn3JTLeh+g17LLMIsorLElt2VK7v3X0dBr2UWYRaBfxNLfifOZhYRNGvAEp8Q9FpmEWYRZhFmEXsAAAD//5K5JFhu0M0nAAAAAElFTkSuQmCC"
 
 	s.Require().Equal(expectedContact, actualContact)
 
