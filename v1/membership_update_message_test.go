@@ -117,16 +117,160 @@ func TestGroupValidateEvent(t *testing.T) {
 	}{
 		{
 			Name:   "chat-created with empty admins and contacts",
-			From:   "",
-			Group:  Group{},
 			Event:  NewChatCreatedEvent("test", 0),
 			Result: true,
 		},
-		// TODO: add the rest of test cases
+		{
+			Name: "chat-created with existing admins",
+			Group: Group{
+				Admins: []string{"0xabc"},
+			},
+			Event:  NewChatCreatedEvent("test", 0),
+			Result: false,
+		},
+		{
+			Name: "chat-created with existing contacts",
+			Group: Group{
+				Contacts: []string{"0xabc"},
+			},
+			Event:  NewChatCreatedEvent("test", 0),
+			Result: false,
+		},
+		{
+			Name: "name-changed allowed because from is admin",
+			From: "0xabc",
+			Group: Group{
+				Admins: []string{"0xabc"},
+			},
+			Event:  NewNameChangedEvent("new-name", 0),
+			Result: true,
+		},
+		{
+			Name:   "name-changed not allowed for non-admins",
+			From:   "0xabc",
+			Event:  NewNameChangedEvent("new-name", 0),
+			Result: false,
+		},
+		{
+			Name: "members-added allowed because from is admin",
+			From: "0xabc",
+			Group: Group{
+				Admins: []string{"0xabc"},
+			},
+			Event:  NewMembersAddedEvent([]string{"0x123"}, 0),
+			Result: true,
+		},
+		{
+			Name:   "members-added not allowed for non-admins",
+			From:   "0xabc",
+			Event:  NewMembersAddedEvent([]string{"0x123"}, 0),
+			Result: false,
+		},
+		{
+			Name:   "member-removed allowed because removing themselves",
+			From:   "0xabc",
+			Event:  NewMemberRemovedEvent("0xabc", 0),
+			Result: true,
+		},
+		{
+			Name: "member-removed allowed because from is admin",
+			From: "0xabc",
+			Group: Group{
+				Admins: []string{"0xabc"},
+			},
+			Event:  NewMemberRemovedEvent("0x123", 0),
+			Result: true,
+		},
+		{
+			Name:   "member-removed not allowed for non-admins",
+			From:   "0xabc",
+			Event:  NewMemberRemovedEvent("0x123", 0),
+			Result: false,
+		},
+		{
+			Name: "member-joined must be in contacts",
+			From: "0xabc",
+			Group: Group{
+				Contacts: []string{"0xabc"},
+			},
+			Event:  NewMemberJoinedEvent("0xabc", 0),
+			Result: true,
+		},
+		{
+			Name:   "member-joined not valid because not in contacts",
+			From:   "0xabc",
+			Event:  NewMemberJoinedEvent("0xabc", 0),
+			Result: false,
+		},
+		{
+			Name:   "member-joined not valid because from differs from the event",
+			From:   "0xdef",
+			Event:  NewMemberJoinedEvent("0xabc", 0),
+			Result: false,
+		},
+		{
+			Name: "admins-added allowed because originating from other admin",
+			From: "0xabc",
+			Group: Group{
+				Admins:   []string{"0xabc", "0x123"},
+				Contacts: []string{"0xdef", "0xghi"},
+			},
+			Event:  NewAdminsAddedEvent([]string{"0xdef"}, 0),
+			Result: true,
+		},
+		{
+			Name: "admins-added not allowed because not from admin",
+			From: "0xabc",
+			Group: Group{
+				Admins:   []string{"0x123"},
+				Contacts: []string{"0xdef", "0xghi"},
+			},
+			Event:  NewAdminsAddedEvent([]string{"0xdef"}, 0),
+			Result: false,
+		},
+		{
+			Name: "admins-added not allowed because not in contacts",
+			From: "0xabc",
+			Group: Group{
+				Admins:   []string{"0xabc", "0x123"},
+				Contacts: []string{"0xghi"},
+			},
+			Event:  NewAdminsAddedEvent([]string{"0xdef"}, 0),
+			Result: false,
+		},
+		{
+			Name: "admin-removed allowed because is admin and removes themselves",
+			From: "0xabc",
+			Group: Group{
+				Admins: []string{"0xabc"},
+			},
+			Event:  NewAdminRemovedEvent("0xabc", 0),
+			Result: true,
+		},
+		{
+			Name: "admin-removed not allowed because not themselves",
+			From: "0xabc",
+			Group: Group{
+				Admins: []string{"0xabc", "0xdef"},
+			},
+			Event:  NewAdminRemovedEvent("0xdef", 0),
+			Result: false,
+		},
+		{
+			Name: "admin-removed not allowed because not admin",
+			From: "0xdef",
+			Group: Group{
+				Admins: []string{"0xabc"},
+			},
+			Event:  NewAdminRemovedEvent("0xabc", 0),
+			Result: false,
+		},
 	}
 
 	for _, tc := range testCases {
-		result := tc.Group.ValidateEvent("", tc.Event)
-		assert.Equal(t, tc.Result, result)
+		t.Run(tc.Name, func(t *testing.T) {
+			result := tc.Group.ValidateEvent(tc.From, tc.Event)
+			assert.Equal(t, tc.Result, result)
+		})
 	}
 }

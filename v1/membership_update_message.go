@@ -114,7 +114,7 @@ func NewAdminsAddedEvent(admins []string, clock int64) MembershipUpdateEvent {
 
 func NewMemberRemovedEvent(member string, clock int64) MembershipUpdateEvent {
 	return MembershipUpdateEvent{
-		Type:       MembershipUpdateAdminRemoved,
+		Type:       MembershipUpdateMemberRemoved,
 		Member:     member,
 		ClockValue: clock,
 	}
@@ -219,9 +219,9 @@ func stringSliceSubset(subset []string, set []string) bool {
 				break
 			}
 		}
-		if !found {
-			return false
+		if found {
+			return true
 		}
 	}
-	return true
+	return false
 }
