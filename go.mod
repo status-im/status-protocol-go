@@ -21,7 +21,7 @@ require (
 	github.com/russolsen/transit v0.0.0-20180705123435-0794b4c4505a
 	github.com/status-im/doubleratchet v2.0.0+incompatible
 	github.com/status-im/migrate/v4 v4.0.0-20190821140204-a9d340ec8fb76af4afda06acf01740d45d2661ed
-	github.com/status-im/whisper v1.4.14
+	github.com/status-im/whisper v1.5.1
 	github.com/stretchr/testify v1.3.1-0.20190712000136-221dbe5ed467
 	github.com/vacp2p/mvds v0.0.21
 	go.uber.org/zap v1.10.0
