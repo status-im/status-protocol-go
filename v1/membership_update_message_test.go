@@ -12,14 +12,13 @@ import (
 )
 
 var (
-	testMembershipUpdateMessageBytes  = []byte(`["~#g5",["072ea460-84d3-53c5-9979-1ca36fb5d1020x0424a68f89ba5fcd5e0640c1e1f591d561fa4125ca4e2a43592bc4123eca10ce064e522c254bb83079ba404327f6eafc01ec90a1444331fe769d3f3a7f90b0dde1",["~#list",[["^ ","~:chat-id","072ea460-84d3-53c5-9979-1ca36fb5d1020x0424a68f89ba5fcd5e0640c1e1f591d561fa4125ca4e2a43592bc4123eca10ce064e522c254bb83079ba404327f6eafc01ec90a1444331fe769d3f3a7f90b0dde1","~:from","0x0424a68f89ba5fcd5e0640c1e1f591d561fa4125ca4e2a43592bc4123eca10ce064e522c254bb83079ba404327f6eafc01ec90a1444331fe769d3f3a7f90b0dde1","~:events",[["^ ","~:type","chat-created","~:name","thathata","~:clock-value",156897373998501],["^ ","^5","members-added","^7",156897373998502,"~:members",["~#set",["0x04aebe2bb01a988abe7d978662f21de7760486119876c680e5a559e38e086a2df6dad41c4e4d9079c03db3bced6cb70fca76afc5650e50ea19b81572046a813534"]]]],"~:signature","7fca3d614cf55bc6cdf9c17fd1e65d1688673322bf1f004c58c78e0927edefea3d1053bf6a9d2e058ae88079f588105dccf2a2f9f330f6035cd47c715ee5950601"]]],null]]`)
+	testMembershipUpdateMessageBytes  = []byte(`["~#g5",["072ea460-84d3-53c5-9979-1ca36fb5d1020x0424a68f89ba5fcd5e0640c1e1f591d561fa4125ca4e2a43592bc4123eca10ce064e522c254bb83079ba404327f6eafc01ec90a1444331fe769d3f3a7f90b0dde1",["~#list",[["^ ","~:chat-id","072ea460-84d3-53c5-9979-1ca36fb5d1020x0424a68f89ba5fcd5e0640c1e1f591d561fa4125ca4e2a43592bc4123eca10ce064e522c254bb83079ba404327f6eafc01ec90a1444331fe769d3f3a7f90b0dde1","~:events",[["^ ","~:type","chat-created","~:name","thathata","~:clock-value",156897373998501],["^ ","^5","members-added","^7",156897373998502,"~:members",["~#set",["0x04aebe2bb01a988abe7d978662f21de7760486119876c680e5a559e38e086a2df6dad41c4e4d9079c03db3bced6cb70fca76afc5650e50ea19b81572046a813534"]]]],"~:signature","7fca3d614cf55bc6cdf9c17fd1e65d1688673322bf1f004c58c78e0927edefea3d1053bf6a9d2e058ae88079f588105dccf2a2f9f330f6035cd47c715ee5950601"]]],null]]`)
 	testMembershipUpdateMessageStruct = MembershipUpdateMessage{
 		ChatID: "072ea460-84d3-53c5-9979-1ca36fb5d1020x0424a68f89ba5fcd5e0640c1e1f591d561fa4125ca4e2a43592bc4123eca10ce064e522c254bb83079ba404327f6eafc01ec90a1444331fe769d3f3a7f90b0dde1",
 		Updates: []MembershipUpdate{
 			{
 				ChatID:    "072ea460-84d3-53c5-9979-1ca36fb5d1020x0424a68f89ba5fcd5e0640c1e1f591d561fa4125ca4e2a43592bc4123eca10ce064e522c254bb83079ba404327f6eafc01ec90a1444331fe769d3f3a7f90b0dde1",
 				Signature: "7fca3d614cf55bc6cdf9c17fd1e65d1688673322bf1f004c58c78e0927edefea3d1053bf6a9d2e058ae88079f588105dccf2a2f9f330f6035cd47c715ee5950601",
-				From:      "0x0424a68f89ba5fcd5e0640c1e1f591d561fa4125ca4e2a43592bc4123eca10ce064e522c254bb83079ba404327f6eafc01ec90a1444331fe769d3f3a7f90b0dde1",
 				Events: []MembershipUpdateEvent{
 					{
 						Type:       "chat-created",
@@ -123,7 +122,7 @@ func TestGroupValidateEvent(t *testing.T) {
 		{
 			Name: "chat-created with existing admins",
 			Group: Group{
-				Admins: []string{"0xabc"},
+				admins: []string{"0xabc"},
 			},
 			Event:  NewChatCreatedEvent("test", 0),
 			Result: false,
@@ -131,7 +130,7 @@ func TestGroupValidateEvent(t *testing.T) {
 		{
 			Name: "chat-created with existing contacts",
 			Group: Group{
-				Contacts: []string{"0xabc"},
+				contacts: []string{"0xabc"},
 			},
 			Event:  NewChatCreatedEvent("test", 0),
 			Result: false,
@@ -140,7 +139,7 @@ func TestGroupValidateEvent(t *testing.T) {
 			Name: "name-changed allowed because from is admin",
 			From: "0xabc",
 			Group: Group{
-				Admins: []string{"0xabc"},
+				admins: []string{"0xabc"},
 			},
 			Event:  NewNameChangedEvent("new-name", 0),
 			Result: true,
@@ -155,7 +154,7 @@ func TestGroupValidateEvent(t *testing.T) {
 			Name: "members-added allowed because from is admin",
 			From: "0xabc",
 			Group: Group{
-				Admins: []string{"0xabc"},
+				admins: []string{"0xabc"},
 			},
 			Event:  NewMembersAddedEvent([]string{"0x123"}, 0),
 			Result: true,
@@ -176,7 +175,7 @@ func TestGroupValidateEvent(t *testing.T) {
 			Name: "member-removed allowed because from is admin",
 			From: "0xabc",
 			Group: Group{
-				Admins: []string{"0xabc"},
+				admins: []string{"0xabc"},
 			},
 			Event:  NewMemberRemovedEvent("0x123", 0),
 			Result: true,
@@ -191,7 +190,7 @@ func TestGroupValidateEvent(t *testing.T) {
 			Name: "member-joined must be in contacts",
 			From: "0xabc",
 			Group: Group{
-				Contacts: []string{"0xabc"},
+				contacts: []string{"0xabc"},
 			},
 			Event:  NewMemberJoinedEvent("0xabc", 0),
 			Result: true,
@@ -212,8 +211,8 @@ func TestGroupValidateEvent(t *testing.T) {
 			Name: "admins-added allowed because originating from other admin",
 			From: "0xabc",
 			Group: Group{
-				Admins:   []string{"0xabc", "0x123"},
-				Contacts: []string{"0xdef", "0xghi"},
+				admins:   []string{"0xabc", "0x123"},
+				contacts: []string{"0xdef", "0xghi"},
 			},
 			Event:  NewAdminsAddedEvent([]string{"0xdef"}, 0),
 			Result: true,
@@ -222,8 +221,8 @@ func TestGroupValidateEvent(t *testing.T) {
 			Name: "admins-added not allowed because not from admin",
 			From: "0xabc",
 			Group: Group{
-				Admins:   []string{"0x123"},
-				Contacts: []string{"0xdef", "0xghi"},
+				admins:   []string{"0x123"},
+				contacts: []string{"0xdef", "0xghi"},
 			},
 			Event:  NewAdminsAddedEvent([]string{"0xdef"}, 0),
 			Result: false,
@@ -232,8 +231,8 @@ func TestGroupValidateEvent(t *testing.T) {
 			Name: "admins-added not allowed because not in contacts",
 			From: "0xabc",
 			Group: Group{
-				Admins:   []string{"0xabc", "0x123"},
-				Contacts: []string{"0xghi"},
+				admins:   []string{"0xabc", "0x123"},
+				contacts: []string{"0xghi"},
 			},
 			Event:  NewAdminsAddedEvent([]string{"0xdef"}, 0),
 			Result: false,
@@ -242,7 +241,7 @@ func TestGroupValidateEvent(t *testing.T) {
 			Name: "admin-removed allowed because is admin and removes themselves",
 			From: "0xabc",
 			Group: Group{
-				Admins: []string{"0xabc"},
+				admins: []string{"0xabc"},
 			},
 			Event:  NewAdminRemovedEvent("0xabc", 0),
 			Result: true,
@@ -251,7 +250,7 @@ func TestGroupValidateEvent(t *testing.T) {
 			Name: "admin-removed not allowed because not themselves",
 			From: "0xabc",
 			Group: Group{
-				Admins: []string{"0xabc", "0xdef"},
+				admins: []string{"0xabc", "0xdef"},
 			},
 			Event:  NewAdminRemovedEvent("0xdef", 0),
 			Result: false,
@@ -260,7 +259,7 @@ func TestGroupValidateEvent(t *testing.T) {
 			Name: "admin-removed not allowed because not admin",
 			From: "0xdef",
 			Group: Group{
-				Admins: []string{"0xabc"},
+				admins: []string{"0xabc"},
 			},
 			Event:  NewAdminRemovedEvent("0xabc", 0),
 			Result: false,
@@ -273,4 +272,29 @@ func TestGroupValidateEvent(t *testing.T) {
 			assert.Equal(t, tc.Result, result)
 		})
 	}
+}
+
+func TestMembershipUpdateMessageProcess(t *testing.T) {
+	key, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	updates := []MembershipUpdate{
+		{
+			ChatID: "some-chat",
+			Events: []MembershipUpdateEvent{
+				NewChatCreatedEvent("some-name", 0),
+			},
+		},
+	}
+	err = updates[0].Sign(key)
+	require.NoError(t, err)
+	require.NotEmpty(t, updates[0].Signature)
+
+	message := MembershipUpdateMessage{
+		ChatID:  "some-chat",
+		Updates: updates,
+	}
+	err = message.Process()
+	require.NoError(t, err)
+	require.EqualValues(t, key.PublicKey.X, updates[0].From.X)
+	require.EqualValues(t, key.PublicKey.Y, updates[0].From.Y)
 }
