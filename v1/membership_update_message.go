@@ -246,9 +246,11 @@ func (g *Group) init() error {
 	g.sortEvents()
 
 	for _, update := range g.updates {
-		if err := g.processEvent(update.From, update.MembershipUpdateEvent); err != nil {
-			return err
+		valid := g.validateEvent(update.From, update.MembershipUpdateEvent)
+		if !valid {
+			return fmt.Errorf("invalid event %#+v from %s", update.MembershipUpdateEvent, update.From)
 		}
+		g.processEvent(update.From, update.MembershipUpdateEvent)
 	}
 
 	if !g.validateChatID(g.chatID) {
@@ -259,7 +261,11 @@ func (g *Group) init() error {
 }
 
 func (g *Group) ProcessEvent(from string, event MembershipUpdateEvent) error {
-	return g.processEvent(from, event)
+	if !g.validateEvent(from, event) {
+		return fmt.Errorf("invalid event %#+v from %s", event, from)
+	}
+	g.processEvent(from, event)
+	return nil
 }
 
 func (g Group) LastClockValue() int64 {
@@ -317,11 +323,7 @@ func (g Group) validateEvent(from string, event MembershipUpdateEvent) bool {
 	}
 }
 
-func (g *Group) processEvent(from string, event MembershipUpdateEvent) error {
-	if !g.validateEvent(from, event) {
-		return fmt.Errorf("invalid event %#+v from %s", event, from)
-	}
-
+func (g *Group) processEvent(from string, event MembershipUpdateEvent) {
 	switch event.Type {
 	case MembershipUpdateChatCreated,
 		MembershipUpdateNameChanged:
@@ -337,8 +339,6 @@ func (g *Group) processEvent(from string, event MembershipUpdateEvent) error {
 	case MembershipUpdateMemberJoined:
 		g.members = append(g.members, event.Member)
 	}
-
-	return nil
 }
 
 func (g *Group) sortEvents() {
@@ -377,6 +377,7 @@ func stringSliceFilter(slice []string, keep func(string) bool) []string {
 	for _, item := range slice {
 		if keep(item) {
 			slice[n] = item
+			n++
 		}
 	}
 	return slice[:n]

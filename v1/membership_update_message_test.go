@@ -107,7 +107,67 @@ func TestSignMembershipUpdate(t *testing.T) {
 }
 
 func TestGroupProcessEvent(t *testing.T) {
-	// TODO
+	testCases := []struct {
+		Name   string
+		Group  Group
+		Result Group
+		From   string
+		Event  MembershipUpdateEvent
+	}{
+		{
+			Name:   "chat-created event",
+			Result: Group{name: "some-name"},
+			From:   "0xabc",
+			Event:  NewChatCreatedEvent("some-name", 0),
+		},
+		{
+			Name:   "name-changed event",
+			Result: Group{name: "some-name"},
+			From:   "0xabc",
+			Event:  NewNameChangedEvent("some-name", 0),
+		},
+		{
+			Name:   "admins-added event",
+			Result: Group{admins: []string{"0xabc", "0x123"}},
+			From:   "0xabc",
+			Event:  NewAdminsAddedEvent([]string{"0xabc", "0x123"}, 0),
+		},
+		{
+			Name:   "admin-removed event",
+			Group:  Group{admins: []string{"0xabc", "0xdef"}},
+			Result: Group{admins: []string{"0xdef"}},
+			From:   "0xabc",
+			Event:  NewAdminRemovedEvent("0xabc", 0),
+		},
+		{
+			Name:   "members-added event",
+			Result: Group{members: []string{"0xabc", "0xdef"}},
+			From:   "0xabc",
+			Event:  NewMembersAddedEvent([]string{"0xabc", "0xdef"}, 0),
+		},
+		{
+			Name:   "member-removed event",
+			Group:  Group{members: []string{"0xabc", "0xdef"}},
+			Result: Group{members: []string{"0xdef"}},
+			From:   "0xabc",
+			Event:  NewMemberRemovedEvent("0xabc", 0),
+		},
+		{
+			Name:   "member-joined event",
+			Group:  Group{members: []string{"0xabc"}},
+			Result: Group{members: []string{"0xabc", "0xdef"}},
+			From:   "0xabc",
+			Event:  NewMemberJoinedEvent("0xdef", 0),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.Name, func(t *testing.T) {
+			g := tc.Group
+			g.processEvent(tc.From, tc.Event)
+			require.EqualValues(t, tc.Result, g)
+		})
+	}
 }
 
 func TestGroupValidateEvent(t *testing.T) {
@@ -297,7 +357,7 @@ func TestMembershipUpdateMessageProcess(t *testing.T) {
 		ChatID:  "some-chat",
 		Updates: updates,
 	}
-	err = message.Process()
+	err = message.Verify()
 	require.NoError(t, err)
 	require.EqualValues(t, key.PublicKey.X, updates[0].From.X)
 	require.EqualValues(t, key.PublicKey.Y, updates[0].From.Y)
