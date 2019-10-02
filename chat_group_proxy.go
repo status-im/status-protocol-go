@@ -11,7 +11,7 @@ type chatGroupProxy struct {
 
 func newChatGroupProxy(chat Chat) *chatGroupProxy {
 	return &chatGroupProxy{
-		group: protocol.NewGroup(chatToProtocolMembershipUpdate(chat)),
+		group: protocol.NewGroup(chat.ID, chatToProtocolMembershipUpdate(chat)),
 		chat:  chat,
 	}
 }
@@ -20,8 +20,7 @@ func chatToProtocolMembershipUpdate(chat Chat) []protocol.MembershipUpdateFlat {
 	result := make([]protocol.MembershipUpdateFlat, len(chat.MembershipUpdates))
 	for idx, update := range chat.MembershipUpdates {
 		result[idx] = protocol.MembershipUpdateFlat{
-			From:      update.From,
-			Signature: update.Signature,
+			From: update.From,
 			MembershipUpdateEvent: protocol.MembershipUpdateEvent{
 				Name:       update.Name,
 				Type:       update.Type,

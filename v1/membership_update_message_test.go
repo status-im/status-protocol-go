@@ -106,6 +106,10 @@ func TestSignMembershipUpdate(t *testing.T) {
 	require.Equal(t, expected, update.Signature)
 }
 
+func TestGroupProcessEvent(t *testing.T) {
+	// TODO
+}
+
 func TestGroupValidateEvent(t *testing.T) {
 	testCases := []struct {
 		Name   string
@@ -115,7 +119,7 @@ func TestGroupValidateEvent(t *testing.T) {
 		Result bool
 	}{
 		{
-			Name:   "chat-created with empty admins and contacts",
+			Name:   "chat-created with empty admins and members",
 			Event:  NewChatCreatedEvent("test", 0),
 			Result: true,
 		},
@@ -128,9 +132,9 @@ func TestGroupValidateEvent(t *testing.T) {
 			Result: false,
 		},
 		{
-			Name: "chat-created with existing contacts",
+			Name: "chat-created with existing members",
 			Group: Group{
-				contacts: []string{"0xabc"},
+				members: []string{"0xabc"},
 			},
 			Event:  NewChatCreatedEvent("test", 0),
 			Result: false,
@@ -187,16 +191,16 @@ func TestGroupValidateEvent(t *testing.T) {
 			Result: false,
 		},
 		{
-			Name: "member-joined must be in contacts",
+			Name: "member-joined must be in members",
 			From: "0xabc",
 			Group: Group{
-				contacts: []string{"0xabc"},
+				members: []string{"0xabc"},
 			},
 			Event:  NewMemberJoinedEvent("0xabc", 0),
 			Result: true,
 		},
 		{
-			Name:   "member-joined not valid because not in contacts",
+			Name:   "member-joined not valid because not in members",
 			From:   "0xabc",
 			Event:  NewMemberJoinedEvent("0xabc", 0),
 			Result: false,
@@ -211,8 +215,8 @@ func TestGroupValidateEvent(t *testing.T) {
 			Name: "admins-added allowed because originating from other admin",
 			From: "0xabc",
 			Group: Group{
-				admins:   []string{"0xabc", "0x123"},
-				contacts: []string{"0xdef", "0xghi"},
+				admins:  []string{"0xabc", "0x123"},
+				members: []string{"0xdef", "0xghi"},
 			},
 			Event:  NewAdminsAddedEvent([]string{"0xdef"}, 0),
 			Result: true,
@@ -221,18 +225,18 @@ func TestGroupValidateEvent(t *testing.T) {
 			Name: "admins-added not allowed because not from admin",
 			From: "0xabc",
 			Group: Group{
-				admins:   []string{"0x123"},
-				contacts: []string{"0xdef", "0xghi"},
+				admins:  []string{"0x123"},
+				members: []string{"0xdef", "0xghi"},
 			},
 			Event:  NewAdminsAddedEvent([]string{"0xdef"}, 0),
 			Result: false,
 		},
 		{
-			Name: "admins-added not allowed because not in contacts",
+			Name: "admins-added not allowed because not in members",
 			From: "0xabc",
 			Group: Group{
-				admins:   []string{"0xabc", "0x123"},
-				contacts: []string{"0xghi"},
+				admins:  []string{"0xabc", "0x123"},
+				members: []string{"0xghi"},
 			},
 			Event:  NewAdminsAddedEvent([]string{"0xdef"}, 0),
 			Result: false,
@@ -268,7 +272,7 @@ func TestGroupValidateEvent(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
-			result := tc.Group.ValidateEvent(tc.From, tc.Event)
+			result := tc.Group.validateEvent(tc.From, tc.Event)
 			assert.Equal(t, tc.Result, result)
 		})
 	}

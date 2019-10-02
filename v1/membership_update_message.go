@@ -34,14 +34,28 @@ type MembershipUpdateMessage struct {
 	Message *Message           `json:"message"` // optional message
 }
 
-func (m *MembershipUpdateMessage) Process() error {
+// Verify makes sure that the received update message has a valid signature.
+// It also extracts public key from the signature available as From field.
+// It does not verify the updates and their events. This should be done
+// separately using Group struct.
+func (m *MembershipUpdateMessage) Verify() error {
 	for idx, update := range m.Updates {
 		if err := update.extractFrom(); err != nil {
-			return err
+			return errors.Wrapf(err, "failed to extract an author of %d update", idx)
 		}
 		m.Updates[idx] = update
 	}
 	return nil
+}
+
+// EncodeMembershipUpdateMessage encodes a MembershipUpdateMessage using Transit serialization.
+func EncodeMembershipUpdateMessage(value MembershipUpdateMessage) ([]byte, error) {
+	var buf bytes.Buffer
+	encoder := NewMessageEncoder(&buf)
+	if err := encoder.Encode(value); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 type MembershipUpdate struct {
@@ -80,29 +94,6 @@ func (u *MembershipUpdate) extractFrom() error {
 	}
 	u.From = publicKey
 	return nil
-}
-
-func stringifyMembershipUpdateEvents(chatID string, events []MembershipUpdateEvent) ([]byte, error) {
-	sort.Slice(events, func(i, j int) bool {
-		return events[i].ClockValue < events[j].ClockValue
-	})
-	tuples := make([]interface{}, len(events))
-	for idx, event := range events {
-		tuples[idx] = tupleMembershipUpdateEvent(event)
-	}
-	structureToSign := []interface{}{
-		tuples,
-		chatID,
-	}
-	return json.Marshal(structureToSign)
-}
-
-func createMembershipUpdateSignature(chatID string, events []MembershipUpdateEvent, identity *ecdsa.PrivateKey) (string, error) {
-	data, err := stringifyMembershipUpdateEvents(chatID, events)
-	if err != nil {
-		return "", err
-	}
-	return crypto.SignBytesAsHex(data, identity)
 }
 
 type MembershipUpdateEvent struct {
@@ -169,14 +160,27 @@ func NewAdminRemovedEvent(admin string, clock int64) MembershipUpdateEvent {
 	}
 }
 
-// EncodeMembershipUpdateMessage encodes a MembershipUpdateMessage using Transit serialization.
-func EncodeMembershipUpdateMessage(value MembershipUpdateMessage) ([]byte, error) {
-	var buf bytes.Buffer
-	encoder := NewMessageEncoder(&buf)
-	if err := encoder.Encode(value); err != nil {
-		return nil, err
+func stringifyMembershipUpdateEvents(chatID string, events []MembershipUpdateEvent) ([]byte, error) {
+	sort.Slice(events, func(i, j int) bool {
+		return events[i].ClockValue < events[j].ClockValue
+	})
+	tuples := make([]interface{}, len(events))
+	for idx, event := range events {
+		tuples[idx] = tupleMembershipUpdateEvent(event)
 	}
-	return buf.Bytes(), nil
+	structureToSign := []interface{}{
+		tuples,
+		chatID,
+	}
+	return json.Marshal(structureToSign)
+}
+
+func createMembershipUpdateSignature(chatID string, events []MembershipUpdateEvent, identity *ecdsa.PrivateKey) (string, error) {
+	data, err := stringifyMembershipUpdateEvents(chatID, events)
+	if err != nil {
+		return "", err
+	}
+	return crypto.SignBytesAsHex(data, identity)
 }
 
 var membershipUpdateEventFieldNamesCompat = map[string]string{
@@ -215,97 +219,132 @@ func tupleMembershipUpdateEvent(update MembershipUpdateEvent) [][]interface{} {
 
 type MembershipUpdateFlat struct {
 	MembershipUpdateEvent
-	From *ecdsa.PublicKey
+	From      string
+	Signature string
 }
 
 type Group struct {
-	chatID   string
-	events   []MembershipUpdateFlat
-	admins   []string
-	contacts []string
+	chatID  string
+	name    string
+	updates []MembershipUpdateFlat
+	admins  []string
+	members []string
 }
 
-func NewGroup(chatID string, events []MembershipUpdateFlat) *Group {
+func NewGroup(chatID string, updates []MembershipUpdateFlat) (*Group, error) {
 	g := Group{
-		chatID: chatID,
-		events: events,
+		chatID:  chatID,
+		updates: updates,
 	}
-	g.init()
-	return &g
+	if err := g.init(); err != nil {
+		return nil, err
+	}
+	return &g, nil
 }
 
-func (g *Group) sortEvents() {
-	sort.Slice(g.events, func(i, j int) bool {
-		return g.events[i].ClockValue < g.events[j].ClockValue
-	})
-}
-
-func (g *Group) init() {
+func (g *Group) init() error {
 	g.sortEvents()
 
-	for _, event := range g.events {
-		switch event.Name {
-		case MembershipUpdateAdminsAdded:
-			g.admins = append(g.admins, event.Members...)
-		case MembershipUpdateAdminRemoved:
-			g.admins = stringSliceFilter(g.admins, func(item string) bool { return item != event.Member })
-		case MembershipUpdateMembersAdded:
-			g.contacts = append(g.contacts, event.Members...)
-		case MembershipUpdateMemberRemoved:
-			g.contacts = stringSliceFilter(g.contacts, func(item string) bool { return item != event.Member })
-		case MembershipUpdateMemberJoined:
-			g.contacts = append(g.contacts, event.Member)
+	for _, update := range g.updates {
+		if err := g.processEvent(update.From, update.MembershipUpdateEvent); err != nil {
+			return err
 		}
 	}
+
+	if !g.validateChatID(g.chatID) {
+		return fmt.Errorf("invalid chatID: %s", g.chatID)
+	}
+
+	return nil
 }
 
-func (g Group) ValidChatID() bool {
-	creator, err := g.Creator()
-	if err != nil || creator == "" {
-		return false
-	}
-	return strings.HasSuffix(g.chatID, creator)
+func (g *Group) ProcessEvent(from string, event MembershipUpdateEvent) error {
+	return g.processEvent(from, event)
 }
 
 func (g Group) LastClockValue() int64 {
-	if len(g.events) == 0 {
+	if len(g.updates) == 0 {
 		return 0
 	}
-	return g.events[len(g.events)-1].ClockValue
+	return g.updates[len(g.updates)-1].ClockValue
 }
 
-func (g Group) Creator() (*ecdsa.PublicKey, error) {
-	if len(g.events) == 0 {
-		return nil, errors.New("no events in the group")
+func (g Group) NextClockValue() int64 {
+	return g.LastClockValue() + 1
+}
+
+func (g Group) creator() (string, error) {
+	if len(g.updates) == 0 {
+		return "", errors.New("no events in the group")
 	}
-	first := g.events[0]
+	first := g.updates[0]
 	if first.Name != MembershipUpdateChatCreated {
-		return nil, fmt.Errorf("expected first event to be 'chat-created', got %s", first.Name)
+		return "", fmt.Errorf("expected first event to be 'chat-created', got %s", first.Name)
 	}
 	return first.From, nil
 }
 
-// ValidateEvent returns true if a given event is valid.
-func (g Group) ValidateEvent(from string, event MembershipUpdateEvent) bool {
+func (g Group) validateChatID(chatID string) bool {
+	creator, err := g.creator()
+	if err != nil || creator == "" {
+		return false
+	}
+	// TODO: It does not verify that the prefix is a valid UUID.
+	//       Improve it so that the prefix follows UUIDv4 spec.
+	return strings.HasSuffix(chatID, creator) && chatID != creator
+}
+
+// validateEvent returns true if a given event is valid.
+func (g Group) validateEvent(from string, event MembershipUpdateEvent) bool {
 	switch event.Type {
 	case MembershipUpdateChatCreated:
-		return len(g.admins) == 0 && len(g.contacts) == 0
+		return len(g.admins) == 0 && len(g.members) == 0
 	case MembershipUpdateNameChanged:
 		return stringSliceContains(g.admins, from) && len(event.Name) > 0
 	case MembershipUpdateMembersAdded:
 		return stringSliceContains(g.admins, from)
 	case MembershipUpdateMemberJoined:
-		return stringSliceContains(g.contacts, from) && from == event.Member
+		return stringSliceContains(g.members, from) && from == event.Member
 	case MembershipUpdateMemberRemoved:
 		// Member can remove themselves or admin can remove a member.
 		return from == event.Member || (stringSliceContains(g.admins, from) && !stringSliceContains(g.admins, event.Member))
 	case MembershipUpdateAdminsAdded:
-		return stringSliceContains(g.admins, from) && stringSliceSubset(event.Members, g.contacts)
+		return stringSliceContains(g.admins, from) && stringSliceSubset(event.Members, g.members)
 	case MembershipUpdateAdminRemoved:
 		return stringSliceContains(g.admins, from) && from == event.Member
 	default:
 		return false
 	}
+}
+
+func (g *Group) processEvent(from string, event MembershipUpdateEvent) error {
+	if !g.validateEvent(from, event) {
+		return fmt.Errorf("invalid event %#+v from %s", event, from)
+	}
+
+	switch event.Type {
+	case MembershipUpdateChatCreated,
+		MembershipUpdateNameChanged:
+		g.name = event.Name
+	case MembershipUpdateAdminsAdded:
+		g.admins = append(g.admins, event.Members...)
+	case MembershipUpdateAdminRemoved:
+		g.admins = stringSliceFilter(g.admins, func(item string) bool { return item != event.Member })
+	case MembershipUpdateMembersAdded:
+		g.members = append(g.members, event.Members...)
+	case MembershipUpdateMemberRemoved:
+		g.members = stringSliceFilter(g.members, func(item string) bool { return item != event.Member })
+	case MembershipUpdateMemberJoined:
+		g.members = append(g.members, event.Member)
+	}
+
+	return nil
+}
+
+func (g *Group) sortEvents() {
+	sort.Slice(g.updates, func(i, j int) bool {
+		return g.updates[i].ClockValue < g.updates[j].ClockValue
+	})
 }
 
 func stringSliceContains(slice []string, item string) bool {
