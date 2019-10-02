@@ -7,6 +7,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/crypto"
 	protocrypto "github.com/status-im/status-protocol-go/crypto"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -75,7 +76,7 @@ func TestSignMembershipUpdate(t *testing.T) {
 	key, err := crypto.HexToECDSA("838fbdd1b670209a258b90af25653a018bc582c44c56e6290a973eebbeb15732")
 	require.NoError(t, err)
 	update := testMembershipUpdateMessageStruct.Updates[0]
-	err = SignMembershipUpdate(&update, key)
+	err = update.Sign(key)
 	require.NoError(t, err)
 	expected, err := protocrypto.SignStringAsHex(
 		strings.Map(func(r rune) rune {
@@ -104,4 +105,172 @@ func TestSignMembershipUpdate(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.Equal(t, expected, update.Signature)
+}
+
+func TestGroupValidateEvent(t *testing.T) {
+	testCases := []struct {
+		Name   string
+		From   string
+		Group  Group
+		Event  MembershipUpdateEvent
+		Result bool
+	}{
+		{
+			Name:   "chat-created with empty admins and contacts",
+			Event:  NewChatCreatedEvent("test", 0),
+			Result: true,
+		},
+		{
+			Name: "chat-created with existing admins",
+			Group: Group{
+				Admins: []string{"0xabc"},
+			},
+			Event:  NewChatCreatedEvent("test", 0),
+			Result: false,
+		},
+		{
+			Name: "chat-created with existing contacts",
+			Group: Group{
+				Contacts: []string{"0xabc"},
+			},
+			Event:  NewChatCreatedEvent("test", 0),
+			Result: false,
+		},
+		{
+			Name: "name-changed allowed because from is admin",
+			From: "0xabc",
+			Group: Group{
+				Admins: []string{"0xabc"},
+			},
+			Event:  NewNameChangedEvent("new-name", 0),
+			Result: true,
+		},
+		{
+			Name:   "name-changed not allowed for non-admins",
+			From:   "0xabc",
+			Event:  NewNameChangedEvent("new-name", 0),
+			Result: false,
+		},
+		{
+			Name: "members-added allowed because from is admin",
+			From: "0xabc",
+			Group: Group{
+				Admins: []string{"0xabc"},
+			},
+			Event:  NewMembersAddedEvent([]string{"0x123"}, 0),
+			Result: true,
+		},
+		{
+			Name:   "members-added not allowed for non-admins",
+			From:   "0xabc",
+			Event:  NewMembersAddedEvent([]string{"0x123"}, 0),
+			Result: false,
+		},
+		{
+			Name:   "member-removed allowed because removing themselves",
+			From:   "0xabc",
+			Event:  NewMemberRemovedEvent("0xabc", 0),
+			Result: true,
+		},
+		{
+			Name: "member-removed allowed because from is admin",
+			From: "0xabc",
+			Group: Group{
+				Admins: []string{"0xabc"},
+			},
+			Event:  NewMemberRemovedEvent("0x123", 0),
+			Result: true,
+		},
+		{
+			Name:   "member-removed not allowed for non-admins",
+			From:   "0xabc",
+			Event:  NewMemberRemovedEvent("0x123", 0),
+			Result: false,
+		},
+		{
+			Name: "member-joined must be in contacts",
+			From: "0xabc",
+			Group: Group{
+				Contacts: []string{"0xabc"},
+			},
+			Event:  NewMemberJoinedEvent("0xabc", 0),
+			Result: true,
+		},
+		{
+			Name:   "member-joined not valid because not in contacts",
+			From:   "0xabc",
+			Event:  NewMemberJoinedEvent("0xabc", 0),
+			Result: false,
+		},
+		{
+			Name:   "member-joined not valid because from differs from the event",
+			From:   "0xdef",
+			Event:  NewMemberJoinedEvent("0xabc", 0),
+			Result: false,
+		},
+		{
+			Name: "admins-added allowed because originating from other admin",
+			From: "0xabc",
+			Group: Group{
+				Admins:   []string{"0xabc", "0x123"},
+				Contacts: []string{"0xdef", "0xghi"},
+			},
+			Event:  NewAdminsAddedEvent([]string{"0xdef"}, 0),
+			Result: true,
+		},
+		{
+			Name: "admins-added not allowed because not from admin",
+			From: "0xabc",
+			Group: Group{
+				Admins:   []string{"0x123"},
+				Contacts: []string{"0xdef", "0xghi"},
+			},
+			Event:  NewAdminsAddedEvent([]string{"0xdef"}, 0),
+			Result: false,
+		},
+		{
+			Name: "admins-added not allowed because not in contacts",
+			From: "0xabc",
+			Group: Group{
+				Admins:   []string{"0xabc", "0x123"},
+				Contacts: []string{"0xghi"},
+			},
+			Event:  NewAdminsAddedEvent([]string{"0xdef"}, 0),
+			Result: false,
+		},
+		{
+			Name: "admin-removed allowed because is admin and removes themselves",
+			From: "0xabc",
+			Group: Group{
+				Admins: []string{"0xabc"},
+			},
+			Event:  NewAdminRemovedEvent("0xabc", 0),
+			Result: true,
+		},
+		{
+			Name: "admin-removed not allowed because not themselves",
+			From: "0xabc",
+			Group: Group{
+				Admins: []string{"0xabc", "0xdef"},
+			},
+			Event:  NewAdminRemovedEvent("0xdef", 0),
+			Result: false,
+		},
+		{
+			Name: "admin-removed not allowed because not admin",
+			From: "0xdef",
+			Group: Group{
+				Admins: []string{"0xabc"},
+			},
+			Event:  NewAdminRemovedEvent("0xabc", 0),
+			Result: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.Name, func(t *testing.T) {
+			result := tc.Group.ValidateEvent(tc.From, tc.Event)
+			assert.Equal(t, tc.Result, result)
+		})
+	}
 }
