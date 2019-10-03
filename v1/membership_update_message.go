@@ -260,6 +260,36 @@ func (g *Group) init() error {
 	return nil
 }
 
+func (g Group) ChatID() string {
+	return g.chatID
+}
+
+func (g Group) Updates() []MembershipUpdateFlat {
+	return g.updates
+}
+
+func (g Group) Name() string {
+	return g.name
+}
+
+func (g Group) Members() []string {
+	return g.members
+}
+
+func (g Group) Admins() []string {
+	return g.admins
+}
+
+func (g Group) Joined() []string {
+	var result []string
+	for _, update := range g.updates {
+		if update.Type == MembershipUpdateMemberJoined {
+			result = append(result, update.Member)
+		}
+	}
+	return result
+}
+
 func (g *Group) ProcessEvent(from string, event MembershipUpdateEvent) error {
 	if !g.validateEvent(from, event) {
 		return fmt.Errorf("invalid event %#+v from %s", event, from)

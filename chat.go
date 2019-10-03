@@ -2,6 +2,8 @@ package statusproto
 
 import (
 	"crypto/ecdsa"
+	"crypto/sha1"
+	"encoding/hex"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -70,6 +72,11 @@ type ChatMembershipUpdate struct {
 	Member string `json:"member,omitempty"`
 	// Target of the event for multi-target events
 	Members []string `json:"members,omitempty"`
+}
+
+func (u *ChatMembershipUpdate) setID() {
+	sum := sha1.Sum([]byte(u.Signature))
+	u.ID = hex.EncodeToString(sum[:])
 }
 
 // ChatMember represents a member who participates in a group chat
