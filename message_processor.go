@@ -28,11 +28,16 @@ const (
 	whisperPoWTime = 5
 )
 
+type messageHandler interface {
+	HandleGroupMessage(m protocol.MembershipUpdateMessage) error
+}
+
 type messageProcessor struct {
 	identity  *ecdsa.PrivateKey
 	datasync  *datasync.DataSync
 	protocol  *encryption.Protocol
 	transport *transport.WhisperServiceTransport
+	handler   messageHandler
 	logger    *zap.Logger
 
 	featureFlags featureFlags
@@ -43,6 +48,7 @@ func newMessageProcessor(
 	database *sql.DB,
 	enc *encryption.Protocol,
 	transport *transport.WhisperServiceTransport,
+	handler messageHandler,
 	logger *zap.Logger,
 	features featureFlags,
 ) (*messageProcessor, error) {
@@ -65,6 +71,7 @@ func newMessageProcessor(
 		datasync:     ds,
 		protocol:     enc,
 		transport:    transport,
+		handler:      handler,
 		logger:       logger,
 		featureFlags: features,
 	}
@@ -187,6 +194,33 @@ func (p *messageProcessor) SendGroup(
 	return resultIDs, nil
 }
 
+func (p *messageProcessor) SendMembershipUpdate(
+	ctx context.Context,
+	recipients []*ecdsa.PublicKey,
+	chatID string,
+	updates []protocol.MembershipUpdate,
+	clock int64,
+) ([][]byte, error) {
+	message := protocol.MembershipUpdateMessage{
+		ChatID:  chatID,
+		Updates: updates,
+	}
+	encodedMessage, err := protocol.EncodeMembershipUpdateMessage(message)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to encode membership update message")
+	}
+
+	var resultIDs [][]byte
+	for _, recipient := range recipients {
+		messageID, err := p.sendPrivate(ctx, recipient, encodedMessage)
+		if err != nil {
+			return nil, err
+		}
+		resultIDs = append(resultIDs, messageID)
+	}
+	return resultIDs, nil
+}
+
 func (p *messageProcessor) SendPublic(ctx context.Context, chatID string, data []byte, clock int64) ([]byte, error) {
 	logger := p.logger.With(zap.String("site", "SendPublic"))
 	logger.Debug("sending a public message", zap.String("chatID", chatID))
@@ -277,6 +311,18 @@ func (p *messageProcessor) Process(message *whisper.ReceivedMessage) ([]*protoco
 			m.ID = statusMessage.ID
 			m.SigPubKey = statusMessage.SigPubKey()
 			decodedMessages = append(decodedMessages, &m)
+		case protocol.MembershipUpdateMessage:
+			// Handle user message that can be attached to the membership update.
+			userMessage := m.Message
+			if userMessage != nil {
+				userMessage.ID = statusMessage.ID
+				userMessage.SigPubKey = statusMessage.SigPubKey()
+				decodedMessages = append(decodedMessages, userMessage)
+			}
+
+			if err := p.processMembershipUpdate(m); err != nil {
+				hlogger.Error("failed to process MembershipUpdateMessage", zap.Error(err))
+			}
 		case protocol.PairMessage:
 			fromOurDevice := isPubKeyEqual(statusMessage.SigPubKey(), &p.identity.PublicKey)
 			if !fromOurDevice {
@@ -293,6 +339,16 @@ func (p *messageProcessor) Process(message *whisper.ReceivedMessage) ([]*protoco
 	}
 
 	return decodedMessages, nil
+}
+
+func (p *messageProcessor) processMembershipUpdate(m protocol.MembershipUpdateMessage) error {
+	if err := m.Verify(); err != nil {
+		return err
+	}
+	if p.handler != nil {
+		return p.handler.HandleGroupMessage(m)
+	}
+	return errors.New("missing handler")
 }
 
 func (p *messageProcessor) processPairMessage(m protocol.PairMessage) error {

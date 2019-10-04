@@ -9,9 +9,12 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"time"
 
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	gethcrypto "github.com/ethereum/go-ethereum/crypto"
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
-
 	"github.com/status-im/status-protocol-go/crypto"
 )
 
@@ -60,10 +63,9 @@ func EncodeMembershipUpdateMessage(value MembershipUpdateMessage) ([]byte, error
 
 type MembershipUpdate struct {
 	ChatID    string                  `json:"chatId"`
-	Signature string                  `json:"signature"`
+	Signature string                  `json:"signature"` // hex-encoded without 0x prefix
 	Events    []MembershipUpdateEvent `json:"events"`
-
-	From *ecdsa.PublicKey // extracted from signature
+	From      string                  `json:"from"` // hex-encoded with 0x prefix
 }
 
 // Sign creates a signature from MembershipUpdateEvents
@@ -92,10 +94,25 @@ func (u *MembershipUpdate) extractFrom() error {
 	if err != nil {
 		return errors.Wrap(err, "failed to extract signature")
 	}
-	u.From = publicKey
+	u.From = hex.EncodeToString(gethcrypto.FromECDSAPub(publicKey))
 	return nil
 }
 
+func (u *MembershipUpdate) Flat() []MembershipUpdateFlat {
+	result := make([]MembershipUpdateFlat, 0, len(u.Events))
+	for _, event := range u.Events {
+		result = append(result, MembershipUpdateFlat{
+			MembershipUpdateEvent: event,
+			ChatID:                u.ChatID,
+			Signature:             u.Signature,
+			From:                  u.From,
+		})
+	}
+	return result
+}
+
+// MembershipUpdateEvent contains an event information.
+// Member and Members are hex-encoded values with 0x prefix.
 type MembershipUpdateEvent struct {
 	Type       string   `json:"type"`
 	ClockValue int64    `json:"clockValue"`
@@ -104,10 +121,49 @@ type MembershipUpdateEvent struct {
 	Name       string   `json:"name,omitempty"`    // name of the group chat
 }
 
-func NewChatCreatedEvent(name string, clock int64) MembershipUpdateEvent {
+func (u MembershipUpdateEvent) Equal(update MembershipUpdateEvent) bool {
+	return u.Type == update.Type &&
+		u.ClockValue == update.ClockValue &&
+		u.Member == update.Member &&
+		stringSliceEquals(u.Members, update.Members) &&
+		u.Name == update.Name
+}
+
+type MembershipUpdateFlat struct {
+	MembershipUpdateEvent
+	ChatID    string `json:"chatId"`
+	Signature string `json:"signature"`
+	From      string `json:"from"`
+}
+
+func (u MembershipUpdateFlat) Equal(update MembershipUpdateFlat) bool {
+	return u.ChatID == update.ChatID &&
+		u.Signature == update.Signature &&
+		u.From == update.From &&
+		u.MembershipUpdateEvent.Equal(update.MembershipUpdateEvent)
+}
+
+func MergeFlatMembershipUpdates(dest []MembershipUpdateFlat, src []MembershipUpdateFlat) []MembershipUpdateFlat {
+	for _, update := range src {
+		var exists bool
+		for _, existing := range dest {
+			if existing.Equal(update) {
+				exists = true
+				break
+			}
+		}
+		if !exists {
+			dest = append(dest, update)
+		}
+	}
+	return dest
+}
+
+func NewChatCreatedEvent(name string, admin string, clock int64) MembershipUpdateEvent {
 	return MembershipUpdateEvent{
 		Type:       MembershipUpdateChatCreated,
 		Name:       name,
+		Member:     admin,
 		ClockValue: clock,
 	}
 }
@@ -217,12 +273,6 @@ func tupleMembershipUpdateEvent(update MembershipUpdateEvent) [][]interface{} {
 	return result
 }
 
-type MembershipUpdateFlat struct {
-	MembershipUpdateEvent
-	From      string
-	Signature string
-}
-
 type Group struct {
 	chatID  string
 	name    string
@@ -231,7 +281,39 @@ type Group struct {
 	members []string
 }
 
+func groupChatID(creator *ecdsa.PublicKey) string {
+	return uuid.New().String() + "-" + hexutil.Encode(gethcrypto.FromECDSAPub(creator))
+}
+
+func NewGroupWithMembershipUpdates(chatID string, updates []MembershipUpdate) (*Group, error) {
+	flatten := make([]MembershipUpdateFlat, 0, len(updates))
+	for _, update := range updates {
+		flatten = append(flatten, update.Flat()...)
+	}
+	return newGroup(chatID, flatten)
+}
+
+func NewGroupWithCreator(name string, creator *ecdsa.PrivateKey) (*Group, error) {
+	chatID := groupChatID(&creator.PublicKey)
+	creatorHex := publicKeyToString(&creator.PublicKey)
+	clock := TimestampInMsFromTime(time.Now())
+	chatCreated := NewChatCreatedEvent(name, creatorHex, int64(clock))
+	update := MembershipUpdate{
+		ChatID: chatID,
+		From:   creatorHex,
+		Events: []MembershipUpdateEvent{chatCreated},
+	}
+	if err := update.Sign(creator); err != nil {
+		return nil, err
+	}
+	return newGroup(chatID, update.Flat())
+}
+
 func NewGroup(chatID string, updates []MembershipUpdateFlat) (*Group, error) {
+	return newGroup(chatID, updates)
+}
+
+func newGroup(chatID string, updates []MembershipUpdateFlat) (*Group, error) {
 	g := Group{
 		chatID:  chatID,
 		updates: updates,
@@ -245,7 +327,14 @@ func NewGroup(chatID string, updates []MembershipUpdateFlat) (*Group, error) {
 func (g *Group) init() error {
 	g.sortEvents()
 
+	var chatID string
+
 	for _, update := range g.updates {
+		if chatID == "" {
+			chatID = update.ChatID
+		} else if update.ChatID != chatID {
+			return errors.New("updates contain different chat IDs")
+		}
 		valid := g.validateEvent(update.From, update.MembershipUpdateEvent)
 		if !valid {
 			return fmt.Errorf("invalid event %#+v from %s", update.MembershipUpdateEvent, update.From)
@@ -253,8 +342,12 @@ func (g *Group) init() error {
 		g.processEvent(update.From, update.MembershipUpdateEvent)
 	}
 
-	if !g.validateChatID(g.chatID) {
-		return fmt.Errorf("invalid chatID: %s", g.chatID)
+	valid := g.validateChatID(g.chatID)
+	if !valid {
+		return fmt.Errorf("invalid chat ID: %s", g.chatID)
+	}
+	if chatID != g.chatID {
+		return fmt.Errorf("expected chat ID equal %s, got %s", g.chatID, chatID)
 	}
 
 	return nil
@@ -314,8 +407,8 @@ func (g Group) creator() (string, error) {
 		return "", errors.New("no events in the group")
 	}
 	first := g.updates[0]
-	if first.Name != MembershipUpdateChatCreated {
-		return "", fmt.Errorf("expected first event to be 'chat-created', got %s", first.Name)
+	if first.Type != MembershipUpdateChatCreated {
+		return "", fmt.Errorf("expected first event to be 'chat-created', got %s", first.Type)
 	}
 	return first.From, nil
 }
@@ -355,8 +448,11 @@ func (g Group) validateEvent(from string, event MembershipUpdateEvent) bool {
 
 func (g *Group) processEvent(from string, event MembershipUpdateEvent) {
 	switch event.Type {
-	case MembershipUpdateChatCreated,
-		MembershipUpdateNameChanged:
+	case MembershipUpdateChatCreated:
+		g.name = event.Name
+		g.members = append(g.members, event.Member)
+		g.admins = append(g.admins, event.Member)
+	case MembershipUpdateNameChanged:
 		g.name = event.Name
 	case MembershipUpdateAdminsAdded:
 		g.admins = append(g.admins, event.Members...)
@@ -402,6 +498,20 @@ func stringSliceSubset(subset []string, set []string) bool {
 	return false
 }
 
+func stringSliceEquals(slice1, slice2 []string) bool {
+	set := map[string]struct{}{}
+	for _, s := range slice1 {
+		set[s] = struct{}{}
+	}
+	for _, s := range slice2 {
+		_, ok := set[s]
+		if !ok {
+			return false
+		}
+	}
+	return true
+}
+
 func stringSliceFilter(slice []string, keep func(string) bool) []string {
 	n := 0
 	for _, item := range slice {
@@ -411,4 +521,8 @@ func stringSliceFilter(slice []string, keep func(string) bool) []string {
 		}
 	}
 	return slice[:n]
+}
+
+func publicKeyToString(publicKey *ecdsa.PublicKey) string {
+	return hexutil.Encode(gethcrypto.FromECDSAPub(publicKey))
 }

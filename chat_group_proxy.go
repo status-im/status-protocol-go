@@ -4,15 +4,16 @@ import (
 	protocol "github.com/status-im/status-protocol-go/v1"
 )
 
-func newProtocolGroupFromChat(chat Chat) (*protocol.Group, error) {
-	return protocol.NewGroup(chat.ID, chatToProtocolGroup(chat))
+func newProtocolGroupFromChat(chat *Chat) (*protocol.Group, error) {
+	return protocol.NewGroup(chat.ID, chatToFlattenMembershipUpdate(chat))
 }
 
-func chatToProtocolGroup(chat Chat) []protocol.MembershipUpdateFlat {
+func chatToFlattenMembershipUpdate(chat *Chat) []protocol.MembershipUpdateFlat {
 	result := make([]protocol.MembershipUpdateFlat, len(chat.MembershipUpdates))
 	for idx, update := range chat.MembershipUpdates {
 		result[idx] = protocol.MembershipUpdateFlat{
-			From: update.From,
+			From:      update.From,
+			Signature: update.Signature,
 			MembershipUpdateEvent: protocol.MembershipUpdateEvent{
 				Name:       update.Name,
 				Type:       update.Type,
@@ -26,6 +27,9 @@ func chatToProtocolGroup(chat Chat) []protocol.MembershipUpdateFlat {
 }
 
 func updateChatFromProtocolGroup(chat *Chat, g *protocol.Group) {
+	// ID
+	chat.ID = g.ChatID()
+
 	// Name
 	chat.Name = g.Name()
 

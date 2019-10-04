@@ -7,7 +7,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/google/uuid"
 )
 
 type ChatType int
@@ -132,14 +131,8 @@ func CreatePublicChat(name string) Chat {
 	}
 }
 
-func groupChatID(creator *ecdsa.PublicKey) string {
-	return uuid.New().String() + hexutil.Encode(crypto.FromECDSAPub(creator))
-}
-
-func CreateGroupChat(name string, creator *ecdsa.PublicKey) Chat {
+func CreateGroupChat() Chat {
 	return Chat{
-		ID:       groupChatID(creator),
-		Name:     name,
 		Active:   true,
 		ChatType: ChatTypePrivateGroupChat,
 	}

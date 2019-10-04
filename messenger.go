@@ -284,6 +284,7 @@ func NewMessenger(
 		database,
 		encryptionProtocol,
 		t,
+		newPersistentMessageHandler(&sqlitePersistence{db: database}),
 		logger,
 		c.featureFlags,
 	)

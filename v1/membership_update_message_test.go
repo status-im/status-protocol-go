@@ -1,6 +1,7 @@
 package statusproto
 
 import (
+	"encoding/hex"
 	"strings"
 	"testing"
 	"unicode"
@@ -106,6 +107,16 @@ func TestSignMembershipUpdate(t *testing.T) {
 	require.Equal(t, expected, update.Signature)
 }
 
+func TestGroupCreator(t *testing.T) {
+	key, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	g, err := NewGroupWithCreator("abc", key)
+	require.NoError(t, err)
+	creator, err := g.creator()
+	require.NoError(t, err)
+	require.Equal(t, publicKeyToString(&key.PublicKey), creator)
+}
+
 func TestGroupProcessEvent(t *testing.T) {
 	testCases := []struct {
 		Name   string
@@ -116,9 +127,9 @@ func TestGroupProcessEvent(t *testing.T) {
 	}{
 		{
 			Name:   "chat-created event",
-			Result: Group{name: "some-name"},
+			Result: Group{name: "some-name", admins: []string{"0xabc"}, members: []string{"0xabc"}},
 			From:   "0xabc",
-			Event:  NewChatCreatedEvent("some-name", 0),
+			Event:  NewChatCreatedEvent("some-name", "0xabc", 0),
 		},
 		{
 			Name:   "name-changed event",
@@ -180,7 +191,7 @@ func TestGroupValidateEvent(t *testing.T) {
 	}{
 		{
 			Name:   "chat-created with empty admins and members",
-			Event:  NewChatCreatedEvent("test", 0),
+			Event:  NewChatCreatedEvent("test", "0xabc", 0),
 			Result: true,
 		},
 		{
@@ -188,7 +199,7 @@ func TestGroupValidateEvent(t *testing.T) {
 			Group: Group{
 				admins: []string{"0xabc"},
 			},
-			Event:  NewChatCreatedEvent("test", 0),
+			Event:  NewChatCreatedEvent("test", "0xabc", 0),
 			Result: false,
 		},
 		{
@@ -196,7 +207,7 @@ func TestGroupValidateEvent(t *testing.T) {
 			Group: Group{
 				members: []string{"0xabc"},
 			},
-			Event:  NewChatCreatedEvent("test", 0),
+			Event:  NewChatCreatedEvent("test", "0xabc", 0),
 			Result: false,
 		},
 		{
@@ -345,7 +356,7 @@ func TestMembershipUpdateMessageProcess(t *testing.T) {
 		{
 			ChatID: "some-chat",
 			Events: []MembershipUpdateEvent{
-				NewChatCreatedEvent("some-name", 0),
+				NewChatCreatedEvent("some-name", "0xabc", 0),
 			},
 		},
 	}
@@ -359,6 +370,74 @@ func TestMembershipUpdateMessageProcess(t *testing.T) {
 	}
 	err = message.Verify()
 	require.NoError(t, err)
-	require.EqualValues(t, key.PublicKey.X, updates[0].From.X)
-	require.EqualValues(t, key.PublicKey.Y, updates[0].From.Y)
+	require.EqualValues(t, hex.EncodeToString(crypto.FromECDSAPub(&key.PublicKey)), updates[0].From)
+}
+
+func TestMembershipUpdateEventEqual(t *testing.T) {
+	u1 := MembershipUpdateEvent{
+		Type:       MembershipUpdateChatCreated,
+		ClockValue: 1,
+		Member:     "0xabc",
+		Members:    []string{"0xabc"},
+		Name:       "abc",
+	}
+	require.True(t, u1.Equal(u1))
+
+	// Verify equality breaking.
+	u2 := u1
+	u2.Members = append(u2.Members, "0xdef")
+	require.False(t, u1.Equal(u2))
+	u2 = u1
+	u2.Type = MembershipUpdateMembersAdded
+	require.False(t, u1.Equal(u2))
+	u2 = u1
+	u2.ClockValue = 2
+	require.False(t, u1.Equal(u2))
+	u2 = u1
+	u2.Member = "0xdef"
+	require.False(t, u1.Equal(u2))
+	u2 = u1
+	u2.Name = "def"
+	require.False(t, u1.Equal(u2))
+}
+
+func TestMembershipUpdateFlatEqual(t *testing.T) {
+	u1 := MembershipUpdateFlat{
+		ChatID:    "abc",
+		Signature: "abc",
+		From:      "0xabc",
+	}
+	require.True(t, u1.Equal(u1))
+
+	// Verify equality breaking.
+	u2 := u1
+	u2.ChatID = "def"
+	require.False(t, u1.Equal(u2))
+	u2 = u1
+	u2.Signature = "def"
+	require.False(t, u1.Equal(u2))
+	u2 = u1
+	u2.From = "0xdef"
+	require.False(t, u1.Equal(u2))
+}
+
+func TestMergeFlatMembershipUpdates(t *testing.T) {
+	u1 := []MembershipUpdateFlat{
+		{
+			ChatID:    "abc",
+			Signature: "abc",
+			From:      "0xabc",
+		},
+	}
+	u2 := []MembershipUpdateFlat{
+		{
+			ChatID:    "abc",
+			Signature: "def",
+			From:      "0xdef",
+		},
+	}
+	result := MergeFlatMembershipUpdates(u1, u1)
+	require.EqualValues(t, u1, result)
+	result = MergeFlatMembershipUpdates(u1, u2)
+	require.EqualValues(t, append(u1, u2...), result)
 }
