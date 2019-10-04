@@ -454,12 +454,20 @@ func (m *Messenger) Mailservers() ([]string, error) {
 }
 
 func (m *Messenger) Join(chat Chat) error {
-	if chat.PublicKey != nil {
+	switch chat.ChatType {
+	case ChatTypeOneToOne:
 		return m.transport.JoinPrivate(chat.PublicKey)
-	} else if chat.Name != "" {
+	case ChatTypePrivateGroupChat:
+		members, err := chat.MembersAsPublicKeys()
+		if err != nil {
+			return err
+		}
+		return m.transport.JoinGroup(members)
+	case ChatTypePublic:
 		return m.transport.JoinPublic(chat.Name)
+	default:
+		return errors.New("chat is neither public nor private")
 	}
-	return errors.New("chat is neither public nor private")
 }
 
 func (m *Messenger) Leave(chat Chat) error {
@@ -522,7 +530,7 @@ func (m *Messenger) Contacts() ([]*Contact, error) {
 	return m.persistence.Contacts()
 }
 
-func (m *Messenger) Send(ctx context.Context, chatID string, data []byte) ([]byte, error) {
+func (m *Messenger) Send(ctx context.Context, chatID string, data []byte) ([][]byte, error) {
 	logger := m.logger.With(zap.String("site", "Send"), zap.String("chatID", chatID))
 
 	// A valid added chat is required.
@@ -538,7 +546,8 @@ func (m *Messenger) Send(ctx context.Context, chatID string, data []byte) ([]byt
 
 	logger.Debug("last message clock received", zap.Int64("clock", clock))
 
-	if chat.PublicKey != nil {
+	switch chat.ChatType {
+	case ChatTypeOneToOne:
 		logger.Debug("sending private message", zap.Binary("publicKey", crypto.FromECDSAPub(chat.PublicKey)))
 
 		id, message, err := m.processor.SendPrivate(ctx, chat.PublicKey, chat.ID, data, clock)
@@ -561,12 +570,24 @@ func (m *Messenger) Send(ctx context.Context, chatID string, data []byte) ([]byt
 		// Cache it to be returned in Retrieve().
 		m.ownMessages = append(m.ownMessages, message)
 
-		return id, nil
-	} else if chat.Name != "" {
+		return [][]byte{id}, nil
+	case ChatTypePublic:
 		logger.Debug("sending public message", zap.String("chatName", chat.Name))
-		return m.processor.SendPublic(ctx, chat.ID, data, clock)
+		id, err := m.processor.SendPublic(ctx, chat.ID, data, clock)
+		if err != nil {
+			return nil, err
+		}
+		return [][]byte{id}, nil
+	case ChatTypePrivateGroupChat:
+		logger.Debug("sending group message", zap.String("chatName", chat.Name))
+		recipients, err := chat.MembersAsPublicKeys()
+		if err != nil {
+			return nil, err
+		}
+		return m.processor.SendGroup(ctx, recipients, chat.ID, data, clock)
+	default:
+		return nil, errors.New("chat is neither public nor private")
 	}
-	return nil, errors.New("chat is neither public nor private")
 }
 
 // SendRaw takes encoded data, encrypts it and sends through the wire.

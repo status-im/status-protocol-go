@@ -54,6 +54,18 @@ type Chat struct {
 	MembershipUpdates []ChatMembershipUpdate `json:"membershipUpdates"`
 }
 
+func (c *Chat) MembersAsPublicKeys() ([]*ecdsa.PublicKey, error) {
+	var err error
+	result := make([]*ecdsa.PublicKey, len(c.Members))
+	for idx, m := range c.Members {
+		result[idx], err = m.PublicKey()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return result, nil
+}
+
 // ChatMembershipUpdate represent an event on membership of the chat
 type ChatMembershipUpdate struct {
 	// Unique identifier for the event

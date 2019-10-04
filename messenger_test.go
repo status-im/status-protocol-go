@@ -306,7 +306,7 @@ func (s *MessengerSuite) TestRetrieveOwnPrivate() {
 
 	// Verify message fields.
 	message := messages[0]
-	s.Equal(messageID, message.ID)
+	s.Equal(messageID[0], message.ID)
 	s.Equal(&s.privateKey.PublicKey, message.SigPubKey) // this is OUR message
 }
 
@@ -334,7 +334,7 @@ func (s *MessengerSuite) TestRetrieveTheirPrivate() {
 	// Validate received message.
 	s.Require().Len(messages, 1)
 	message := messages[0]
-	s.Equal(messageID, message.ID)
+	s.Equal(messageID[0], message.ID)
 	s.Equal(&theirMessenger.identity.PublicKey, message.SigPubKey)
 }
 
