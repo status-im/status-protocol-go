@@ -54,15 +54,11 @@ type Chat struct {
 }
 
 func (c *Chat) MembersAsPublicKeys() ([]*ecdsa.PublicKey, error) {
-	var err error
-	result := make([]*ecdsa.PublicKey, len(c.Members))
-	for idx, m := range c.Members {
-		result[idx], err = m.PublicKey()
-		if err != nil {
-			return nil, err
-		}
+	publicKeys := make([]string, len(c.Members))
+	for idx, item := range c.Members {
+		publicKeys[idx] = item.ID
 	}
-	return result, nil
+	return stringSliceToPublicKeys(publicKeys, true)
 }
 
 // ChatMembershipUpdate represent an event on membership of the chat
@@ -131,7 +127,7 @@ func CreatePublicChat(name string) Chat {
 	}
 }
 
-func CreateGroupChat() Chat {
+func createGroupChat() Chat {
 	return Chat{
 		Active:   true,
 		ChatType: ChatTypePrivateGroupChat,
@@ -145,4 +141,27 @@ func findChatByID(chatID string, chats []*Chat) *Chat {
 		}
 	}
 	return nil
+}
+
+func stringSliceToPublicKeys(slice []string, prefixed bool) ([]*ecdsa.PublicKey, error) {
+	result := make([]*ecdsa.PublicKey, len(slice))
+	for idx, item := range slice {
+		var (
+			b   []byte
+			err error
+		)
+		if prefixed {
+			b, err = hexutil.Decode(item)
+		} else {
+			b, err = hex.DecodeString(item)
+		}
+		if err != nil {
+			return nil, err
+		}
+		result[idx], err = crypto.UnmarshalPubkey(b)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return result, nil
 }

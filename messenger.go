@@ -480,6 +480,65 @@ func (m *Messenger) Leave(chat Chat) error {
 	return errors.New("chat is neither public nor private")
 }
 
+// TODO: consider moving to a ChatManager ???
+func (m *Messenger) CreateGroupChat(name string) (Chat, error) {
+	chat := createGroupChat()
+	group, err := protocol.NewGroupWithCreator(name, m.identity)
+	if err != nil {
+		return Chat{}, err
+	}
+	updateChatFromProtocolGroup(&chat, group)
+	return chat, nil
+}
+
+func (m *Messenger) AddMembersToChat(ctx context.Context, chat *Chat, members []*ecdsa.PublicKey) error {
+	group, err := newProtocolGroupFromChat(chat)
+	if err != nil {
+		return err
+	}
+	encodedMembers := make([]string, len(members))
+	for idx, member := range members {
+		encodedMembers[idx] = hexutil.Encode(crypto.FromECDSAPub(member))
+	}
+	event := protocol.NewMembersAddedEvent(encodedMembers, group.NextClockValue())
+	err = group.ProcessEvent(hexutil.Encode(crypto.FromECDSAPub(&m.identity.PublicKey)), event)
+	if err != nil {
+		return err
+	}
+	if err := m.propagateMembershipUpdates(ctx, group); err != nil {
+		return err
+	}
+	updateChatFromProtocolGroup(chat, group)
+	return m.SaveChat(*chat)
+}
+
+func (m *Messenger) propagateMembershipUpdates(ctx context.Context, group *protocol.Group) error {
+	events := make([]protocol.MembershipUpdateEvent, len(group.Updates()))
+	for idx, event := range group.Updates() {
+		events[idx] = event.MembershipUpdateEvent
+	}
+	update := protocol.MembershipUpdate{
+		ChatID: group.ChatID(),
+		Events: events,
+	}
+	if err := update.Sign(m.identity); err != nil {
+		return err
+	}
+	// TODO: filter me out from recipients
+	recipients, err := stringSliceToPublicKeys(group.Members(), true)
+	if err != nil {
+		return err
+	}
+	_, err = m.processor.SendMembershipUpdate(
+		ctx,
+		recipients,
+		group.ChatID(),
+		[]protocol.MembershipUpdate{update},
+		group.NextClockValue(),
+	)
+	return err
+}
+
 func (m *Messenger) SaveChat(chat Chat) error {
 	return m.persistence.SaveChat(chat)
 }
@@ -556,20 +615,9 @@ func (m *Messenger) Send(ctx context.Context, chatID string, data []byte) ([][]b
 			return nil, err
 		}
 
-		// Save our message because it won't be received from the transport layer.
-		message.ID = id // a Message need ID to be properly stored in the db
-		message.SigPubKey = &m.identity.PublicKey
-		message.ChatID = chatID
-
-		if m.messagesPersistenceEnabled {
-			_, err = m.persistence.SaveMessages([]*protocol.Message{message})
-			if err != nil {
-				return nil, err
-			}
+		if err := m.cacheOwnMessage(chatID, id, message); err != nil {
+			return nil, err
 		}
-
-		// Cache it to be returned in Retrieve().
-		m.ownMessages = append(m.ownMessages, message)
 
 		return [][]byte{id}, nil
 	case ChatTypePublic:
@@ -585,10 +633,46 @@ func (m *Messenger) Send(ctx context.Context, chatID string, data []byte) ([][]b
 		if err != nil {
 			return nil, err
 		}
-		return m.processor.SendGroup(ctx, recipients, chat.ID, data, clock)
+		// Filter me out of recipients.
+		n := 0
+		for _, item := range recipients {
+			if !isPubKeyEqual(item, &m.identity.PublicKey) {
+				recipients[n] = item
+				n++
+			}
+		}
+		ids, messages, err := m.processor.SendGroup(ctx, recipients[:n], chat.ID, data, clock)
+		if err != nil {
+			return nil, err
+		}
+		for idx, message := range messages {
+			if err := m.cacheOwnMessage(chatID, ids[idx], message); err != nil {
+				return nil, err
+			}
+		}
+		return ids, nil
 	default:
 		return nil, errors.New("chat is neither public nor private")
 	}
+}
+
+func (m *Messenger) cacheOwnMessage(chatID string, id []byte, message *protocol.Message) error {
+	// Save our message because it won't be received from the transport layer.
+	message.ID = id // a Message need ID to be properly stored in the db
+	message.SigPubKey = &m.identity.PublicKey
+	message.ChatID = chatID
+
+	if m.messagesPersistenceEnabled {
+		_, err := m.persistence.SaveMessages([]*protocol.Message{message})
+		if err != nil {
+			return err
+		}
+	}
+
+	// Cache it to be returned in Retrieve().
+	m.ownMessages = append(m.ownMessages, message)
+
+	return nil
 }
 
 // SendRaw takes encoded data, encrypts it and sends through the wire.

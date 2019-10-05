@@ -12,6 +12,7 @@ func chatToFlattenMembershipUpdate(chat *Chat) []protocol.MembershipUpdateFlat {
 	result := make([]protocol.MembershipUpdateFlat, len(chat.MembershipUpdates))
 	for idx, update := range chat.MembershipUpdates {
 		result[idx] = protocol.MembershipUpdateFlat{
+			ChatID:    chat.ID,
 			From:      update.From,
 			Signature: update.Signature,
 			MembershipUpdateEvent: protocol.MembershipUpdateEvent{

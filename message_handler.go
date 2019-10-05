@@ -14,10 +14,10 @@ func newPersistentMessageHandler(persistence *sqlitePersistence) *persistentMess
 	return &persistentMessageHandler{persistence: persistence}
 }
 
-// HandleGroupMessage updates a Chat instance according to the membership updates.
+// HandleMembershipUpdate updates a Chat instance according to the membership updates.
 // It retrieves chat, if exists, and merges membership updates from the message.
 // Finally, the Chat is updated with the new group events.
-func (h *persistentMessageHandler) HandleGroupMessage(m protocol.MembershipUpdateMessage) error {
+func (h *persistentMessageHandler) HandleMembershipUpdate(m protocol.MembershipUpdateMessage) error {
 	chat, err := h.chatID(m.ChatID)
 	switch err {
 	case errChatNotFound:
@@ -25,7 +25,7 @@ func (h *persistentMessageHandler) HandleGroupMessage(m protocol.MembershipUpdat
 		if err != nil {
 			return err
 		}
-		newChat := CreateGroupChat()
+		newChat := createGroupChat()
 		updateChatFromProtocolGroup(&newChat, group)
 		chat = &newChat
 	case nil:

@@ -29,7 +29,7 @@ const (
 )
 
 type messageHandler interface {
-	HandleGroupMessage(m protocol.MembershipUpdateMessage) error
+	HandleMembershipUpdate(m protocol.MembershipUpdateMessage) error
 }
 
 type messageProcessor struct {
@@ -137,6 +137,8 @@ func (p *messageProcessor) sendPrivate(
 	recipient *ecdsa.PublicKey,
 	data []byte,
 ) ([]byte, error) {
+	p.logger.Debug("sending private message", zap.Binary("recipient", crypto.FromECDSAPub(recipient)))
+
 	wrappedMessage, err := p.tryWrapMessageV1(data)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to wrap message")
@@ -174,24 +176,24 @@ func (p *messageProcessor) SendGroup(
 	chatID string,
 	data []byte,
 	clock int64,
-) ([][]byte, error) {
+) ([][]byte, []*protocol.Message, error) {
 	p.logger.Debug("sending a group message", zap.Int("membersCount", len(recipients)))
 
 	message := protocol.CreatePrivateGroupTextMessage(data, clock, chatID)
 	encodedMessage, err := p.encodeMessage(message)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to encode message")
+		return nil, nil, errors.Wrap(err, "failed to encode message")
 	}
 
 	var resultIDs [][]byte
 	for _, recipient := range recipients {
 		messageID, err := p.sendPrivate(ctx, recipient, encodedMessage)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		resultIDs = append(resultIDs, messageID)
 	}
-	return resultIDs, nil
+	return resultIDs, nil, nil
 }
 
 func (p *messageProcessor) SendMembershipUpdate(
@@ -201,6 +203,13 @@ func (p *messageProcessor) SendMembershipUpdate(
 	updates []protocol.MembershipUpdate,
 	clock int64,
 ) ([][]byte, error) {
+	p.logger.Debug("sending a membership update", zap.Int("membersCount", len(recipients)))
+
+	for _, update := range updates {
+		if err := update.Sign(p.identity); err != nil {
+			return nil, err
+		}
+	}
 	message := protocol.MembershipUpdateMessage{
 		ChatID:  chatID,
 		Updates: updates,
@@ -346,7 +355,7 @@ func (p *messageProcessor) processMembershipUpdate(m protocol.MembershipUpdateMe
 		return err
 	}
 	if p.handler != nil {
-		return p.handler.HandleGroupMessage(m)
+		return p.handler.HandleMembershipUpdate(m)
 	}
 	return errors.New("missing handler")
 }

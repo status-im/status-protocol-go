@@ -383,6 +383,16 @@ func (g Group) Joined() []string {
 	return result
 }
 
+func (g *Group) ProcessEvents(from string, events []MembershipUpdateEvent) error {
+	for _, event := range events {
+		err := g.ProcessEvent(from, event)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (g *Group) ProcessEvent(from string, event MembershipUpdateEvent) error {
 	if !g.validateEvent(from, event) {
 		return fmt.Errorf("invalid event %#+v from %s", event, from)

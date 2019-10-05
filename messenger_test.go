@@ -27,9 +27,9 @@ func TestMessengerSuite(t *testing.T) {
 	suite.Run(t, new(MessengerSuite))
 }
 
-func TestMessengerWithDataSyncEnabledSuite(t *testing.T) {
-	suite.Run(t, &MessengerSuite{enableDataSync: true})
-}
+//func TestMessengerWithDataSyncEnabledSuite(t *testing.T) {
+//	suite.Run(t, &MessengerSuite{enableDataSync: true})
+//}
 
 func TestPostProcessorSuite(t *testing.T) {
 	suite.Run(t, new(PostProcessorSuite))
@@ -788,6 +788,75 @@ func (s *MessengerSuite) TestContactPersistenceUpdate() {
 func (s *MessengerSuite) TestSharedSecretHandler() {
 	_, err := s.m.handleSharedSecrets(nil)
 	s.NoError(err)
+}
+
+// TestGroupChatAutocreate verifies that after receiving a membership update message
+// for non-existing group chat, a new one is created.
+func (s *MessengerSuite) TestGroupChatAutocreate() {
+	theirMessenger := s.newMessenger()
+	chat, err := theirMessenger.CreateGroupChat("test-group")
+	s.NoError(err)
+	err = theirMessenger.SaveChat(chat)
+	s.NoError(err)
+	err = theirMessenger.AddMembersToChat(
+		context.Background(),
+		&chat,
+		[]*ecdsa.PublicKey{&s.privateKey.PublicKey},
+	)
+	s.NoError(err)
+
+	var chats []*Chat
+
+	err = tt.RetryWithBackOff(func() error {
+		_, err := s.m.RetrieveAll(context.Background(), RetrieveLatest)
+		if err != nil {
+			return err
+		}
+		chats, err = s.m.Chats()
+		if err != nil {
+			return err
+		}
+		if len(chats) == 0 {
+			return errors.New("expected a group chat to be created")
+		}
+		return nil
+	})
+	s.NoError(err)
+	s.Equal(chat.ID, chats[0].ID)
+	s.Equal("test-group", chats[0].Name)
+}
+
+func (s *MessengerSuite) TestGroupChatMessages() {
+	theirMessenger := s.newMessenger()
+	chat, err := theirMessenger.CreateGroupChat("test-group")
+	s.NoError(err)
+	err = theirMessenger.SaveChat(chat)
+	s.NoError(err)
+	err = theirMessenger.AddMembersToChat(
+		context.Background(),
+		&chat,
+		[]*ecdsa.PublicKey{&s.privateKey.PublicKey},
+	)
+	s.NoError(err)
+	_, err = theirMessenger.Send(context.Background(), chat.ID, []byte("hello!"))
+	s.NoError(err)
+
+	var messages []*protocol.Message
+
+	err = tt.RetryWithBackOff(func() error {
+		var err error
+		messages, err = s.m.RetrieveAll(context.Background(), RetrieveLatest)
+		if err == nil && len(messages) == 0 {
+			err = errors.New("no messages")
+		}
+		return err
+	})
+	s.NoError(err)
+
+	// Validate received message.
+	s.Require().Len(messages, 1)
+	message := messages[0]
+	s.Equal(&theirMessenger.identity.PublicKey, message.SigPubKey)
 }
 
 type PostProcessorSuite struct {
