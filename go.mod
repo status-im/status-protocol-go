@@ -15,7 +15,7 @@ require (
 	github.com/russolsen/ohyeah v0.0.0-20160324131710-f4938c005315 // indirect
 	github.com/russolsen/same v0.0.0-20160222130632-f089df61f51d // indirect
 	github.com/russolsen/transit v0.0.0-20180705123435-0794b4c4505a
-	github.com/status-im/doubleratchet v2.0.0+incompatible
+	github.com/status-im/doubleratchet v3.0.0+incompatible
 	github.com/status-im/migrate/v4 v4.6.2-status.2
 	github.com/status-im/whisper v1.5.1
 	github.com/stretchr/testify v1.3.1-0.20190712000136-221dbe5ed467

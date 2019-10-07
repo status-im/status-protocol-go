@@ -249,8 +249,8 @@ github.com/shopspring/decimal v0.0.0-20180709203117-cd690d0c9e24/go.mod h1:M+9Nz
 github.com/sirupsen/logrus v1.2.0/go.mod h1:LxeOpSwHxABJmUn/MG1IvRgCAasNZTLOkJPxbbu5VWo=
 github.com/sirupsen/logrus v1.4.1 h1:GL2rEmy6nsikmW0r8opw9JIRScdMF5hA8cOYLH7In1k=
 github.com/sirupsen/logrus v1.4.1/go.mod h1:ni0Sbl8bgC9z8RoU9G6nDWqqs/fq4eDPysMBDgk/93Q=
-github.com/status-im/doubleratchet v2.0.0+incompatible h1:s77lF1lDubK0RKftxN2vH8G9gwtVVp13ggWfyY4O1q4=
-github.com/status-im/doubleratchet v2.0.0+incompatible/go.mod h1:1sqR0+yhiM/bd+wrdX79AOt2csZuJOni0nUDzKNuqOU=
+github.com/status-im/doubleratchet v3.0.0+incompatible h1:aJ1ejcSERpSzmWZBgtfYtiU2nF0Q8ZkGyuEPYETXkCY=
+github.com/status-im/doubleratchet v3.0.0+incompatible/go.mod h1:1sqR0+yhiM/bd+wrdX79AOt2csZuJOni0nUDzKNuqOU=
 github.com/status-im/go-ethereum v1.9.5-status.4 h1:F5VrxH9LmTxWl4qwQjs0TI5TgG9dVuZKqGmdwHJ0cWk=
 github.com/status-im/go-ethereum v1.9.5-status.4/go.mod h1:Ulij8LMpMvXnbnPcmDqrpI+iXoXSjxItuY/wmbasTZU=
 github.com/status-im/migrate/v4 v4.6.2-status.2 h1:SdC+sMDl/aI7vUlwD2qj2p7KsK4T60IS9z4/rYCCbI8=
