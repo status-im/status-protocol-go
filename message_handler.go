@@ -26,7 +26,7 @@ func (h *persistentMessageHandler) HandleMembershipUpdate(m protocol.MembershipU
 			return err
 		}
 		newChat := createGroupChat()
-		updateChatFromProtocolGroup(&newChat, group)
+		newChat.updateChatFromProtocolGroup(group)
 		chat = &newChat
 	case nil:
 		existingGroup, err := newProtocolGroupFromChat(chat)
@@ -42,7 +42,7 @@ func (h *persistentMessageHandler) HandleMembershipUpdate(m protocol.MembershipU
 		if err != nil {
 			return errors.Wrap(err, "failed to create a group with new membership updates")
 		}
-		updateChatFromProtocolGroup(chat, newGroup)
+		chat.updateChatFromProtocolGroup(newGroup)
 	default:
 		return err
 	}

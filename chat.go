@@ -7,6 +7,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
+	protocol "github.com/status-im/status-protocol-go/v1"
 )
 
 type ChatType int
@@ -59,6 +60,47 @@ func (c *Chat) MembersAsPublicKeys() ([]*ecdsa.PublicKey, error) {
 		publicKeys[idx] = item.ID
 	}
 	return stringSliceToPublicKeys(publicKeys, true)
+}
+
+func (c *Chat) updateChatFromProtocolGroup(g *protocol.Group) {
+	// ID
+	c.ID = g.ChatID()
+
+	// Name
+	c.Name = g.Name()
+
+	// Members
+	members := g.Members()
+	admins := g.Admins()
+	joined := g.Joined()
+	chatMembers := make([]ChatMember, 0, len(members))
+	for _, m := range members {
+		chatMember := ChatMember{
+			ID: m,
+		}
+		chatMember.Admin = stringSliceContains(admins, m)
+		chatMember.Joined = stringSliceContains(joined, m)
+		chatMembers = append(chatMembers, chatMember)
+	}
+	c.Members = chatMembers
+
+	// MembershipUpdates
+	updates := g.Updates()
+	membershipUpdates := make([]ChatMembershipUpdate, 0, len(updates))
+	for _, update := range updates {
+		membershipUpdate := ChatMembershipUpdate{
+			Type:       update.Type,
+			Name:       update.Name,
+			ClockValue: uint64(update.ClockValue), // TODO: get rid of type casting
+			Signature:  update.Signature,
+			From:       update.From,
+			Member:     update.Member,
+			Members:    update.Members,
+		}
+		membershipUpdate.setID()
+		membershipUpdates = append(membershipUpdates, membershipUpdate)
+	}
+	c.MembershipUpdates = membershipUpdates
 }
 
 // ChatMembershipUpdate represent an event on membership of the chat
@@ -164,4 +206,13 @@ func stringSliceToPublicKeys(slice []string, prefixed bool) ([]*ecdsa.PublicKey,
 		}
 	}
 	return result, nil
+}
+
+func stringSliceContains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
 }

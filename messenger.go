@@ -481,14 +481,14 @@ func (m *Messenger) Leave(chat Chat) error {
 }
 
 // TODO: consider moving to a ChatManager ???
-func (m *Messenger) CreateGroupChat(name string) (Chat, error) {
+func (m *Messenger) CreateGroupChat(name string) (*Chat, error) {
 	chat := createGroupChat()
 	group, err := protocol.NewGroupWithCreator(name, m.identity)
 	if err != nil {
-		return Chat{}, err
+		return nil, err
 	}
-	updateChatFromProtocolGroup(&chat, group)
-	return chat, nil
+	chat.updateChatFromProtocolGroup(group)
+	return &chat, nil
 }
 
 func (m *Messenger) AddMembersToChat(ctx context.Context, chat *Chat, members []*ecdsa.PublicKey) error {
@@ -508,7 +508,7 @@ func (m *Messenger) AddMembersToChat(ctx context.Context, chat *Chat, members []
 	if err := m.propagateMembershipUpdates(ctx, group); err != nil {
 		return err
 	}
-	updateChatFromProtocolGroup(chat, group)
+	chat.updateChatFromProtocolGroup(group)
 	return m.SaveChat(*chat)
 }
 

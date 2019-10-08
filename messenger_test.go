@@ -27,9 +27,9 @@ func TestMessengerSuite(t *testing.T) {
 	suite.Run(t, new(MessengerSuite))
 }
 
-//func TestMessengerWithDataSyncEnabledSuite(t *testing.T) {
-//	suite.Run(t, &MessengerSuite{enableDataSync: true})
-//}
+func TestMessengerWithDataSyncEnabledSuite(t *testing.T) {
+	suite.Run(t, &MessengerSuite{enableDataSync: true})
+}
 
 func TestPostProcessorSuite(t *testing.T) {
 	suite.Run(t, new(PostProcessorSuite))
@@ -796,11 +796,11 @@ func (s *MessengerSuite) TestGroupChatAutocreate() {
 	theirMessenger := s.newMessenger()
 	chat, err := theirMessenger.CreateGroupChat("test-group")
 	s.NoError(err)
-	err = theirMessenger.SaveChat(chat)
+	err = theirMessenger.SaveChat(*chat)
 	s.NoError(err)
 	err = theirMessenger.AddMembersToChat(
 		context.Background(),
-		&chat,
+		chat,
 		[]*ecdsa.PublicKey{&s.privateKey.PublicKey},
 	)
 	s.NoError(err)
@@ -830,11 +830,11 @@ func (s *MessengerSuite) TestGroupChatMessages() {
 	theirMessenger := s.newMessenger()
 	chat, err := theirMessenger.CreateGroupChat("test-group")
 	s.NoError(err)
-	err = theirMessenger.SaveChat(chat)
+	err = theirMessenger.SaveChat(*chat)
 	s.NoError(err)
 	err = theirMessenger.AddMembersToChat(
 		context.Background(),
-		&chat,
+		chat,
 		[]*ecdsa.PublicKey{&s.privateKey.PublicKey},
 	)
 	s.NoError(err)
