@@ -230,6 +230,8 @@ func (db sqlitePersistence) Contacts() ([]*Contact, error) {
 	last_updated,
 	system_tags,
 	device_info,
+	ens_verified,
+	ens_verified_at,
 	tribute_to_talk
 	FROM contacts`)
 
@@ -254,6 +256,8 @@ func (db sqlitePersistence) Contacts() ([]*Contact, error) {
 			&contact.LastUpdated,
 			&encodedSystemTags,
 			&encodedDeviceInfo,
+			&contact.ENSVerified,
+			&contact.ENSVerifiedAt,
 			&contact.TributeToTalk,
 		)
 		if err != nil {
@@ -282,9 +286,7 @@ func (db sqlitePersistence) Contacts() ([]*Contact, error) {
 	return response, nil
 }
 
-// SetContactsGeneratedData sets a contact generated data if not existing already
-// in the database
-func (db sqlitePersistence) SetContactsGeneratedData(contacts []Contact) error {
+func (db sqlitePersistence) SetContactsENSData(contacts []Contact) error {
 	tx, err := db.db.BeginTx(context.Background(), &sql.TxOptions{})
 	if err != nil {
 		return err
@@ -298,6 +300,44 @@ func (db sqlitePersistence) SetContactsGeneratedData(contacts []Contact) error {
 		// don't shadow original error
 		_ = tx.Rollback()
 	}()
+
+	// Ensure contacts exists
+
+	err = db.SetContactsGeneratedData(contacts, tx)
+	if err != nil {
+		return err
+	}
+
+	// Update ens data
+	for _, contact := range contacts {
+		_, err := tx.Exec(`UPDATE contacts SET name = ?, ens_verified = ? , ens_verified_at = ? WHERE id = ?`, contact.Name, contact.ENSVerified, contact.ENSVerifiedAt, contact.ID)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// SetContactsGeneratedData sets a contact generated data if not existing already
+// in the database
+func (db sqlitePersistence) SetContactsGeneratedData(contacts []Contact, tx *sql.Tx) error {
+	var err error
+	if tx == nil {
+		tx, err = db.db.BeginTx(context.Background(), &sql.TxOptions{})
+		if err != nil {
+			return err
+		}
+		defer func() {
+			if err == nil {
+				err = tx.Commit()
+				return
+
+			}
+			// don't shadow original error
+			_ = tx.Rollback()
+		}()
+	}
 
 	for _, contact := range contacts {
 		_, err := tx.Exec(`INSERT OR IGNORE INTO contacts(
@@ -368,9 +408,11 @@ func (db sqlitePersistence) SaveContact(contact Contact, tx *sql.Tx) error {
 	  last_updated,
 	  system_tags,
 	  device_info,
+	  ens_verified,
+	  ens_verified_at,
 	  tribute_to_talk
 	)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
@@ -386,6 +428,8 @@ func (db sqlitePersistence) SaveContact(contact Contact, tx *sql.Tx) error {
 		contact.LastUpdated,
 		encodedSystemTags.Bytes(),
 		encodedDeviceInfo.Bytes(),
+		contact.ENSVerified,
+		contact.ENSVerifiedAt,
 		contact.TributeToTalk,
 	)
 	return err
