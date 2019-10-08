@@ -524,11 +524,20 @@ func (m *Messenger) propagateMembershipUpdates(ctx context.Context, group *proto
 	if err := update.Sign(m.identity); err != nil {
 		return err
 	}
-	// TODO: filter me out from recipients
 	recipients, err := stringSliceToPublicKeys(group.Members(), true)
 	if err != nil {
 		return err
 	}
+	// Filter out my key from the recipients
+	n := 0
+	for _, recipient := range recipients {
+		if !isPubKeyEqual(recipient, &m.identity.PublicKey) {
+			recipients[n] = recipient
+			n++
+		}
+	}
+	recipients = recipients[:n]
+	// Finally send membership updates to all recipients.
 	_, err = m.processor.SendMembershipUpdate(
 		ctx,
 		recipients,
