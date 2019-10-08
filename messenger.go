@@ -4,8 +4,6 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"database/sql"
-	"encoding/hex"
-	"fmt"
 	"strings"
 	"time"
 
@@ -18,6 +16,7 @@ import (
 	"github.com/status-im/status-protocol-go/encryption"
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
 	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
+	"github.com/status-im/status-protocol-go/ens"
 	"github.com/status-im/status-protocol-go/identity/alias"
 	"github.com/status-im/status-protocol-go/identity/identicon"
 	"github.com/status-im/status-protocol-go/sqlite"
@@ -835,26 +834,16 @@ func (m *Messenger) saveContacts(messages map[transport.Filter][]*protocol.Statu
 			if _, ok := allContactsMap[address]; ok {
 				continue
 			}
-			id := fmt.Sprintf("0x%s", hex.EncodeToString(crypto.FromECDSAPub(publicKey)))
-
-			identicon, err := identicon.GenerateBase64(id)
+			contact, err := buildContact(publicKey)
 			if err != nil {
 				continue
 			}
 
-			contact := Contact{
-				ID:        id,
-				Address:   address[2:],
-				Alias:     alias.GenerateFromPublicKey(message.SigPubKey()),
-				Identicon: identicon,
-			}
-
 			allContactsMap[address] = true
-			allContacts = append(allContacts, contact)
-
+			allContacts = append(allContacts, *contact)
 		}
 	}
-	return m.persistence.SetContactsGeneratedData(allContacts)
+	return m.persistence.SetContactsGeneratedData(allContacts, nil)
 }
 
 // DEPRECATED
@@ -1062,6 +1051,47 @@ func (p *postProcessor) matchMessage(message *protocol.Message, chats []*Chat) (
 // Identicon returns an identicon based on the input string
 func Identicon(id string) (string, error) {
 	return identicon.GenerateBase64(id)
+}
+
+// VerifyENSName verifies that a registered ENS name matches the expected public key
+func (m *Messenger) VerifyENSNames(rpcEndpoint, contractAddress string, ensDetails []ens.ENSDetails) (map[string]ens.ENSResponse, error) {
+	verifier := ens.NewVerifier(m.logger)
+
+	ensResponse, err := verifier.CheckBatch(ensDetails, rpcEndpoint, contractAddress)
+	if err != nil {
+		return nil, err
+	}
+
+	// Update contacts
+	var contacts []Contact
+	for _, details := range ensResponse {
+		if details.Error == nil {
+			contact, err := buildContact(details.PublicKey)
+			if err != nil {
+				return nil, err
+			}
+			contact.ENSVerified = details.Verified
+			contact.ENSVerifiedAt = details.VerifiedAt
+			contact.Name = details.Name
+
+			contacts = append(contacts, *contact)
+		} else {
+			m.logger.Warn("Failed to resolve ens name",
+				zap.String("name", details.Name),
+				zap.String("publicKey", details.PublicKeyString),
+				zap.Error(details.Error),
+			)
+		}
+	}
+
+	if len(contacts) != 0 {
+		err = m.persistence.SetContactsENSData(contacts)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return ensResponse, nil
 }
 
 // GenerateAlias name returns the generated name given a public key hex encoded prefixed with 0x
