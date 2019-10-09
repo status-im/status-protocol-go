@@ -8,6 +8,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/status-im/status-protocol-go/transport/whisper/gethbridge"
 	"github.com/status-im/status-protocol-go/tt"
 
 	"github.com/ethereum/go-ethereum/crypto"
@@ -74,7 +75,7 @@ func (s *FiltersManagerSuite) SetupTest() {
 	db, err := sqlite.Open(s.dbPath, "filter-key")
 	s.Require().NoError(err)
 
-	whisper := whisper.New(nil)
+	whisper := gethbridge.NewGethWhisperWrapper(whisper.New(nil))
 
 	s.chats, err = newFiltersManager(db, whisper, s.manager[0].privateKey, s.logger)
 	s.Require().NoError(err)
