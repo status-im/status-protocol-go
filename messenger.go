@@ -501,7 +501,27 @@ func (m *Messenger) AddMembersToChat(ctx context.Context, chat *Chat, members []
 		encodedMembers[idx] = hexutil.Encode(crypto.FromECDSAPub(member))
 	}
 	event := protocol.NewMembersAddedEvent(encodedMembers, group.NextClockValue())
-	err = group.ProcessEvent(hexutil.Encode(crypto.FromECDSAPub(&m.identity.PublicKey)), event)
+	err = group.ProcessEvent(&m.identity.PublicKey, event)
+	if err != nil {
+		return err
+	}
+	if err := m.propagateMembershipUpdates(ctx, group); err != nil {
+		return err
+	}
+	chat.updateChatFromProtocolGroup(group)
+	return m.SaveChat(*chat)
+}
+
+func (m *Messenger) ConfirmJoiningGroup(ctx context.Context, chat *Chat) error {
+	group, err := newProtocolGroupFromChat(chat)
+	if err != nil {
+		return err
+	}
+	event := protocol.NewMemberJoinedEvent(
+		hexutil.Encode(crypto.FromECDSAPub(&m.identity.PublicKey)),
+		group.NextClockValue(),
+	)
+	err = group.ProcessEvent(&m.identity.PublicKey, event)
 	if err != nil {
 		return err
 	}

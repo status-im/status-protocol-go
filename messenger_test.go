@@ -790,6 +790,27 @@ func (s *MessengerSuite) TestSharedSecretHandler() {
 	s.NoError(err)
 }
 
+func (s *MessengerSuite) TestCreateGroupChat() {
+	chat, err := s.m.CreateGroupChat("test")
+	s.NoError(err)
+	s.Equal("test", chat.Name)
+	publicKeyHex := "0x" + hex.EncodeToString(crypto.FromECDSAPub(&s.m.identity.PublicKey))
+	s.Contains(chat.ID, publicKeyHex)
+	s.EqualValues([]string{publicKeyHex}, []string{chat.Members[0].ID})
+}
+
+func (s *MessengerSuite) TestAddMembersToChat() {
+	chat, err := s.m.CreateGroupChat("test")
+	s.NoError(err)
+	key, err := crypto.GenerateKey()
+	s.NoError(err)
+	err = s.m.AddMembersToChat(context.Background(), chat, []*ecdsa.PublicKey{&key.PublicKey})
+	s.NoError(err)
+	publicKeyHex := "0x" + hex.EncodeToString(crypto.FromECDSAPub(&s.m.identity.PublicKey))
+	keyHex := "0x" + hex.EncodeToString(crypto.FromECDSAPub(&key.PublicKey))
+	s.EqualValues([]string{publicKeyHex, keyHex}, []string{chat.Members[0].ID, chat.Members[1].ID})
+}
+
 // TestGroupChatAutocreate verifies that after receiving a membership update message
 // for non-existing group chat, a new one is created.
 func (s *MessengerSuite) TestGroupChatAutocreate() {
@@ -804,6 +825,7 @@ func (s *MessengerSuite) TestGroupChatAutocreate() {
 		[]*ecdsa.PublicKey{&s.privateKey.PublicKey},
 	)
 	s.NoError(err)
+	s.Equal(2, len(chat.Members))
 
 	var chats []*Chat
 
@@ -824,6 +846,11 @@ func (s *MessengerSuite) TestGroupChatAutocreate() {
 	s.NoError(err)
 	s.Equal(chat.ID, chats[0].ID)
 	s.Equal("test-group", chats[0].Name)
+	s.Equal(2, len(chats[0].Members))
+
+	// Send confirmation.
+	err = s.m.ConfirmJoiningGroup(context.Background(), chats[0])
+	s.Require().NoError(err)
 }
 
 func (s *MessengerSuite) TestGroupChatMessages() {

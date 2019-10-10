@@ -94,7 +94,7 @@ func (u *MembershipUpdate) extractFrom() error {
 	if err != nil {
 		return errors.Wrap(err, "failed to extract signature")
 	}
-	u.From = hex.EncodeToString(gethcrypto.FromECDSAPub(publicKey))
+	u.From = hexutil.Encode(gethcrypto.FromECDSAPub(publicKey))
 	return nil
 }
 
@@ -277,8 +277,8 @@ type Group struct {
 	chatID  string
 	name    string
 	updates []MembershipUpdateFlat
-	admins  []string
-	members []string
+	admins  *stringSet
+	members *stringSet
 }
 
 func groupChatID(creator *ecdsa.PublicKey) string {
@@ -317,6 +317,8 @@ func newGroup(chatID string, updates []MembershipUpdateFlat) (*Group, error) {
 	g := Group{
 		chatID:  chatID,
 		updates: updates,
+		admins:  newStringSet(),
+		members: newStringSet(),
 	}
 	if err := g.init(); err != nil {
 		return nil, err
@@ -366,11 +368,11 @@ func (g Group) Name() string {
 }
 
 func (g Group) Members() []string {
-	return g.members
+	return g.members.List()
 }
 
 func (g Group) Admins() []string {
-	return g.admins
+	return g.admins.List()
 }
 
 func (g Group) Joined() []string {
@@ -383,7 +385,7 @@ func (g Group) Joined() []string {
 	return result
 }
 
-func (g *Group) ProcessEvents(from string, events []MembershipUpdateEvent) error {
+func (g *Group) ProcessEvents(from *ecdsa.PublicKey, events []MembershipUpdateEvent) error {
 	for _, event := range events {
 		err := g.ProcessEvent(from, event)
 		if err != nil {
@@ -393,11 +395,18 @@ func (g *Group) ProcessEvents(from string, events []MembershipUpdateEvent) error
 	return nil
 }
 
-func (g *Group) ProcessEvent(from string, event MembershipUpdateEvent) error {
-	if !g.validateEvent(from, event) {
+func (g *Group) ProcessEvent(from *ecdsa.PublicKey, event MembershipUpdateEvent) error {
+	fromHex := hexutil.Encode(gethcrypto.FromECDSAPub(from))
+	if !g.validateEvent(fromHex, event) {
 		return fmt.Errorf("invalid event %#+v from %s", event, from)
 	}
-	g.processEvent(from, event)
+	update := MembershipUpdate{
+		ChatID: g.chatID,
+		From:   fromHex,
+		Events: []MembershipUpdateEvent{event},
+	}
+	g.updates = append(g.updates, update.Flat()...)
+	g.processEvent(fromHex, event)
 	return nil
 }
 
@@ -437,20 +446,20 @@ func (g Group) validateChatID(chatID string) bool {
 func (g Group) validateEvent(from string, event MembershipUpdateEvent) bool {
 	switch event.Type {
 	case MembershipUpdateChatCreated:
-		return len(g.admins) == 0 && len(g.members) == 0
+		return g.admins.Empty() && g.members.Empty()
 	case MembershipUpdateNameChanged:
-		return stringSliceContains(g.admins, from) && len(event.Name) > 0
+		return g.admins.Has(from) && len(event.Name) > 0
 	case MembershipUpdateMembersAdded:
-		return stringSliceContains(g.admins, from)
+		return g.admins.Has(from)
 	case MembershipUpdateMemberJoined:
-		return stringSliceContains(g.members, from) && from == event.Member
+		return g.members.Has(from) && from == event.Member
 	case MembershipUpdateMemberRemoved:
 		// Member can remove themselves or admin can remove a member.
-		return from == event.Member || (stringSliceContains(g.admins, from) && !stringSliceContains(g.admins, event.Member))
+		return from == event.Member || (g.admins.Has(from) && !g.admins.Has(event.Member))
 	case MembershipUpdateAdminsAdded:
-		return stringSliceContains(g.admins, from) && stringSliceSubset(event.Members, g.members)
+		return g.admins.Has(from) && stringSliceSubset(event.Members, g.members.List())
 	case MembershipUpdateAdminRemoved:
-		return stringSliceContains(g.admins, from) && from == event.Member
+		return g.admins.Has(from) && from == event.Member
 	default:
 		return false
 	}
@@ -460,20 +469,20 @@ func (g *Group) processEvent(from string, event MembershipUpdateEvent) {
 	switch event.Type {
 	case MembershipUpdateChatCreated:
 		g.name = event.Name
-		g.members = append(g.members, event.Member)
-		g.admins = append(g.admins, event.Member)
+		g.members.Add(event.Member)
+		g.admins.Add(event.Member)
 	case MembershipUpdateNameChanged:
 		g.name = event.Name
 	case MembershipUpdateAdminsAdded:
-		g.admins = append(g.admins, event.Members...)
+		g.admins.Add(event.Members...)
 	case MembershipUpdateAdminRemoved:
-		g.admins = stringSliceFilter(g.admins, func(item string) bool { return item != event.Member })
+		g.admins.Remove(event.Member)
 	case MembershipUpdateMembersAdded:
-		g.members = append(g.members, event.Members...)
+		g.members.Add(event.Members...)
 	case MembershipUpdateMemberRemoved:
-		g.members = stringSliceFilter(g.members, func(item string) bool { return item != event.Member })
+		g.members.Remove(event.Member)
 	case MembershipUpdateMemberJoined:
-		g.members = append(g.members, event.Member)
+		g.members.Add(event.Member)
 	}
 }
 
@@ -535,4 +544,65 @@ func stringSliceFilter(slice []string, keep func(string) bool) []string {
 
 func publicKeyToString(publicKey *ecdsa.PublicKey) string {
 	return hexutil.Encode(gethcrypto.FromECDSAPub(publicKey))
+}
+
+type stringSet struct {
+	m     map[string]struct{}
+	items []string
+}
+
+func newStringSet() *stringSet {
+	return &stringSet{
+		m: make(map[string]struct{}),
+	}
+}
+
+func newStringSetFromSlice(s []string) *stringSet {
+	set := newStringSet()
+	if len(s) > 0 {
+		set.Add(s...)
+	}
+	return set
+}
+
+func (s *stringSet) Add(items ...string) {
+	for _, item := range items {
+		if _, ok := s.m[item]; !ok {
+			s.m[item] = struct{}{}
+			s.items = append(s.items, item)
+		}
+	}
+}
+
+func (s *stringSet) Remove(items ...string) {
+	for _, item := range items {
+		if _, ok := s.m[item]; ok {
+			delete(s.m, item)
+			s.removeFromItems(item)
+		}
+	}
+}
+
+func (s *stringSet) Has(item string) bool {
+	_, ok := s.m[item]
+	return ok
+}
+
+func (s *stringSet) Empty() bool {
+	return len(s.items) == 0
+}
+
+func (s *stringSet) List() []string {
+	return s.items
+}
+
+func (s *stringSet) removeFromItems(dropped string) {
+	n := 0
+	for _, item := range s.items {
+		if item != dropped {
+			s.items[n] = item
+			n++
+		}
+	}
+	s.items = s.items[:n]
 }

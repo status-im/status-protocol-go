@@ -118,6 +118,14 @@ func TestGroupCreator(t *testing.T) {
 }
 
 func TestGroupProcessEvent(t *testing.T) {
+	createGroup := func(admins, members []string, name string) Group {
+		return Group{
+			name:    name,
+			admins:  newStringSetFromSlice(admins),
+			members: newStringSetFromSlice(members),
+		}
+	}
+
 	testCases := []struct {
 		Name   string
 		Group  Group
@@ -127,46 +135,50 @@ func TestGroupProcessEvent(t *testing.T) {
 	}{
 		{
 			Name:   "chat-created event",
-			Result: Group{name: "some-name", admins: []string{"0xabc"}, members: []string{"0xabc"}},
+			Group:  createGroup(nil, nil, ""),
+			Result: createGroup([]string{"0xabc"}, []string{"0xabc"}, "some-name"),
 			From:   "0xabc",
 			Event:  NewChatCreatedEvent("some-name", "0xabc", 0),
 		},
 		{
 			Name:   "name-changed event",
-			Result: Group{name: "some-name"},
+			Group:  createGroup(nil, nil, ""),
+			Result: createGroup(nil, nil, "some-name"),
 			From:   "0xabc",
 			Event:  NewNameChangedEvent("some-name", 0),
 		},
 		{
 			Name:   "admins-added event",
-			Result: Group{admins: []string{"0xabc", "0x123"}},
+			Group:  createGroup(nil, nil, ""),
+			Result: createGroup([]string{"0xabc", "0x123"}, nil, ""),
 			From:   "0xabc",
 			Event:  NewAdminsAddedEvent([]string{"0xabc", "0x123"}, 0),
 		},
 		{
 			Name:   "admin-removed event",
-			Group:  Group{admins: []string{"0xabc", "0xdef"}},
-			Result: Group{admins: []string{"0xdef"}},
+			Group:  createGroup([]string{"0xabc", "0xdef"}, nil, ""),
+			Result: createGroup([]string{"0xdef"}, nil, ""),
 			From:   "0xabc",
 			Event:  NewAdminRemovedEvent("0xabc", 0),
 		},
 		{
 			Name:   "members-added event",
-			Result: Group{members: []string{"0xabc", "0xdef"}},
+			Group:  createGroup(nil, nil, ""),
+			Result: createGroup(nil, []string{"0xabc", "0xdef"}, ""),
 			From:   "0xabc",
 			Event:  NewMembersAddedEvent([]string{"0xabc", "0xdef"}, 0),
 		},
 		{
 			Name:   "member-removed event",
-			Group:  Group{members: []string{"0xabc", "0xdef"}},
-			Result: Group{members: []string{"0xdef"}},
+			Group:  createGroup(nil, []string{"0xabc", "0xdef"}, ""),
+			Result: createGroup(nil, []string{"0xdef"}, ""),
 			From:   "0xabc",
 			Event:  NewMemberRemovedEvent("0xabc", 0),
 		},
 		{
 			Name:   "member-joined event",
-			Group:  Group{members: []string{"0xabc"}},
-			Result: Group{members: []string{"0xabc", "0xdef"}},
+			Group:  createGroup(nil, []string{"0xabc"}, ""),
+			Result: createGroup(nil, []string{"0xabc", "0xdef"}, ""),
 			From:   "0xabc",
 			Event:  NewMemberJoinedEvent("0xdef", 0),
 		},
@@ -182,6 +194,13 @@ func TestGroupProcessEvent(t *testing.T) {
 }
 
 func TestGroupValidateEvent(t *testing.T) {
+	createGroup := func(admins, members []string) Group {
+		return Group{
+			admins:  newStringSetFromSlice(admins),
+			members: newStringSetFromSlice(members),
+		}
+	}
+
 	testCases := []struct {
 		Name   string
 		From   string
@@ -191,151 +210,131 @@ func TestGroupValidateEvent(t *testing.T) {
 	}{
 		{
 			Name:   "chat-created with empty admins and members",
+			Group:  createGroup(nil, nil),
 			Event:  NewChatCreatedEvent("test", "0xabc", 0),
 			Result: true,
 		},
 		{
-			Name: "chat-created with existing admins",
-			Group: Group{
-				admins: []string{"0xabc"},
-			},
+			Name:   "chat-created with existing admins",
+			Group:  createGroup([]string{"0xabc"}, nil),
 			Event:  NewChatCreatedEvent("test", "0xabc", 0),
 			Result: false,
 		},
 		{
-			Name: "chat-created with existing members",
-			Group: Group{
-				members: []string{"0xabc"},
-			},
+			Name:   "chat-created with existing members",
+			Group:  createGroup(nil, []string{"0xabc"}),
 			Event:  NewChatCreatedEvent("test", "0xabc", 0),
 			Result: false,
 		},
 		{
-			Name: "name-changed allowed because from is admin",
-			From: "0xabc",
-			Group: Group{
-				admins: []string{"0xabc"},
-			},
+			Name:   "name-changed allowed because from is admin",
+			From:   "0xabc",
+			Group:  createGroup([]string{"0xabc"}, nil),
 			Event:  NewNameChangedEvent("new-name", 0),
 			Result: true,
 		},
 		{
 			Name:   "name-changed not allowed for non-admins",
 			From:   "0xabc",
+			Group:  createGroup(nil, nil),
 			Event:  NewNameChangedEvent("new-name", 0),
 			Result: false,
 		},
 		{
-			Name: "members-added allowed because from is admin",
-			From: "0xabc",
-			Group: Group{
-				admins: []string{"0xabc"},
-			},
+			Name:   "members-added allowed because from is admin",
+			From:   "0xabc",
+			Group:  createGroup([]string{"0xabc"}, nil),
 			Event:  NewMembersAddedEvent([]string{"0x123"}, 0),
 			Result: true,
 		},
 		{
 			Name:   "members-added not allowed for non-admins",
 			From:   "0xabc",
+			Group:  createGroup(nil, nil),
 			Event:  NewMembersAddedEvent([]string{"0x123"}, 0),
 			Result: false,
 		},
 		{
 			Name:   "member-removed allowed because removing themselves",
 			From:   "0xabc",
+			Group:  createGroup(nil, nil),
 			Event:  NewMemberRemovedEvent("0xabc", 0),
 			Result: true,
 		},
 		{
-			Name: "member-removed allowed because from is admin",
-			From: "0xabc",
-			Group: Group{
-				admins: []string{"0xabc"},
-			},
+			Name:   "member-removed allowed because from is admin",
+			From:   "0xabc",
+			Group:  createGroup([]string{"0xabc"}, nil),
 			Event:  NewMemberRemovedEvent("0x123", 0),
 			Result: true,
 		},
 		{
 			Name:   "member-removed not allowed for non-admins",
 			From:   "0xabc",
+			Group:  createGroup(nil, nil),
 			Event:  NewMemberRemovedEvent("0x123", 0),
 			Result: false,
 		},
 		{
-			Name: "member-joined must be in members",
-			From: "0xabc",
-			Group: Group{
-				members: []string{"0xabc"},
-			},
+			Name:   "member-joined must be in members",
+			From:   "0xabc",
+			Group:  createGroup(nil, []string{"0xabc"}),
 			Event:  NewMemberJoinedEvent("0xabc", 0),
 			Result: true,
 		},
 		{
 			Name:   "member-joined not valid because not in members",
 			From:   "0xabc",
+			Group:  createGroup(nil, nil),
 			Event:  NewMemberJoinedEvent("0xabc", 0),
 			Result: false,
 		},
 		{
 			Name:   "member-joined not valid because from differs from the event",
 			From:   "0xdef",
+			Group:  createGroup(nil, nil),
 			Event:  NewMemberJoinedEvent("0xabc", 0),
 			Result: false,
 		},
 		{
-			Name: "admins-added allowed because originating from other admin",
-			From: "0xabc",
-			Group: Group{
-				admins:  []string{"0xabc", "0x123"},
-				members: []string{"0xdef", "0xghi"},
-			},
+			Name:   "admins-added allowed because originating from other admin",
+			From:   "0xabc",
+			Group:  createGroup([]string{"0xabc", "0x123"}, []string{"0xdef", "0xghi"}),
 			Event:  NewAdminsAddedEvent([]string{"0xdef"}, 0),
 			Result: true,
 		},
 		{
-			Name: "admins-added not allowed because not from admin",
-			From: "0xabc",
-			Group: Group{
-				admins:  []string{"0x123"},
-				members: []string{"0xdef", "0xghi"},
-			},
+			Name:   "admins-added not allowed because not from admin",
+			From:   "0xabc",
+			Group:  createGroup([]string{"0x123"}, []string{"0xdef", "0xghi"}),
 			Event:  NewAdminsAddedEvent([]string{"0xdef"}, 0),
 			Result: false,
 		},
 		{
-			Name: "admins-added not allowed because not in members",
-			From: "0xabc",
-			Group: Group{
-				admins:  []string{"0xabc", "0x123"},
-				members: []string{"0xghi"},
-			},
+			Name:   "admins-added not allowed because not in members",
+			From:   "0xabc",
+			Group:  createGroup([]string{"0xabc", "0x123"}, []string{"0xghi"}),
 			Event:  NewAdminsAddedEvent([]string{"0xdef"}, 0),
 			Result: false,
 		},
 		{
-			Name: "admin-removed allowed because is admin and removes themselves",
-			From: "0xabc",
-			Group: Group{
-				admins: []string{"0xabc"},
-			},
+			Name:   "admin-removed allowed because is admin and removes themselves",
+			From:   "0xabc",
+			Group:  createGroup([]string{"0xabc"}, nil),
 			Event:  NewAdminRemovedEvent("0xabc", 0),
 			Result: true,
 		},
 		{
-			Name: "admin-removed not allowed because not themselves",
-			From: "0xabc",
-			Group: Group{
-				admins: []string{"0xabc", "0xdef"},
-			},
+			Name:   "admin-removed not allowed because not themselves",
+			From:   "0xabc",
+			Group:  createGroup([]string{"0xabc", "0xdef"}, nil),
 			Event:  NewAdminRemovedEvent("0xdef", 0),
 			Result: false,
 		},
 		{
-			Name: "admin-removed not allowed because not admin",
-			From: "0xdef",
-			Group: Group{
-				admins: []string{"0xabc"},
-			},
+			Name:   "admin-removed not allowed because not admin",
+			From:   "0xdef",
+			Group:  createGroup([]string{"0xabc"}, nil),
 			Event:  NewAdminRemovedEvent("0xabc", 0),
 			Result: false,
 		},
@@ -370,7 +369,7 @@ func TestMembershipUpdateMessageProcess(t *testing.T) {
 	}
 	err = message.Verify()
 	require.NoError(t, err)
-	require.EqualValues(t, hex.EncodeToString(crypto.FromECDSAPub(&key.PublicKey)), updates[0].From)
+	require.EqualValues(t, "0x"+hex.EncodeToString(crypto.FromECDSAPub(&key.PublicKey)), updates[0].From)
 }
 
 func TestMembershipUpdateEventEqual(t *testing.T) {
