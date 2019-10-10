@@ -12,8 +12,10 @@ import (
 	"time"
 
 	"github.com/status-im/status-protocol-go/sqlite"
+	"github.com/status-im/status-protocol-go/transport/whisper/gethbridge"
+	whispertypes "github.com/status-im/status-protocol-go/transport/whisper/types"
+	statusproto "github.com/status-im/status-protocol-go/types"
 
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	_ "github.com/mutecomm/go-sqlcipher" // require go-sqlcipher that overrides default implementation
 	"github.com/status-im/status-protocol-go/tt"
@@ -44,7 +46,7 @@ type MessengerSuite struct {
 	privateKey *ecdsa.PrivateKey // private key for the main instance of Messenger
 	// If one wants to send messages between different instances of Messenger,
 	// a single Whisper service should be shared.
-	shh      *whisper.Whisper
+	shh      whispertypes.Whisper
 	tmpFiles []*os.File // files to clean up
 	logger   *zap.Logger
 }
@@ -54,8 +56,9 @@ func (s *MessengerSuite) SetupTest() {
 
 	config := whisper.DefaultConfig
 	config.MinimumAcceptedPOW = 0
-	s.shh = whisper.New(&config)
-	s.Require().NoError(s.shh.Start(nil))
+	shh := whisper.New(&config)
+	s.shh = gethbridge.NewGethWhisperWrapper(shh)
+	s.Require().NoError(shh.Start(nil))
 
 	s.m = s.newMessenger()
 	s.privateKey = s.m.identity
@@ -130,7 +133,7 @@ func (s *MessengerSuite) TestInit() {
 				key, err := crypto.GenerateKey()
 				s.Require().NoError(err)
 				privateChat := Chat{
-					ID:        hexutil.Encode(crypto.FromECDSAPub(&key.PublicKey)),
+					ID:        statusproto.EncodeHex(crypto.FromECDSAPub(&key.PublicKey)),
 					ChatType:  ChatTypeOneToOne,
 					PublicKey: &key.PublicKey,
 					Active:    true,
@@ -152,10 +155,10 @@ func (s *MessengerSuite) TestInit() {
 					Active:   true,
 					Members: []ChatMember{
 						{
-							ID: hexutil.Encode(crypto.FromECDSAPub(&key1.PublicKey)),
+							ID: statusproto.EncodeHex(crypto.FromECDSAPub(&key1.PublicKey)),
 						},
 						{
-							ID: hexutil.Encode(crypto.FromECDSAPub(&key2.PublicKey)),
+							ID: statusproto.EncodeHex(crypto.FromECDSAPub(&key2.PublicKey)),
 						},
 					},
 				}
@@ -183,7 +186,7 @@ func (s *MessengerSuite) TestInit() {
 				key, err := crypto.GenerateKey()
 				s.Require().NoError(err)
 				contact := Contact{
-					ID:         hexutil.Encode(crypto.FromECDSAPub(&key.PublicKey)),
+					ID:         statusproto.EncodeHex(crypto.FromECDSAPub(&key.PublicKey)),
 					Name:       "Some Contact",
 					SystemTags: []string{contactAdded},
 				}
@@ -198,7 +201,7 @@ func (s *MessengerSuite) TestInit() {
 				key, err := crypto.GenerateKey()
 				s.Require().NoError(err)
 				contact := Contact{
-					ID:         hexutil.Encode(crypto.FromECDSAPub(&key.PublicKey)),
+					ID:         statusproto.EncodeHex(crypto.FromECDSAPub(&key.PublicKey)),
 					Name:       "Some Contact",
 					SystemTags: []string{contactAdded, contactBlocked},
 				}
@@ -213,7 +216,7 @@ func (s *MessengerSuite) TestInit() {
 				key, err := crypto.GenerateKey()
 				s.Require().NoError(err)
 				contact := Contact{
-					ID:         hexutil.Encode(crypto.FromECDSAPub(&key.PublicKey)),
+					ID:         statusproto.EncodeHex(crypto.FromECDSAPub(&key.PublicKey)),
 					Name:       "Some Contact",
 					SystemTags: []string{contactRequestReceived},
 				}
