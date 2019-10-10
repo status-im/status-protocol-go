@@ -205,11 +205,6 @@ func (p *messageProcessor) SendMembershipUpdate(
 ) ([][]byte, error) {
 	p.logger.Debug("sending a membership update", zap.Int("membersCount", len(recipients)))
 
-	for _, update := range updates {
-		if err := update.Sign(p.identity); err != nil {
-			return nil, err
-		}
-	}
 	message := protocol.MembershipUpdateMessage{
 		ChatID:  chatID,
 		Updates: updates,

@@ -492,15 +492,6 @@ func (g *Group) sortEvents() {
 	})
 }
 
-func stringSliceContains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
-}
-
 func stringSliceSubset(subset []string, set []string) bool {
 	for _, item1 := range set {
 		var found bool
@@ -529,17 +520,6 @@ func stringSliceEquals(slice1, slice2 []string) bool {
 		}
 	}
 	return true
-}
-
-func stringSliceFilter(slice []string, keep func(string) bool) []string {
-	n := 0
-	for _, item := range slice {
-		if keep(item) {
-			slice[n] = item
-			n++
-		}
-	}
-	return slice[:n]
 }
 
 func publicKeyToString(publicKey *ecdsa.PublicKey) string {
