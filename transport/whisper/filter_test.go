@@ -8,7 +8,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/status-im/status-protocol-go/transport/whisper/gethbridge"
+	gethbridge "github.com/status-im/status-protocol-go/bridge/geth"
+	"github.com/status-im/status-protocol-go/sqlite"
 	"github.com/status-im/status-protocol-go/tt"
 
 	"github.com/ethereum/go-ethereum/crypto"
@@ -16,8 +17,6 @@ import (
 	whisper "github.com/status-im/whisper/whisperv6"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
-
-	"github.com/status-im/status-protocol-go/sqlite"
 )
 
 func TestFiltersManagerSuite(t *testing.T) {
