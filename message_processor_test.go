@@ -8,18 +8,19 @@ import (
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/golang/protobuf/proto"
-	whisper "github.com/status-im/whisper/whisperv6"
+
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 
+	gethbridge "github.com/status-im/status-protocol-go/bridge/geth"
 	"github.com/status-im/status-protocol-go/encryption"
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
 	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
 	"github.com/status-im/status-protocol-go/sqlite"
 	transport "github.com/status-im/status-protocol-go/transport/whisper"
-	"github.com/status-im/status-protocol-go/transport/whisper/gethbridge"
 	whispertypes "github.com/status-im/status-protocol-go/transport/whisper/types"
 	protocol "github.com/status-im/status-protocol-go/v1"
+	whisper "github.com/status-im/whisper/whisperv6"
 	datasyncproto "github.com/vacp2p/mvds/protobuf"
 )
 

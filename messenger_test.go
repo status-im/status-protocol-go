@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/status-im/status-protocol-go/sqlite"
-	"github.com/status-im/status-protocol-go/transport/whisper/gethbridge"
+	gethbridge "github.com/status-im/status-protocol-go/bridge/geth"
 	whispertypes "github.com/status-im/status-protocol-go/transport/whisper/types"
 	statusproto "github.com/status-im/status-protocol-go/types"
 
