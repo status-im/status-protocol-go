@@ -539,12 +539,14 @@ func (m *Messenger) Send(ctx context.Context, chatID string, data []byte) ([]byt
 	logger.Debug("last message clock received", zap.Int64("clock", clock))
 
 	if chat.PublicKey != nil {
-		logger.Debug("sending private message", zap.Binary("publicKey", crypto.FromECDSAPub(chat.PublicKey)))
+		logger.Info("sending private message", zap.Binary("publicKey", crypto.FromECDSAPub(chat.PublicKey)))
 
 		id, message, err := m.processor.SendPrivate(ctx, chat.PublicKey, chat.ID, data, clock)
 		if err != nil {
 			return nil, err
 		}
+
+		logger.Info("sent private message", zap.Binary("id", id))
 
 		// Save our message because it won't be received from the transport layer.
 		message.ID = id // a Message need ID to be properly stored in the db
@@ -563,8 +565,16 @@ func (m *Messenger) Send(ctx context.Context, chatID string, data []byte) ([]byt
 
 		return id, nil
 	} else if chat.Name != "" {
-		logger.Debug("sending public message", zap.String("chatName", chat.Name))
-		return m.processor.SendPublic(ctx, chat.ID, data, clock)
+		logger.Info("sending public message", zap.String("chatName", chat.Name))
+
+		id, err := m.processor.SendPublic(ctx, chat.ID, data, clock)
+		if err != nil {
+			return nil, err
+		}
+
+		logger.Info("sent private message", zap.Binary("id", id))
+
+		return id, nil
 	}
 	return nil, errors.New("chat is neither public nor private")
 }
