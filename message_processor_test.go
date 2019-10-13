@@ -98,6 +98,7 @@ func (s *MessageProcessorSuite) SetupTest() {
 		database,
 		encryptionProtocol,
 		whisperTransport,
+		nil,
 		s.logger,
 		featureFlags{},
 	)
