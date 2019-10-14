@@ -39,9 +39,10 @@ github.com/go-ole/go-ole
 github.com/go-ole/go-ole/oleutil
 # github.com/go-stack/stack v1.8.0
 github.com/go-stack/stack
-# github.com/golang-migrate/migrate/v4 v4.5.0
+# github.com/golang-migrate/migrate/v4 v4.6.2
 github.com/golang-migrate/migrate/v4
 github.com/golang-migrate/migrate/v4/database
+github.com/golang-migrate/migrate/v4/internal/url
 github.com/golang-migrate/migrate/v4/source
 # github.com/golang/protobuf v1.3.2
 github.com/golang/protobuf/proto
@@ -85,9 +86,10 @@ github.com/russolsen/transit
 github.com/shopspring/decimal
 # github.com/status-im/doubleratchet v2.0.0+incompatible
 github.com/status-im/doubleratchet
-# github.com/status-im/migrate/v4 v4.0.0-20190821140204-a9d340ec8fb76af4afda06acf01740d45d2661ed
+# github.com/status-im/migrate/v4 v4.6.2-status.2
 github.com/status-im/migrate/v4
 github.com/status-im/migrate/v4/database/sqlcipher
+github.com/status-im/migrate/v4/internal/url
 github.com/status-im/migrate/v4/source/go_bindata
 # github.com/status-im/whisper v1.5.1
 github.com/status-im/whisper/whisperv6
@@ -108,7 +110,7 @@ github.com/syndtr/goleveldb/leveldb/opt
 github.com/syndtr/goleveldb/leveldb/storage
 github.com/syndtr/goleveldb/leveldb/table
 github.com/syndtr/goleveldb/leveldb/util
-# github.com/vacp2p/mvds v0.0.21
+# github.com/vacp2p/mvds v0.0.23
 github.com/vacp2p/mvds/node
 github.com/vacp2p/mvds/node/migrations
 github.com/vacp2p/mvds/peers
