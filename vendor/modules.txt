@@ -110,7 +110,7 @@ github.com/syndtr/goleveldb/leveldb/opt
 github.com/syndtr/goleveldb/leveldb/storage
 github.com/syndtr/goleveldb/leveldb/table
 github.com/syndtr/goleveldb/leveldb/util
-# github.com/vacp2p/mvds v0.0.23-0.20191014101555-026e462c829d
+# github.com/vacp2p/mvds v0.0.23
 github.com/vacp2p/mvds/node
 github.com/vacp2p/mvds/node/migrations
 github.com/vacp2p/mvds/peers
