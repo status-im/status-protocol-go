@@ -6,6 +6,7 @@ require (
 	github.com/aristanetworks/goarista v0.0.0-20190704150520-f44d68189fd7 // indirect
 	github.com/cenkalti/backoff/v3 v3.0.0
 	github.com/ethereum/go-ethereum v1.9.5
+	github.com/golang-migrate/migrate/v4 v4.6.2 // indirect
 	github.com/golang/protobuf v1.3.2
 	github.com/google/uuid v1.1.1
 	github.com/jinzhu/copier v0.0.0-20190625015134-976e0346caa8
@@ -16,7 +17,7 @@ require (
 	github.com/russolsen/same v0.0.0-20160222130632-f089df61f51d // indirect
 	github.com/russolsen/transit v0.0.0-20180705123435-0794b4c4505a
 	github.com/status-im/doubleratchet v2.0.0+incompatible
-	github.com/status-im/migrate/v4 v4.0.0-20190821140204-a9d340ec8fb76af4afda06acf01740d45d2661ed
+	github.com/status-im/migrate/v4 v4.6.2-status.1
 	github.com/status-im/whisper v1.5.1
 	github.com/stretchr/testify v1.3.1-0.20190712000136-221dbe5ed467
 	github.com/vacp2p/mvds v0.0.21
