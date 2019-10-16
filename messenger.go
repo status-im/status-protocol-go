@@ -995,6 +995,11 @@ func (p *postProcessor) matchMessages(messages []*protocol.Message) ([]*protocol
 }
 
 func (p *postProcessor) matchMessage(message *protocol.Message, chats []*Chat) (*Chat, error) {
+	if message.SigPubKey == nil {
+		p.logger.Error("public key can't be empty")
+		return nil, errors.New("received a message with empty public key")
+	}
+
 	switch {
 	case message.MessageT == protocol.MessageTypePublicGroup:
 		// For public messages, all outgoing and incoming messages have the same chatID
@@ -1038,6 +1043,10 @@ func (p *postProcessor) matchMessage(message *protocol.Message, chats []*Chat) (
 		// It needs to be verified if the signature public key belongs to the chat.
 		chatID := message.Content.ChatID
 		chat := findChatByID(chatID, chats)
+		if chat == nil {
+			return nil, errors.New("received group chat message for non-existing chat")
+		}
+
 		sigPubKeyHex := statusproto.EncodeHex(crypto.FromECDSAPub(message.SigPubKey))
 		for _, member := range chat.Members {
 			if member.ID == sigPubKeyHex {

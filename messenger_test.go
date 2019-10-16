@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/status-im/status-protocol-go/sqlite"
 	gethbridge "github.com/status-im/status-protocol-go/bridge/geth"
+	"github.com/status-im/status-protocol-go/sqlite"
 	whispertypes "github.com/status-im/status-protocol-go/transport/whisper/types"
 	statusproto "github.com/status-im/status-protocol-go/types"
 
@@ -927,45 +927,55 @@ func (s *PostProcessorSuite) TestRun() {
 	s.Require().NoError(err)
 
 	testCases := []struct {
-		Name           string
-		Chat           Chat // Chat to create
-		Message        protocol.Message
-		SigPubKey      *ecdsa.PublicKey
-		ExpectedChatID string
+		Name            string
+		Chat            Chat // Chat to create
+		Message         protocol.Message
+		SigPubKey       *ecdsa.PublicKey
+		ExpectedChatIDs []string
 	}{
 		{
-			Name:           "Public chat",
-			Chat:           CreatePublicChat("test-chat"),
-			Message:        protocol.CreatePublicTextMessage([]byte("test"), 0, "test-chat"),
-			SigPubKey:      &key1.PublicKey,
-			ExpectedChatID: "test-chat",
+			Name:            "Public chat",
+			Chat:            CreatePublicChat("test-chat"),
+			Message:         protocol.CreatePublicTextMessage([]byte("test"), 0, "test-chat"),
+			SigPubKey:       &key1.PublicKey,
+			ExpectedChatIDs: []string{"test-chat"},
 		},
 		{
-			Name:           "Private message from myself with existing chat",
-			Chat:           CreateOneToOneChat("test-private-chat", &key1.PublicKey),
-			Message:        protocol.CreatePrivateTextMessage([]byte("test"), 0, oneToOneChatID(&key1.PublicKey)),
-			SigPubKey:      &key1.PublicKey,
-			ExpectedChatID: oneToOneChatID(&key1.PublicKey),
+			Name:            "Private message from myself with existing chat",
+			Chat:            CreateOneToOneChat("test-private-chat", &key1.PublicKey),
+			Message:         protocol.CreatePrivateTextMessage([]byte("test"), 0, oneToOneChatID(&key1.PublicKey)),
+			SigPubKey:       &key1.PublicKey,
+			ExpectedChatIDs: []string{oneToOneChatID(&key1.PublicKey)},
 		},
 		{
-			Name:           "Private message from other with existing chat",
-			Chat:           CreateOneToOneChat("test-private-chat", &key2.PublicKey),
-			Message:        protocol.CreatePrivateTextMessage([]byte("test"), 0, oneToOneChatID(&key1.PublicKey)),
-			SigPubKey:      &key2.PublicKey,
-			ExpectedChatID: oneToOneChatID(&key2.PublicKey),
+			Name:            "Private message from other with existing chat",
+			Chat:            CreateOneToOneChat("test-private-chat", &key2.PublicKey),
+			Message:         protocol.CreatePrivateTextMessage([]byte("test"), 0, oneToOneChatID(&key1.PublicKey)),
+			SigPubKey:       &key2.PublicKey,
+			ExpectedChatIDs: []string{oneToOneChatID(&key2.PublicKey)},
 		},
 		{
-			Name:           "Private message from myself without chat",
-			Message:        protocol.CreatePrivateTextMessage([]byte("test"), 0, oneToOneChatID(&key1.PublicKey)),
-			SigPubKey:      &key1.PublicKey,
-			ExpectedChatID: oneToOneChatID(&key1.PublicKey),
+			Name:            "Private message from myself without chat",
+			Message:         protocol.CreatePrivateTextMessage([]byte("test"), 0, oneToOneChatID(&key1.PublicKey)),
+			SigPubKey:       &key1.PublicKey,
+			ExpectedChatIDs: []string{oneToOneChatID(&key1.PublicKey)},
 		},
 		{
-			Name:           "Private message from other without chat",
-			Message:        protocol.CreatePrivateTextMessage([]byte("test"), 0, oneToOneChatID(&key1.PublicKey)),
-			SigPubKey:      &key2.PublicKey,
-			ExpectedChatID: oneToOneChatID(&key2.PublicKey),
+			Name:            "Private message from other without chat",
+			Message:         protocol.CreatePrivateTextMessage([]byte("test"), 0, oneToOneChatID(&key1.PublicKey)),
+			SigPubKey:       &key2.PublicKey,
+			ExpectedChatIDs: []string{oneToOneChatID(&key2.PublicKey)},
 		},
+		{
+			Name:      "Private message without public key",
+			SigPubKey: nil,
+		},
+		{
+			Name:      "Private group message",
+			Message:   protocol.CreatePrivateGroupTextMessage([]byte("test"), 0, "not-existing-chat-id"),
+			SigPubKey: &key2.PublicKey,
+		},
+
 		// TODO: add test for group messages
 	}
 
@@ -988,9 +998,11 @@ func (s *PostProcessorSuite) TestRun() {
 			message.ID = []byte(strconv.Itoa(idx)) // manually set the ID because messages does not go through messageProcessor
 			messages, err := s.postProcessor.Run([]*protocol.Message{&message})
 			s.NoError(err)
-			s.Equal(tc.ExpectedChatID, message.ChatID)
-			s.Require().Len(messages, 1)
-			s.EqualValues(&message, messages[0])
+			s.Require().Len(messages, len(tc.ExpectedChatIDs))
+			if len(tc.ExpectedChatIDs) != 0 {
+				s.Equal(tc.ExpectedChatIDs[0], message.ChatID)
+				s.EqualValues(&message, messages[0])
+			}
 		})
 	}
 }
