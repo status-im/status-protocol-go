@@ -32,10 +32,6 @@ func (w *gethWhisperWrapper) PublicWhisperAPI() whispertypes.PublicWhisperAPI {
 	return NewGethPublicWhisperAPIWrapper(whisper.NewPublicWhisperAPI(w.whisper))
 }
 
-func (w *gethWhisperWrapper) NewMessageStore() whispertypes.MessageStore {
-	return NewGethMessageStoreWrapper(w.whisper.NewMessageStore())
-}
-
 // MinPow returns the PoW value required by this node.
 func (w *gethWhisperWrapper) MinPow() float64 {
 	return w.whisper.MinPow()
@@ -124,14 +120,16 @@ func (w *gethWhisperWrapper) Unsubscribe(id string) error {
 	return w.whisper.Unsubscribe(id)
 }
 
+func (w *gethWhisperWrapper) createFilterWrapper(id string, keyAsym *ecdsa.PrivateKey, keySym []byte, pow float64, topics [][]byte, messages whispertypes.MessageStore) (whispertypes.Filter, error) {
 func (w *gethWhisperWrapper) CreateFilterWrapper(keyAsym *ecdsa.PrivateKey, keySym []byte, pow float64, topics [][]byte, messages whispertypes.MessageStore) whispertypes.Filter {
+func (w *gethWhisperWrapper) createFilterWrapper(id string, keyAsym *ecdsa.PrivateKey, keySym []byte, pow float64, topics [][]byte) (whispertypes.Filter, error) {
 	return NewGethFilterWrapper(&whisper.Filter{
 		KeyAsym:  keyAsym,
 		KeySym:   keySym,
 		PoW:      pow,
 		AllowP2P: true,
 		Topics:   topics,
-		Messages: GetGethMessageStoreFrom(messages),
+		Messages: whisper.NewMemoryMessageStore(),
 	})
 }
 

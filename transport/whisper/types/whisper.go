@@ -9,7 +9,6 @@ import (
 // network, using its very own P2P communication layer.
 type Whisper interface {
 	PublicWhisperAPI() PublicWhisperAPI
-	NewMessageStore() MessageStore
 
 	// MinPow returns the PoW value required by this node.
 	MinPow() float64
@@ -47,7 +46,7 @@ type Whisper interface {
 	GetFilter(id string) Filter
 	Unsubscribe(id string) error
 
-	CreateFilterWrapper(keyAsym *ecdsa.PrivateKey, keySym []byte, pow float64, topics [][]byte, messages MessageStore) Filter
+	CreateFilterWrapper(keyAsym *ecdsa.PrivateKey, keySym []byte, pow float64, topics [][]byte) Filter
 
 	// RequestHistoricMessages sends a message with p2pRequestCode to a specific peer,
 	// which is known to implement MailServer interface, and is supposed to process this
