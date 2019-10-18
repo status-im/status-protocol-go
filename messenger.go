@@ -640,16 +640,13 @@ func (m *Messenger) Send(ctx context.Context, chatID string, data []byte) ([][]b
 	switch chat.ChatType {
 	case ChatTypeOneToOne:
 		logger.Debug("sending private message", zap.Binary("publicKey", crypto.FromECDSAPub(chat.PublicKey)))
-
 		id, message, err := m.processor.SendPrivate(ctx, chat.PublicKey, chat.ID, data, clock)
 		if err != nil {
 			return nil, err
 		}
-
 		if err := m.cacheOwnMessage(chatID, id, message); err != nil {
 			return nil, err
 		}
-
 		return [][]byte{id}, nil
 	case ChatTypePublic:
 		logger.Debug("sending public message", zap.String("chatName", chat.Name))
