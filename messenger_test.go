@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/status-im/status-protocol-go/sqlite"
-	"github.com/status-im/status-protocol-go/transport/whisper/gethbridge"
+	gethbridge "github.com/status-im/status-protocol-go/bridge/geth"
 	whispertypes "github.com/status-im/status-protocol-go/transport/whisper/types"
 	statusproto "github.com/status-im/status-protocol-go/types"
 
@@ -309,7 +309,7 @@ func (s *MessengerSuite) TestRetrieveOwnPrivate() {
 
 	// Verify message fields.
 	message := messages[0]
-	s.Equal(messageID, message.ID)
+	s.Equal(messageID[0], message.ID)
 	s.Equal(&s.privateKey.PublicKey, message.SigPubKey) // this is OUR message
 }
 
@@ -337,7 +337,7 @@ func (s *MessengerSuite) TestRetrieveTheirPrivate() {
 	// Validate received message.
 	s.Require().Len(messages, 1)
 	message := messages[0]
-	s.Equal(messageID, message.ID)
+	s.Equal(messageID[0], message.ID)
 	s.Equal(&theirMessenger.identity.PublicKey, message.SigPubKey)
 }
 
@@ -791,6 +791,102 @@ func (s *MessengerSuite) TestContactPersistenceUpdate() {
 func (s *MessengerSuite) TestSharedSecretHandler() {
 	_, err := s.m.handleSharedSecrets(nil)
 	s.NoError(err)
+}
+
+func (s *MessengerSuite) TestCreateGroupChat() {
+	chat, err := s.m.CreateGroupChat("test")
+	s.NoError(err)
+	s.Equal("test", chat.Name)
+	publicKeyHex := "0x" + hex.EncodeToString(crypto.FromECDSAPub(&s.m.identity.PublicKey))
+	s.Contains(chat.ID, publicKeyHex)
+	s.EqualValues([]string{publicKeyHex}, []string{chat.Members[0].ID})
+}
+
+func (s *MessengerSuite) TestAddMembersToChat() {
+	chat, err := s.m.CreateGroupChat("test")
+	s.NoError(err)
+	key, err := crypto.GenerateKey()
+	s.NoError(err)
+	err = s.m.AddMembersToChat(context.Background(), chat, []*ecdsa.PublicKey{&key.PublicKey})
+	s.NoError(err)
+	publicKeyHex := "0x" + hex.EncodeToString(crypto.FromECDSAPub(&s.m.identity.PublicKey))
+	keyHex := "0x" + hex.EncodeToString(crypto.FromECDSAPub(&key.PublicKey))
+	s.EqualValues([]string{publicKeyHex, keyHex}, []string{chat.Members[0].ID, chat.Members[1].ID})
+}
+
+// TestGroupChatAutocreate verifies that after receiving a membership update message
+// for non-existing group chat, a new one is created.
+func (s *MessengerSuite) TestGroupChatAutocreate() {
+	theirMessenger := s.newMessenger()
+	chat, err := theirMessenger.CreateGroupChat("test-group")
+	s.NoError(err)
+	err = theirMessenger.SaveChat(*chat)
+	s.NoError(err)
+	err = theirMessenger.AddMembersToChat(
+		context.Background(),
+		chat,
+		[]*ecdsa.PublicKey{&s.privateKey.PublicKey},
+	)
+	s.NoError(err)
+	s.Equal(2, len(chat.Members))
+
+	var chats []*Chat
+
+	err = tt.RetryWithBackOff(func() error {
+		_, err := s.m.RetrieveAll(context.Background(), RetrieveLatest)
+		if err != nil {
+			return err
+		}
+		chats, err = s.m.Chats()
+		if err != nil {
+			return err
+		}
+		if len(chats) == 0 {
+			return errors.New("expected a group chat to be created")
+		}
+		return nil
+	})
+	s.NoError(err)
+	s.Equal(chat.ID, chats[0].ID)
+	s.Equal("test-group", chats[0].Name)
+	s.Equal(2, len(chats[0].Members))
+
+	// Send confirmation.
+	err = s.m.ConfirmJoiningGroup(context.Background(), chats[0])
+	s.Require().NoError(err)
+}
+
+func (s *MessengerSuite) TestGroupChatMessages() {
+	theirMessenger := s.newMessenger()
+	chat, err := theirMessenger.CreateGroupChat("test-group")
+	s.NoError(err)
+	err = theirMessenger.SaveChat(*chat)
+	s.NoError(err)
+	err = theirMessenger.AddMembersToChat(
+		context.Background(),
+		chat,
+		[]*ecdsa.PublicKey{&s.privateKey.PublicKey},
+	)
+	s.NoError(err)
+	_, err = theirMessenger.Send(context.Background(), chat.ID, []byte("hello!"))
+	s.NoError(err)
+
+	var messages []*protocol.Message
+
+	err = tt.RetryWithBackOff(func() error {
+		var err error
+		messages, err = s.m.RetrieveAll(context.Background(), RetrieveLatest)
+		if err == nil && len(messages) == 0 {
+			err = errors.New("no messages")
+		}
+		return err
+	})
+	s.NoError(err)
+
+	// Validate received message.
+	s.Require().Len(messages, 1)
+	message := messages[0]
+	s.Equal(&theirMessenger.identity.PublicKey, message.SigPubKey)
 }
 
 type PostProcessorSuite struct {
