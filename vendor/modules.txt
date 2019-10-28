@@ -91,9 +91,9 @@ github.com/status-im/migrate/v4
 github.com/status-im/migrate/v4/database/sqlcipher
 github.com/status-im/migrate/v4/internal/url
 github.com/status-im/migrate/v4/source/go_bindata
-# github.com/status-im/whisper v1.5.1
+# github.com/status-im/whisper v1.5.2-0.20191026113552-3dbba6f0a421
 github.com/status-im/whisper/whisperv6
-# github.com/stretchr/testify v1.3.1-0.20190712000136-221dbe5ed467
+# github.com/stretchr/testify v1.4.0
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/require
 github.com/stretchr/testify/suite
