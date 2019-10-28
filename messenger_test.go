@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/status-im/status-protocol-go/sqlite"
 	gethbridge "github.com/status-im/status-protocol-go/bridge/geth"
+	"github.com/status-im/status-protocol-go/sqlite"
 	whispertypes "github.com/status-im/status-protocol-go/transport/whisper/types"
 	statusproto "github.com/status-im/status-protocol-go/types"
 
@@ -60,11 +60,11 @@ func (s *MessengerSuite) SetupTest() {
 	s.shh = gethbridge.NewGethWhisperWrapper(shh)
 	s.Require().NoError(shh.Start(nil))
 
-	s.m = s.newMessenger()
+	s.m = s.newMessenger(s.shh)
 	s.privateKey = s.m.identity
 }
 
-func (s *MessengerSuite) newMessenger() *Messenger {
+func (s *MessengerSuite) newMessenger(shh whispertypes.Whisper) *Messenger {
 	tmpFile, err := ioutil.TempFile("", "")
 	s.Require().NoError(err)
 
@@ -81,7 +81,7 @@ func (s *MessengerSuite) newMessenger() *Messenger {
 	}
 	m, err := NewMessenger(
 		privateKey,
-		s.shh,
+		shh,
 		"installation-1",
 		options...,
 	)
@@ -314,7 +314,7 @@ func (s *MessengerSuite) TestRetrieveOwnPrivate() {
 }
 
 func (s *MessengerSuite) TestRetrieveTheirPrivate() {
-	theirMessenger := s.newMessenger()
+	theirMessenger := s.newMessenger(s.shh)
 	chat := CreateOneToOneChat("XXX", &s.privateKey.PublicKey)
 	err := theirMessenger.SaveChat(chat)
 	s.NoError(err)
@@ -817,7 +817,7 @@ func (s *MessengerSuite) TestAddMembersToChat() {
 // TestGroupChatAutocreate verifies that after receiving a membership update message
 // for non-existing group chat, a new one is created.
 func (s *MessengerSuite) TestGroupChatAutocreate() {
-	theirMessenger := s.newMessenger()
+	theirMessenger := s.newMessenger(s.shh)
 	chat, err := theirMessenger.CreateGroupChat("test-group")
 	s.NoError(err)
 	err = theirMessenger.SaveChat(*chat)
@@ -857,7 +857,7 @@ func (s *MessengerSuite) TestGroupChatAutocreate() {
 }
 
 func (s *MessengerSuite) TestGroupChatMessages() {
-	theirMessenger := s.newMessenger()
+	theirMessenger := s.newMessenger(s.shh)
 	chat, err := theirMessenger.CreateGroupChat("test-group")
 	s.NoError(err)
 	err = theirMessenger.SaveChat(*chat)
@@ -887,6 +887,35 @@ func (s *MessengerSuite) TestGroupChatMessages() {
 	s.Require().Len(messages, 1)
 	message := messages[0]
 	s.Equal(&theirMessenger.identity.PublicKey, message.SigPubKey)
+}
+
+type mockSendMessagesRequest struct {
+	whispertypes.Whisper
+	req whispertypes.MessagesRequest
+}
+
+func (m *mockSendMessagesRequest) SendMessagesRequest(peerID []byte, request whispertypes.MessagesRequest) error {
+	m.req = request
+	return nil
+}
+
+func (s *MessengerSuite) TestRequestHistoricMessagesRequest() {
+	shh := &mockSendMessagesRequest{
+		Whisper: s.shh,
+	}
+	m := s.newMessenger(shh)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	defer cancel()
+	cursor, err := m.RequestHistoricMessages(ctx, nil, 10, 20, []byte{0x01})
+	s.EqualError(err, ctx.Err().Error())
+	s.Empty(cursor)
+	// verify request is correct
+	s.NotEmpty(shh.req.ID)
+	s.EqualValues(10, shh.req.From)
+	s.EqualValues(20, shh.req.To)
+	s.EqualValues(100, shh.req.Limit)
+	s.Equal([]byte{0x01}, shh.req.Cursor)
+	s.NotEmpty(shh.req.Bloom)
 }
 
 type PostProcessorSuite struct {
