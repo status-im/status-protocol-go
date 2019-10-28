@@ -380,7 +380,7 @@ func (a *WhisperServiceTransport) Stop() error {
 }
 
 // RequestHistoricMessages requests historic messages for all registered filters.
-func (a *WhisperServiceTransport) RequestHistoricMessages(
+func (a *WhisperServiceTransport) SendMessagesRequest(
 	ctx context.Context,
 	peerID []byte,
 	from, to uint32,

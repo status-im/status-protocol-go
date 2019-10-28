@@ -863,7 +863,7 @@ func (m *Messenger) RequestHistoricMessages(
 	from, to uint32,
 	cursor []byte,
 ) ([]byte, error) {
-	return m.transport.RequestHistoricMessages(ctx, peer, from, to, cursor)
+	return m.transport.SendMessagesRequest(ctx, peer, from, to, cursor)
 }
 
 // DEPRECATED
