@@ -15,11 +15,6 @@ import (
 	statusproto "github.com/status-im/status-protocol-go/types"
 )
 
-const (
-	// defaultRequestTimeout is the default request timeout in seconds
-	defaultRequestTimeout = 10
-)
-
 var (
 	// ErrNoMailservers returned if there is no configured mailservers that can be used.
 	ErrNoMailservers = errors.New("no configured mailservers")
