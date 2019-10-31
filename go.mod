@@ -17,7 +17,7 @@ require (
 	github.com/status-im/status-go v0.34.0-beta.3 // indirect
 	github.com/status-im/whisper v1.5.1
 	github.com/stretchr/testify v1.4.0
-	github.com/vacp2p/mvds v0.0.23
+	github.com/vacp2p/mvds v0.0.24
 	github.com/wealdtech/go-ens/v3 v3.0.7
 	go.uber.org/zap v1.10.0
 	golang.org/x/crypto v0.0.0-20191001141032-4663e185863a
