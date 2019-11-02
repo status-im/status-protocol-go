@@ -413,10 +413,10 @@ func (a *WhisperServiceTransport) waitForRequestCompleted(ctx context.Context, r
 		case ev := <-events:
 			a.logger.Debug(
 				"waiting for request completed and received an event",
-				zap.ByteString("requestID", requestID),
+				zap.Binary("requestID", requestID),
 				zap.Any("event", ev),
 			)
-			if bytes.Equal(ev.Hash.Bytes(), requestID) {
+			if !bytes.Equal(ev.Hash.Bytes(), requestID) {
 				continue
 			}
 			if ev.Event != whispertypes.EventMailServerRequestCompleted {
