@@ -11,13 +11,11 @@ require (
 	github.com/lucasb-eyer/go-colorful v1.0.2
 	github.com/mutecomm/go-sqlcipher v0.0.0-20190227152316-55dbde17881f
 	github.com/pkg/errors v0.8.1
-	github.com/russolsen/ohyeah v0.0.0-20160324131710-f4938c005315 // indirect
-	github.com/russolsen/same v0.0.0-20160222130632-f089df61f51d // indirect
 	github.com/russolsen/transit v0.0.0-20180705123435-0794b4c4505a
 	github.com/status-im/doubleratchet v3.0.0+incompatible
 	github.com/status-im/migrate/v4 v4.6.2-status.2
-	github.com/status-im/status-go v0.16.4 // indirect
-	github.com/status-im/whisper v1.5.2-0.20191026113552-3dbba6f0a421
+	github.com/status-im/status-go v0.34.0-beta.3.0.20191102115453-d96e5bcd5588 // indirect
+	github.com/status-im/whisper v1.5.2-0.20191102115102-900685f2eb7e
 	github.com/stretchr/testify v1.4.0
 	github.com/vacp2p/mvds v0.0.23
 	github.com/wealdtech/go-ens/v3 v3.0.7

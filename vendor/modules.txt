@@ -1,14 +1,14 @@
 # github.com/allegro/bigcache v1.2.0
 github.com/allegro/bigcache
 github.com/allegro/bigcache/queue
-# github.com/aristanetworks/goarista v0.0.0-20190219163901-728bce664cf5
+# github.com/aristanetworks/goarista v0.0.0-20190704150520-f44d68189fd7
 github.com/aristanetworks/goarista/monotime
-# github.com/btcsuite/btcd v0.0.0-20190418232430-6867ff32788a
+# github.com/btcsuite/btcd v0.0.0-20191011042131-c3151ef50de9
 github.com/btcsuite/btcd/btcec
 github.com/btcsuite/btcd/chaincfg
 github.com/btcsuite/btcd/chaincfg/chainhash
 github.com/btcsuite/btcd/wire
-# github.com/btcsuite/btcutil v0.0.0-20190207003914-4c204d697803
+# github.com/btcsuite/btcutil v0.0.0-20190425235716-9e5f4b9a998d
 github.com/btcsuite/btcutil
 github.com/btcsuite/btcutil/base58
 github.com/btcsuite/btcutil/bech32
@@ -115,7 +115,7 @@ github.com/huin/goupnp/ssdp
 github.com/jackpal/go-nat-pmp
 # github.com/jinzhu/copier v0.0.0-20190625015134-976e0346caa8
 github.com/jinzhu/copier
-# github.com/karalabe/usb v0.0.0-20190819132248-550797b1cad8
+# github.com/karalabe/usb v0.0.0-20190919080040-51dc0efba356
 github.com/karalabe/usb
 # github.com/lucasb-eyer/go-colorful v1.0.2
 github.com/lucasb-eyer/go-colorful
@@ -123,11 +123,11 @@ github.com/lucasb-eyer/go-colorful
 github.com/mattn/go-runewidth
 # github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
 github.com/minio/blake2b-simd
-# github.com/minio/sha256-simd v0.0.0-20190328051042-05b4dd3047e5
+# github.com/minio/sha256-simd v0.1.1
 github.com/minio/sha256-simd
 # github.com/mr-tron/base58 v1.1.2
 github.com/mr-tron/base58/base58
-# github.com/multiformats/go-multihash v0.0.5
+# github.com/multiformats/go-multihash v0.0.8
 github.com/multiformats/go-multihash
 # github.com/mutecomm/go-sqlcipher v0.0.0-20190227152316-55dbde17881f
 github.com/mutecomm/go-sqlcipher
@@ -160,9 +160,9 @@ github.com/status-im/migrate/v4
 github.com/status-im/migrate/v4/database/sqlcipher
 github.com/status-im/migrate/v4/internal/url
 github.com/status-im/migrate/v4/source/go_bindata
-# github.com/status-im/status-go v0.16.4
+# github.com/status-im/status-go v0.34.0-beta.3.0.20191102115453-d96e5bcd5588
 github.com/status-im/status-go/extkeys
-# github.com/status-im/whisper v1.5.2-0.20191026113552-3dbba6f0a421
+# github.com/status-im/whisper v1.5.2-0.20191102115102-900685f2eb7e
 github.com/status-im/whisper/whisperv6
 # github.com/steakknife/bloomfilter v0.0.0-20180922174646-6819c0d2a570
 github.com/steakknife/bloomfilter
@@ -238,15 +238,15 @@ golang.org/x/crypto/ripemd160
 golang.org/x/crypto/scrypt
 golang.org/x/crypto/sha3
 golang.org/x/crypto/ssh/terminal
-# golang.org/x/net v0.0.0-20190424112056-4829fb13d2c6
+# golang.org/x/net v0.0.0-20190930134127-c5a3c61f89f3
 golang.org/x/net/context
 golang.org/x/net/html
 golang.org/x/net/html/atom
 golang.org/x/net/html/charset
 golang.org/x/net/idna
-# golang.org/x/sync v0.0.0-20190423024810-112230192c58
+# golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
 golang.org/x/sync/syncmap
-# golang.org/x/sys v0.0.0-20190426135247-a129542de9ae
+# golang.org/x/sys v0.0.0-20190927073244-c990c680b611
 golang.org/x/sys/cpu
 golang.org/x/sys/unix
 golang.org/x/sys/windows
