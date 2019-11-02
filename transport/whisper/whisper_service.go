@@ -398,7 +398,7 @@ func (a *WhisperServiceTransport) SendMessagesRequest(
 		return
 	}
 
-	resp, err := waitForRequestCompleted(ctx, r.ID, events)
+	resp, err := a.waitForRequestCompleted(ctx, r.ID, events)
 	if err == nil && resp != nil && resp.Error != nil {
 		err = resp.Error
 	} else if err == nil && resp != nil {
@@ -407,10 +407,15 @@ func (a *WhisperServiceTransport) SendMessagesRequest(
 	return
 }
 
-func waitForRequestCompleted(ctx context.Context, requestID []byte, events chan whispertypes.EnvelopeEvent) (*whispertypes.MailServerResponse, error) {
+func (a *WhisperServiceTransport) waitForRequestCompleted(ctx context.Context, requestID []byte, events chan whispertypes.EnvelopeEvent) (*whispertypes.MailServerResponse, error) {
 	for {
 		select {
 		case ev := <-events:
+			a.logger.Debug(
+				"waiting for request completed and received an event",
+				zap.ByteString("requestID", requestID),
+				zap.Any("event", ev),
+			)
 			if bytes.Equal(ev.Hash.Bytes(), requestID) {
 				continue
 			}
