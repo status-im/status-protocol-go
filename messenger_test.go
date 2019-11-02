@@ -11,14 +11,14 @@ import (
 	"testing"
 	"time"
 
-	gethbridge "github.com/status-im/status-protocol-go/bridge/geth"
-	"github.com/status-im/status-protocol-go/sqlite"
-	whispertypes "github.com/status-im/status-protocol-go/transport/whisper/types"
-	statusproto "github.com/status-im/status-protocol-go/types"
-
 	"github.com/ethereum/go-ethereum/crypto"
 	_ "github.com/mutecomm/go-sqlcipher" // require go-sqlcipher that overrides default implementation
+	gethbridge "github.com/status-im/status-protocol-go/bridge/geth"
+	"github.com/status-im/status-protocol-go/ens"
+	"github.com/status-im/status-protocol-go/sqlite"
+	whispertypes "github.com/status-im/status-protocol-go/transport/whisper/types"
 	"github.com/status-im/status-protocol-go/tt"
+	statusproto "github.com/status-im/status-protocol-go/types"
 	protocol "github.com/status-im/status-protocol-go/v1"
 	whisper "github.com/status-im/whisper/whisperv6"
 	"github.com/stretchr/testify/suite"
@@ -738,6 +738,79 @@ func (s *MessengerSuite) TestContactPersistence() {
 	s.Require().Equal(expectedContact, actualContact)
 }
 
+func (s *MessengerSuite) TestVerifyENSNames() {
+	rpcEndpoint := os.Getenv("RPC_ENDPOINT")
+	if rpcEndpoint == "" {
+		s.T().Skip()
+	}
+	contractAddress := "0x314159265dd8dbb310642f98f50c066173c1259b"
+	pk1 := "04325367620ae20dd878dbb39f69f02c567d789dd21af8a88623dc5b529827c2812571c380a2cd8236a2851b8843d6486481166c39debf60a5d30b9099c66213e4"
+	pk2 := "044580b6aef9ddebd88c373b43c91237dcc95a8307bc5837d11d3ad2fa5d1dc696b598e7ccc498b414ba80b86b129c48e1eb9464cc9ea26224321539f2f54024cc"
+	pk3 := "044fee950d9748606da2f77d3c51bf16134a59bde4903aa68076a45d9eefbb54182a24f0c74b381bad0525a90e78770d11559aa02f77343d172f386e3b521c277a"
+	pk4 := "not a valid pk"
+
+	ensDetails := []ens.ENSDetails{
+		ens.ENSDetails{
+			Name:            "pedro.stateofus.eth",
+			PublicKeyString: pk1,
+		},
+		// Not matching pk -> name
+		ens.ENSDetails{
+			Name:            "pedro.stateofus.eth",
+			PublicKeyString: pk2,
+		},
+		// Not existing name
+		ens.ENSDetails{
+			Name:            "definitelynotpedro.stateofus.eth",
+			PublicKeyString: pk3,
+		},
+		// Malformed pk
+		ens.ENSDetails{
+			Name:            "pedro.stateofus.eth",
+			PublicKeyString: pk4,
+		},
+	}
+
+	response, err := s.m.VerifyENSNames(rpcEndpoint, contractAddress, ensDetails)
+	s.Require().NoError(err)
+	s.Require().Equal(4, len(response))
+
+	s.Require().Nil(response[pk1].Error)
+	s.Require().Nil(response[pk2].Error)
+	s.Require().NotNil(response[pk3].Error)
+	s.Require().NotNil(response[pk4].Error)
+
+	s.Require().True(response[pk1].Verified)
+	s.Require().False(response[pk2].Verified)
+	s.Require().False(response[pk3].Verified)
+	s.Require().False(response[pk4].Verified)
+
+	// The contacts are updated
+	savedContacts, err := s.m.Contacts()
+	s.Require().NoError(err)
+
+	s.Require().Equal(2, len(savedContacts))
+
+	var verifiedContact *Contact
+	var notVerifiedContact *Contact
+
+	if savedContacts[0].ID == pk1 {
+		verifiedContact = savedContacts[0]
+		notVerifiedContact = savedContacts[1]
+	} else {
+		notVerifiedContact = savedContacts[0]
+		verifiedContact = savedContacts[1]
+	}
+
+	s.Require().Equal("pedro.stateofus.eth", verifiedContact.Name)
+	s.Require().NotEqual(0, verifiedContact.ENSVerifiedAt)
+	s.Require().True(verifiedContact.ENSVerified)
+
+	s.Require().Equal("pedro.stateofus.eth", notVerifiedContact.Name)
+	s.Require().NotEqual(0, notVerifiedContact.ENSVerifiedAt)
+	s.Require().True(notVerifiedContact.ENSVerified)
+}
+
 func (s *MessengerSuite) TestContactPersistenceUpdate() {
 	contactID := "0x0424a68f89ba5fcd5e0640c1e1f591d561fa4125ca4e2a43592bc4123eca10ce064e522c254bb83079ba404327f6eafc01ec90a1444331fe769d3f3a7f90b0dde1"
 
@@ -956,45 +1029,55 @@ func (s *PostProcessorSuite) TestRun() {
 	s.Require().NoError(err)
 
 	testCases := []struct {
-		Name           string
-		Chat           Chat // Chat to create
-		Message        protocol.Message
-		SigPubKey      *ecdsa.PublicKey
-		ExpectedChatID string
+		Name            string
+		Chat            Chat // Chat to create
+		Message         protocol.Message
+		SigPubKey       *ecdsa.PublicKey
+		ExpectedChatIDs []string
 	}{
 		{
-			Name:           "Public chat",
-			Chat:           CreatePublicChat("test-chat"),
-			Message:        protocol.CreatePublicTextMessage([]byte("test"), 0, "test-chat"),
-			SigPubKey:      &key1.PublicKey,
-			ExpectedChatID: "test-chat",
+			Name:            "Public chat",
+			Chat:            CreatePublicChat("test-chat"),
+			Message:         protocol.CreatePublicTextMessage([]byte("test"), 0, "test-chat"),
+			SigPubKey:       &key1.PublicKey,
+			ExpectedChatIDs: []string{"test-chat"},
 		},
 		{
-			Name:           "Private message from myself with existing chat",
-			Chat:           CreateOneToOneChat("test-private-chat", &key1.PublicKey),
-			Message:        protocol.CreatePrivateTextMessage([]byte("test"), 0, oneToOneChatID(&key1.PublicKey)),
-			SigPubKey:      &key1.PublicKey,
-			ExpectedChatID: oneToOneChatID(&key1.PublicKey),
+			Name:            "Private message from myself with existing chat",
+			Chat:            CreateOneToOneChat("test-private-chat", &key1.PublicKey),
+			Message:         protocol.CreatePrivateTextMessage([]byte("test"), 0, oneToOneChatID(&key1.PublicKey)),
+			SigPubKey:       &key1.PublicKey,
+			ExpectedChatIDs: []string{oneToOneChatID(&key1.PublicKey)},
 		},
 		{
-			Name:           "Private message from other with existing chat",
-			Chat:           CreateOneToOneChat("test-private-chat", &key2.PublicKey),
-			Message:        protocol.CreatePrivateTextMessage([]byte("test"), 0, oneToOneChatID(&key1.PublicKey)),
-			SigPubKey:      &key2.PublicKey,
-			ExpectedChatID: oneToOneChatID(&key2.PublicKey),
+			Name:            "Private message from other with existing chat",
+			Chat:            CreateOneToOneChat("test-private-chat", &key2.PublicKey),
+			Message:         protocol.CreatePrivateTextMessage([]byte("test"), 0, oneToOneChatID(&key1.PublicKey)),
+			SigPubKey:       &key2.PublicKey,
+			ExpectedChatIDs: []string{oneToOneChatID(&key2.PublicKey)},
 		},
 		{
-			Name:           "Private message from myself without chat",
-			Message:        protocol.CreatePrivateTextMessage([]byte("test"), 0, oneToOneChatID(&key1.PublicKey)),
-			SigPubKey:      &key1.PublicKey,
-			ExpectedChatID: oneToOneChatID(&key1.PublicKey),
+			Name:            "Private message from myself without chat",
+			Message:         protocol.CreatePrivateTextMessage([]byte("test"), 0, oneToOneChatID(&key1.PublicKey)),
+			SigPubKey:       &key1.PublicKey,
+			ExpectedChatIDs: []string{oneToOneChatID(&key1.PublicKey)},
 		},
 		{
-			Name:           "Private message from other without chat",
-			Message:        protocol.CreatePrivateTextMessage([]byte("test"), 0, oneToOneChatID(&key1.PublicKey)),
-			SigPubKey:      &key2.PublicKey,
-			ExpectedChatID: oneToOneChatID(&key2.PublicKey),
+			Name:            "Private message from other without chat",
+			Message:         protocol.CreatePrivateTextMessage([]byte("test"), 0, oneToOneChatID(&key1.PublicKey)),
+			SigPubKey:       &key2.PublicKey,
+			ExpectedChatIDs: []string{oneToOneChatID(&key2.PublicKey)},
 		},
+		{
+			Name:      "Private message without public key",
+			SigPubKey: nil,
+		},
+		{
+			Name:      "Private group message",
+			Message:   protocol.CreatePrivateGroupTextMessage([]byte("test"), 0, "not-existing-chat-id"),
+			SigPubKey: &key2.PublicKey,
+		},
+
 		// TODO: add test for group messages
 	}
 
@@ -1017,9 +1100,11 @@ func (s *PostProcessorSuite) TestRun() {
 			message.ID = []byte(strconv.Itoa(idx)) // manually set the ID because messages does not go through messageProcessor
 			messages, err := s.postProcessor.Run([]*protocol.Message{&message})
 			s.NoError(err)
-			s.Equal(tc.ExpectedChatID, message.ChatID)
-			s.Require().Len(messages, 1)
-			s.EqualValues(&message, messages[0])
+			s.Require().Len(messages, len(tc.ExpectedChatIDs))
+			if len(tc.ExpectedChatIDs) != 0 {
+				s.Equal(tc.ExpectedChatIDs[0], message.ChatID)
+				s.EqualValues(&message, messages[0])
+			}
 		})
 	}
 }

@@ -377,7 +377,7 @@ func TestSetContactGeneratedData(t *testing.T) {
 	err = p.SaveContact(existingContact, nil)
 	require.NoError(t, err)
 
-	err = p.SetContactsGeneratedData([]Contact{existingContactUpdate, nonExistingContactUpdate})
+	err = p.SetContactsGeneratedData([]Contact{existingContactUpdate, nonExistingContactUpdate}, nil)
 	require.NoError(t, err)
 
 	allContacts, err := p.Contacts()
