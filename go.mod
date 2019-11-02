@@ -15,7 +15,7 @@ require (
 	github.com/status-im/doubleratchet v3.0.0+incompatible
 	github.com/status-im/migrate/v4 v4.6.2-status.2
 	github.com/status-im/status-go v0.34.0-beta.3.0.20191102115453-d96e5bcd5588 // indirect
-	github.com/status-im/whisper v1.5.2-0.20191102115102-900685f2eb7e
+	github.com/status-im/whisper v1.5.2
 	github.com/stretchr/testify v1.4.0
 	github.com/vacp2p/mvds v0.0.23
 	github.com/wealdtech/go-ens/v3 v3.0.7

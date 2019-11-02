@@ -162,7 +162,7 @@ github.com/status-im/migrate/v4/internal/url
 github.com/status-im/migrate/v4/source/go_bindata
 # github.com/status-im/status-go v0.34.0-beta.3.0.20191102115453-d96e5bcd5588
 github.com/status-im/status-go/extkeys
-# github.com/status-im/whisper v1.5.2-0.20191102115102-900685f2eb7e
+# github.com/status-im/whisper v1.5.2
 github.com/status-im/whisper/whisperv6
 # github.com/steakknife/bloomfilter v0.0.0-20180922174646-6819c0d2a570
 github.com/steakknife/bloomfilter
