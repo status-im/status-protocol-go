@@ -3,7 +3,7 @@ github.com/allegro/bigcache
 github.com/allegro/bigcache/queue
 # github.com/aristanetworks/goarista v0.0.0-20190704150520-f44d68189fd7
 github.com/aristanetworks/goarista/monotime
-# github.com/btcsuite/btcd v0.0.0-20191011042131-c3151ef50de9
+# github.com/btcsuite/btcd v0.20.0-beta
 github.com/btcsuite/btcd/btcec
 github.com/btcsuite/btcd/chaincfg
 github.com/btcsuite/btcd/chaincfg/chainhash
@@ -23,7 +23,7 @@ github.com/edsrzf/mmap-go
 # github.com/elastic/gosigar v0.10.4
 github.com/elastic/gosigar
 github.com/elastic/gosigar/sys/windows
-# github.com/ethereum/go-ethereum v1.9.5 => github.com/status-im/go-ethereum v1.9.5-status.4
+# github.com/ethereum/go-ethereum v1.9.5 => github.com/status-im/go-ethereum v1.9.5-status.5
 github.com/ethereum/go-ethereum
 github.com/ethereum/go-ethereum/accounts
 github.com/ethereum/go-ethereum/accounts/abi
@@ -153,6 +153,8 @@ github.com/shopspring/decimal
 github.com/spaolacci/murmur3
 # github.com/status-im/doubleratchet v3.0.0+incompatible
 github.com/status-im/doubleratchet
+# github.com/status-im/extkeys v1.0.0
+github.com/status-im/extkeys
 # github.com/status-im/keycard-go v0.0.0-20190424133014-d95853db0f48
 github.com/status-im/keycard-go/derivationpath
 # github.com/status-im/migrate/v4 v4.6.2-status.2
@@ -160,8 +162,6 @@ github.com/status-im/migrate/v4
 github.com/status-im/migrate/v4/database/sqlcipher
 github.com/status-im/migrate/v4/internal/url
 github.com/status-im/migrate/v4/source/go_bindata
-# github.com/status-im/status-go v0.34.0-beta.3
-github.com/status-im/status-go/extkeys
 # github.com/status-im/whisper v1.5.1
 github.com/status-im/whisper/whisperv6
 # github.com/steakknife/bloomfilter v0.0.0-20180922174646-6819c0d2a570
@@ -229,7 +229,7 @@ go.uber.org/zap/internal/bufferpool
 go.uber.org/zap/internal/color
 go.uber.org/zap/internal/exit
 go.uber.org/zap/zapcore
-# golang.org/x/crypto v0.0.0-20191001141032-4663e185863a
+# golang.org/x/crypto v0.0.0-20191029031824-8986dd9e96cf
 golang.org/x/crypto/blake2s
 golang.org/x/crypto/curve25519
 golang.org/x/crypto/hkdf
