@@ -805,7 +805,7 @@ func (m *Messenger) RetrieveRawAll() (map[transport.Filter][]*protocol.StatusMes
 	for chat, messages := range chatWithMessages {
 		for _, shhMessage := range messages {
 			// TODO: fix this to use an exported method.
-			statusMessages, err := m.processor.handleMessages(shhMessage, false)
+			statusMessages, err := m.processor.handleMessages(shhMessage, true)
 			if err != nil {
 				logger.Info("failed to decode messages", zap.Error(err))
 				continue
