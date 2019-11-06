@@ -32,5 +32,3 @@ require (
 )
 
 replace github.com/ethereum/go-ethereum v1.9.5 => github.com/status-im/go-ethereum v1.9.5-status.5
-
-replace github.com/NaySoftware/go-fcm => github.com/status-im/go-fcm v1.0.0-status
