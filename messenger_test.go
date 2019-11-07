@@ -285,6 +285,34 @@ func (s *MessengerSuite) TestRetrieveOwnPublic() {
 	s.Equal(&s.privateKey.PublicKey, message.SigPubKey) // this is OUR message
 }
 
+func (s *MessengerSuite) TestRetrieveOwnPublicRaw() {
+	chat := CreatePublicChat("status")
+	err := s.m.SaveChat(chat)
+	s.NoError(err)
+	text := "پيل اندر خانه يي تاريک بود عرضه را آورده بودندش هنود  i\nاز براي ديدنش مردم بسي اندر آن ظلمت همي شد هر کسي"
+
+	_, err = s.m.Send(context.Background(), chat.ID, []byte(text))
+	s.NoError(err)
+
+	// Give Whisper some time to propagate message to filters.
+	time.Sleep(time.Millisecond * 500)
+
+	// Retrieve chat
+	messages, err := s.m.RetrieveRawAll()
+	s.NoError(err)
+	s.Len(messages, 1)
+
+	for _, v := range messages {
+		s.Len(v, 1)
+		textMessage, ok := v[0].ParsedMessage.(protocol.Message)
+		s.Require().True(ok)
+		s.Equal(textMessage.Content.Text, text)
+		s.NotNil(textMessage.Content.ParsedText)
+		s.True(textMessage.Content.RTL)
+		s.Equal(1, textMessage.Content.LineCount)
+	}
+}
+
 func (s *MessengerSuite) TestRetrieveOwnPrivate() {
 	recipientKey, err := crypto.GenerateKey()
 	s.NoError(err)
@@ -1014,6 +1042,7 @@ func (s *PostProcessorSuite) SetupTest() {
 		config: postProcessorConfig{
 			MatchChat: true,
 			Persist:   true,
+			Parse:     true,
 		},
 	}
 }

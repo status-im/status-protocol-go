@@ -17,7 +17,12 @@ var (
 		MessageT:  "public-group-user-message",
 		Clock:     154593077368201,
 		Timestamp: 1545930773682,
-		Content:   Content{"testing-adamb", "abc123", "id", "test-name"},
+		Content: Content{
+			ChatID:     "testing-adamb",
+			Text:       "abc123",
+			ResponseTo: "id",
+			Name:       "test-name",
+		},
 	}
 )
 
