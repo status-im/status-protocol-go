@@ -128,6 +128,7 @@ func (s *MessageProcessorSuite) TestHandleDecodedMessagesSingle() {
 	s.Require().Equal(&privateKey.PublicKey, decodedMessages[0].SigPubKey())
 	s.Require().Equal(protocol.MessageID(&privateKey.PublicKey, encodedPayload), decodedMessages[0].ID)
 	s.Require().Equal(s.testMessage, decodedMessages[0].ParsedMessage)
+	s.Require().Equal(protocol.MessageT, decodedMessages[0].MessageType)
 }
 
 func (s *MessageProcessorSuite) TestHandleDecodedMessagesRaw() {
@@ -176,6 +177,7 @@ func (s *MessageProcessorSuite) TestHandleDecodedMessagesWrapped() {
 	s.Require().Equal(protocol.MessageID(&authorKey.PublicKey, wrappedPayload), decodedMessages[0].ID)
 	s.Require().Equal(encodedPayload, decodedMessages[0].DecryptedPayload)
 	s.Require().Equal(s.testMessage, decodedMessages[0].ParsedMessage)
+	s.Require().Equal(protocol.MessageT, decodedMessages[0].MessageType)
 }
 
 func (s *MessageProcessorSuite) TestHandleDecodedMessagesDatasync() {
@@ -212,11 +214,13 @@ func (s *MessageProcessorSuite) TestHandleDecodedMessagesDatasync() {
 	s.Require().Equal(protocol.MessageID(&relayerKey.PublicKey, encodedPayload), decodedMessages[0].ID)
 	s.Require().Equal(encodedPayload, decodedMessages[0].DecryptedPayload)
 	s.Require().Equal(s.testMessage, decodedMessages[0].ParsedMessage)
+	s.Require().Equal(protocol.MessageT, decodedMessages[0].MessageType)
 
 	s.Require().Equal(&authorKey.PublicKey, decodedMessages[1].SigPubKey())
 	s.Require().Equal(protocol.MessageID(&authorKey.PublicKey, wrappedPayload), decodedMessages[1].ID)
 	s.Require().Equal(encodedPayload, decodedMessages[1].DecryptedPayload)
 	s.Require().Equal(s.testMessage, decodedMessages[1].ParsedMessage)
+	s.Require().Equal(protocol.MessageT, decodedMessages[1].MessageType)
 }
 
 func (s *MessageProcessorSuite) TestHandleDecodedMessagesDatasyncEncrypted() {
@@ -277,9 +281,11 @@ func (s *MessageProcessorSuite) TestHandleDecodedMessagesDatasyncEncrypted() {
 	s.Require().Equal(protocol.MessageID(&relayerKey.PublicKey, encodedPayload), decodedMessages[0].ID)
 	s.Require().Equal(encodedPayload, decodedMessages[0].DecryptedPayload)
 	s.Require().Equal(s.testMessage, decodedMessages[0].ParsedMessage)
+	s.Require().Equal(protocol.MessageT, decodedMessages[0].MessageType)
 
 	s.Require().Equal(&authorKey.PublicKey, decodedMessages[1].SigPubKey())
 	s.Require().Equal(protocol.MessageID(&authorKey.PublicKey, wrappedPayload), decodedMessages[1].ID)
 	s.Require().Equal(encodedPayload, decodedMessages[1].DecryptedPayload)
 	s.Require().Equal(s.testMessage, decodedMessages[1].ParsedMessage)
+	s.Require().Equal(protocol.MessageT, decodedMessages[1].MessageType)
 }
