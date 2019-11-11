@@ -10,14 +10,14 @@ import (
 )
 
 var (
-	testMessageBytes  = []byte(`["~#c4",["abc123","text/plain","~:public-group-user-message",154593077368201,1545930773682,["^ ","~:chat-id","testing-adamb","~:text","abc123"]]]`)
+	testMessageBytes  = []byte(`["~#c4",["abc123","text/plain","~:public-group-user-message",154593077368201,1545930773682,["^ ","~:chat-id","testing-adamb","~:name", "test-name","~:response-to", "id","~:text","abc123"]]]`)
 	testMessageStruct = Message{
 		Text:      "abc123",
 		ContentT:  "text/plain",
 		MessageT:  "public-group-user-message",
 		Clock:     154593077368201,
 		Timestamp: 1545930773682,
-		Content:   Content{"testing-adamb", "abc123"},
+		Content:   Content{"testing-adamb", "abc123", "id", "test-name"},
 	}
 )
 

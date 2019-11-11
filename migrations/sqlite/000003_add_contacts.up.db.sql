@@ -2,6 +2,8 @@ CREATE TABLE contacts (
   id TEXT PRIMARY KEY ON CONFLICT REPLACE,
   address TEXT NOT NULL,
   name TEXT NOT NULL,
+  ens_verified BOOLEAN DEFAULT FALSE,
+  ens_verified_at INT NOT NULL DEFAULT 0,
   alias TEXT NOT NULL,
   identicon TEXT NOT NULL,
   photo TEXT NOT NULL,

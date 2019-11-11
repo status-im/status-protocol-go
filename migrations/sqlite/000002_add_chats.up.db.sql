@@ -12,6 +12,7 @@ last_clock_value INT NOT NULL DEFAULT 0,
 last_message_content_type VARCHAR,
 last_message_content VARCHAR,
 last_message_timestamp INT,
+last_message_clock_value INT,
 members BLOB,
 membership_updates BLOB
 );
