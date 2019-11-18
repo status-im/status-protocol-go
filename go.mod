@@ -24,7 +24,7 @@ require (
 	github.com/status-im/migrate/v4 v4.6.2-status.2
 	github.com/status-im/whisper v1.5.2
 	github.com/stretchr/testify v1.4.0
-	github.com/vacp2p/mvds v0.0.23
+	github.com/vacp2p/mvds v0.0.25
 	github.com/wealdtech/go-ens/v3 v3.0.7
 	go.uber.org/zap v1.10.0
 	golang.org/x/crypto v0.0.0-20191029031824-8986dd9e96cf
