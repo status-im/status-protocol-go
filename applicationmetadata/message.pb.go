@@ -20,9 +20,749 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.ProtoPackageIsVersion3 // please upgrade the proto package
 
+type SyncContact_SystemTags int32
+
+const (
+	SyncContact_ADDED_BY_US   SyncContact_SystemTags = 0
+	SyncContact_BLOCKED       SyncContact_SystemTags = 1
+	SyncContact_ADDED_BY_THEM SyncContact_SystemTags = 2
+)
+
+var SyncContact_SystemTags_name = map[int32]string{
+	0: "ADDED_BY_US",
+	1: "BLOCKED",
+	2: "ADDED_BY_THEM",
+}
+
+var SyncContact_SystemTags_value = map[string]int32{
+	"ADDED_BY_US":   0,
+	"BLOCKED":       1,
+	"ADDED_BY_THEM": 2,
+}
+
+func (x SyncContact_SystemTags) String() string {
+	return proto.EnumName(SyncContact_SystemTags_name, int32(x))
+}
+
+func (SyncContact_SystemTags) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_33c57e4bae7b9afd, []int{0, 0}
+}
+
+type PairInstallation_DeviceType int32
+
+const (
+	PairInstallation_ANDROID PairInstallation_DeviceType = 0
+	PairInstallation_IOS     PairInstallation_DeviceType = 1
+	PairInstallation_DESKTOP PairInstallation_DeviceType = 2
+)
+
+var PairInstallation_DeviceType_name = map[int32]string{
+	0: "ANDROID",
+	1: "IOS",
+	2: "DESKTOP",
+}
+
+var PairInstallation_DeviceType_value = map[string]int32{
+	"ANDROID": 0,
+	"IOS":     1,
+	"DESKTOP": 2,
+}
+
+func (x PairInstallation_DeviceType) String() string {
+	return proto.EnumName(PairInstallation_DeviceType_name, int32(x))
+}
+
+func (PairInstallation_DeviceType) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_33c57e4bae7b9afd, []int{4, 0}
+}
+
+type GroupChatEvent_EventType int32
+
+const (
+	GroupChatEvent_CHAT_CREATED   GroupChatEvent_EventType = 0
+	GroupChatEvent_NAME_CHANGED   GroupChatEvent_EventType = 1
+	GroupChatEvent_MEMBER_ADDED   GroupChatEvent_EventType = 2
+	GroupChatEvent_MEMBER_JOINED  GroupChatEvent_EventType = 3
+	GroupChatEvent_MEMBER_REMOVED GroupChatEvent_EventType = 4
+	GroupChatEvent_ADMIN_ADDED    GroupChatEvent_EventType = 5
+	GroupChatEvent_ADMIN_REMOVED  GroupChatEvent_EventType = 6
+)
+
+var GroupChatEvent_EventType_name = map[int32]string{
+	0: "CHAT_CREATED",
+	1: "NAME_CHANGED",
+	2: "MEMBER_ADDED",
+	3: "MEMBER_JOINED",
+	4: "MEMBER_REMOVED",
+	5: "ADMIN_ADDED",
+	6: "ADMIN_REMOVED",
+}
+
+var GroupChatEvent_EventType_value = map[string]int32{
+	"CHAT_CREATED":   0,
+	"NAME_CHANGED":   1,
+	"MEMBER_ADDED":   2,
+	"MEMBER_JOINED":  3,
+	"MEMBER_REMOVED": 4,
+	"ADMIN_ADDED":    5,
+	"ADMIN_REMOVED":  6,
+}
+
+func (x GroupChatEvent_EventType) String() string {
+	return proto.EnumName(GroupChatEvent_EventType_name, int32(x))
+}
+
+func (GroupChatEvent_EventType) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_33c57e4bae7b9afd, []int{6, 0}
+}
+
+type ChatMessage_MessageType int32
+
+const (
+	ChatMessage_ONE_TO_ONE    ChatMessage_MessageType = 0
+	ChatMessage_PUBLIC_GROUP  ChatMessage_MessageType = 1
+	ChatMessage_PRIVATE_GROUP ChatMessage_MessageType = 3
+)
+
+var ChatMessage_MessageType_name = map[int32]string{
+	0: "ONE_TO_ONE",
+	1: "PUBLIC_GROUP",
+	3: "PRIVATE_GROUP",
+}
+
+var ChatMessage_MessageType_value = map[string]int32{
+	"ONE_TO_ONE":    0,
+	"PUBLIC_GROUP":  1,
+	"PRIVATE_GROUP": 3,
+}
+
+func (x ChatMessage_MessageType) String() string {
+	return proto.EnumName(ChatMessage_MessageType_name, int32(x))
+}
+
+func (ChatMessage_MessageType) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_33c57e4bae7b9afd, []int{8, 0}
+}
+
+type ChatMessage_ContentType int32
+
+const (
+	ChatMessage_TEXT_PLAIN      ChatMessage_ContentType = 0
+	ChatMessage_STICKER         ChatMessage_ContentType = 1
+	ChatMessage_STATUS          ChatMessage_ContentType = 2
+	ChatMessage_COMMAND         ChatMessage_ContentType = 3
+	ChatMessage_COMMAND_REQUEST ChatMessage_ContentType = 4
+	ChatMessage_EMOJI           ChatMessage_ContentType = 5
+)
+
+var ChatMessage_ContentType_name = map[int32]string{
+	0: "TEXT_PLAIN",
+	1: "STICKER",
+	2: "STATUS",
+	3: "COMMAND",
+	4: "COMMAND_REQUEST",
+	5: "EMOJI",
+}
+
+var ChatMessage_ContentType_value = map[string]int32{
+	"TEXT_PLAIN":      0,
+	"STICKER":         1,
+	"STATUS":          2,
+	"COMMAND":         3,
+	"COMMAND_REQUEST": 4,
+	"EMOJI":           5,
+}
+
+func (x ChatMessage_ContentType) String() string {
+	return proto.EnumName(ChatMessage_ContentType_name, int32(x))
+}
+
+func (ChatMessage_ContentType) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_33c57e4bae7b9afd, []int{8, 1}
+}
+
+type SyncContact struct {
+	// The public key of the contact to be synced
+	PublicKey string `protobuf:"bytes,1,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`
+	// The profile image of the contact
+	ProfileImage string `protobuf:"bytes,2,opt,name=profile_image,json=profileImage,proto3" json:"profile_image,omitempty"`
+	// The ens_name of the contact
+	EnsName string `protobuf:"bytes,3,opt,name=ens_name,json=ensName,proto3" json:"ens_name,omitempty"`
+	// The system tags for a given contact
+	SystemTags           []SyncContact_SystemTags `protobuf:"varint,4,rep,packed,name=system_tags,json=systemTags,proto3,enum=applicationmetadata.SyncContact_SystemTags" json:"system_tags,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                 `json:"-"`
+	XXX_unrecognized     []byte                   `json:"-"`
+	XXX_sizecache        int32                    `json:"-"`
+}
+
+func (m *SyncContact) Reset()         { *m = SyncContact{} }
+func (m *SyncContact) String() string { return proto.CompactTextString(m) }
+func (*SyncContact) ProtoMessage()    {}
+func (*SyncContact) Descriptor() ([]byte, []int) {
+	return fileDescriptor_33c57e4bae7b9afd, []int{0}
+}
+
+func (m *SyncContact) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_SyncContact.Unmarshal(m, b)
+}
+func (m *SyncContact) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_SyncContact.Marshal(b, m, deterministic)
+}
+func (m *SyncContact) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SyncContact.Merge(m, src)
+}
+func (m *SyncContact) XXX_Size() int {
+	return xxx_messageInfo_SyncContact.Size(m)
+}
+func (m *SyncContact) XXX_DiscardUnknown() {
+	xxx_messageInfo_SyncContact.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SyncContact proto.InternalMessageInfo
+
+func (m *SyncContact) GetPublicKey() string {
+	if m != nil {
+		return m.PublicKey
+	}
+	return ""
+}
+
+func (m *SyncContact) GetProfileImage() string {
+	if m != nil {
+		return m.ProfileImage
+	}
+	return ""
+}
+
+func (m *SyncContact) GetEnsName() string {
+	if m != nil {
+		return m.EnsName
+	}
+	return ""
+}
+
+func (m *SyncContact) GetSystemTags() []SyncContact_SystemTags {
+	if m != nil {
+		return m.SystemTags
+	}
+	return nil
+}
+
+type SyncPublicChat struct {
+	// The chat_id of the chat to be synced
+	ChatId               string   `protobuf:"bytes,1,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *SyncPublicChat) Reset()         { *m = SyncPublicChat{} }
+func (m *SyncPublicChat) String() string { return proto.CompactTextString(m) }
+func (*SyncPublicChat) ProtoMessage()    {}
+func (*SyncPublicChat) Descriptor() ([]byte, []int) {
+	return fileDescriptor_33c57e4bae7b9afd, []int{1}
+}
+
+func (m *SyncPublicChat) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_SyncPublicChat.Unmarshal(m, b)
+}
+func (m *SyncPublicChat) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_SyncPublicChat.Marshal(b, m, deterministic)
+}
+func (m *SyncPublicChat) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SyncPublicChat.Merge(m, src)
+}
+func (m *SyncPublicChat) XXX_Size() int {
+	return xxx_messageInfo_SyncPublicChat.Size(m)
+}
+func (m *SyncPublicChat) XXX_DiscardUnknown() {
+	xxx_messageInfo_SyncPublicChat.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SyncPublicChat proto.InternalMessageInfo
+
+func (m *SyncPublicChat) GetChatId() string {
+	if m != nil {
+		return m.ChatId
+	}
+	return ""
+}
+
+type SyncAccount struct {
+	// Our profile image
+	ProfileImage string `protobuf:"bytes,1,opt,name=profile_image,json=profileImage,proto3" json:"profile_image,omitempty"`
+	// The time we last updated the account
+	LastUpdated          uint64   `protobuf:"varint,2,opt,name=last_updated,json=lastUpdated,proto3" json:"last_updated,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *SyncAccount) Reset()         { *m = SyncAccount{} }
+func (m *SyncAccount) String() string { return proto.CompactTextString(m) }
+func (*SyncAccount) ProtoMessage()    {}
+func (*SyncAccount) Descriptor() ([]byte, []int) {
+	return fileDescriptor_33c57e4bae7b9afd, []int{2}
+}
+
+func (m *SyncAccount) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_SyncAccount.Unmarshal(m, b)
+}
+func (m *SyncAccount) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_SyncAccount.Marshal(b, m, deterministic)
+}
+func (m *SyncAccount) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SyncAccount.Merge(m, src)
+}
+func (m *SyncAccount) XXX_Size() int {
+	return xxx_messageInfo_SyncAccount.Size(m)
+}
+func (m *SyncAccount) XXX_DiscardUnknown() {
+	xxx_messageInfo_SyncAccount.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SyncAccount proto.InternalMessageInfo
+
+func (m *SyncAccount) GetProfileImage() string {
+	if m != nil {
+		return m.ProfileImage
+	}
+	return ""
+}
+
+func (m *SyncAccount) GetLastUpdated() uint64 {
+	if m != nil {
+		return m.LastUpdated
+	}
+	return 0
+}
+
+type SyncInstallation struct {
+	// The contacts to be synced
+	Contacts []*SyncContact `protobuf:"bytes,1,rep,name=contacts,proto3" json:"contacts,omitempty"`
+	// The public chats to be synced
+	PublicChats []*SyncPublicChat `protobuf:"bytes,2,rep,name=public_chats,json=publicChats,proto3" json:"public_chats,omitempty"`
+	// Our own account
+	Account              []*SyncAccount `protobuf:"bytes,3,rep,name=account,proto3" json:"account,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}       `json:"-"`
+	XXX_unrecognized     []byte         `json:"-"`
+	XXX_sizecache        int32          `json:"-"`
+}
+
+func (m *SyncInstallation) Reset()         { *m = SyncInstallation{} }
+func (m *SyncInstallation) String() string { return proto.CompactTextString(m) }
+func (*SyncInstallation) ProtoMessage()    {}
+func (*SyncInstallation) Descriptor() ([]byte, []int) {
+	return fileDescriptor_33c57e4bae7b9afd, []int{3}
+}
+
+func (m *SyncInstallation) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_SyncInstallation.Unmarshal(m, b)
+}
+func (m *SyncInstallation) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_SyncInstallation.Marshal(b, m, deterministic)
+}
+func (m *SyncInstallation) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SyncInstallation.Merge(m, src)
+}
+func (m *SyncInstallation) XXX_Size() int {
+	return xxx_messageInfo_SyncInstallation.Size(m)
+}
+func (m *SyncInstallation) XXX_DiscardUnknown() {
+	xxx_messageInfo_SyncInstallation.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SyncInstallation proto.InternalMessageInfo
+
+func (m *SyncInstallation) GetContacts() []*SyncContact {
+	if m != nil {
+		return m.Contacts
+	}
+	return nil
+}
+
+func (m *SyncInstallation) GetPublicChats() []*SyncPublicChat {
+	if m != nil {
+		return m.PublicChats
+	}
+	return nil
+}
+
+func (m *SyncInstallation) GetAccount() []*SyncAccount {
+	if m != nil {
+		return m.Account
+	}
+	return nil
+}
+
+type PairInstallation struct {
+	// The user-set device name
+	DeviceName string `protobuf:"bytes,1,opt,name=device_name,json=deviceName,proto3" json:"device_name,omitempty"`
+	// The installation-id of the device
+	InstallationId string `protobuf:"bytes,2,opt,name=installation_id,json=installationId,proto3" json:"installation_id,omitempty"`
+	// The type of device
+	DeviceType           PairInstallation_DeviceType `protobuf:"varint,3,opt,name=device_type,json=deviceType,proto3,enum=applicationmetadata.PairInstallation_DeviceType" json:"device_type,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                    `json:"-"`
+	XXX_unrecognized     []byte                      `json:"-"`
+	XXX_sizecache        int32                       `json:"-"`
+}
+
+func (m *PairInstallation) Reset()         { *m = PairInstallation{} }
+func (m *PairInstallation) String() string { return proto.CompactTextString(m) }
+func (*PairInstallation) ProtoMessage()    {}
+func (*PairInstallation) Descriptor() ([]byte, []int) {
+	return fileDescriptor_33c57e4bae7b9afd, []int{4}
+}
+
+func (m *PairInstallation) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_PairInstallation.Unmarshal(m, b)
+}
+func (m *PairInstallation) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_PairInstallation.Marshal(b, m, deterministic)
+}
+func (m *PairInstallation) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PairInstallation.Merge(m, src)
+}
+func (m *PairInstallation) XXX_Size() int {
+	return xxx_messageInfo_PairInstallation.Size(m)
+}
+func (m *PairInstallation) XXX_DiscardUnknown() {
+	xxx_messageInfo_PairInstallation.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_PairInstallation proto.InternalMessageInfo
+
+func (m *PairInstallation) GetDeviceName() string {
+	if m != nil {
+		return m.DeviceName
+	}
+	return ""
+}
+
+func (m *PairInstallation) GetInstallationId() string {
+	if m != nil {
+		return m.InstallationId
+	}
+	return ""
+}
+
+func (m *PairInstallation) GetDeviceType() PairInstallation_DeviceType {
+	if m != nil {
+		return m.DeviceType
+	}
+	return PairInstallation_ANDROID
+}
+
+type ContactRequest struct {
+	// The ens name of the contact
+	EnsName string `protobuf:"bytes,1,opt,name=ens_name,json=ensName,proto3" json:"ens_name,omitempty"`
+	// The profile image of the contact
+	ProfileImage         string   `protobuf:"bytes,2,opt,name=profile_image,json=profileImage,proto3" json:"profile_image,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *ContactRequest) Reset()         { *m = ContactRequest{} }
+func (m *ContactRequest) String() string { return proto.CompactTextString(m) }
+func (*ContactRequest) ProtoMessage()    {}
+func (*ContactRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_33c57e4bae7b9afd, []int{5}
+}
+
+func (m *ContactRequest) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_ContactRequest.Unmarshal(m, b)
+}
+func (m *ContactRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_ContactRequest.Marshal(b, m, deterministic)
+}
+func (m *ContactRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ContactRequest.Merge(m, src)
+}
+func (m *ContactRequest) XXX_Size() int {
+	return xxx_messageInfo_ContactRequest.Size(m)
+}
+func (m *ContactRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_ContactRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ContactRequest proto.InternalMessageInfo
+
+func (m *ContactRequest) GetEnsName() string {
+	if m != nil {
+		return m.EnsName
+	}
+	return ""
+}
+
+func (m *ContactRequest) GetProfileImage() string {
+	if m != nil {
+		return m.ProfileImage
+	}
+	return ""
+}
+
+type GroupChatEvent struct {
+	// Lamport timestamp of the event
+	Clock uint64 `protobuf:"varint,1,opt,name=clock,proto3" json:"clock,omitempty"`
+	// The data of the event
+	//
+	// Types that are valid to be assigned to Data:
+	//	*GroupChatEvent_Members
+	//	*GroupChatEvent_Name
+	Data                 isGroupChatEvent_Data `protobuf_oneof:"data"`
+	XXX_NoUnkeyedLiteral struct{}              `json:"-"`
+	XXX_unrecognized     []byte                `json:"-"`
+	XXX_sizecache        int32                 `json:"-"`
+}
+
+func (m *GroupChatEvent) Reset()         { *m = GroupChatEvent{} }
+func (m *GroupChatEvent) String() string { return proto.CompactTextString(m) }
+func (*GroupChatEvent) ProtoMessage()    {}
+func (*GroupChatEvent) Descriptor() ([]byte, []int) {
+	return fileDescriptor_33c57e4bae7b9afd, []int{6}
+}
+
+func (m *GroupChatEvent) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_GroupChatEvent.Unmarshal(m, b)
+}
+func (m *GroupChatEvent) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_GroupChatEvent.Marshal(b, m, deterministic)
+}
+func (m *GroupChatEvent) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GroupChatEvent.Merge(m, src)
+}
+func (m *GroupChatEvent) XXX_Size() int {
+	return xxx_messageInfo_GroupChatEvent.Size(m)
+}
+func (m *GroupChatEvent) XXX_DiscardUnknown() {
+	xxx_messageInfo_GroupChatEvent.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GroupChatEvent proto.InternalMessageInfo
+
+func (m *GroupChatEvent) GetClock() uint64 {
+	if m != nil {
+		return m.Clock
+	}
+	return 0
+}
+
+type isGroupChatEvent_Data interface {
+	isGroupChatEvent_Data()
+}
+
+type GroupChatEvent_Members struct {
+	Members string `protobuf:"bytes,2,opt,name=members,proto3,oneof"`
+}
+
+type GroupChatEvent_Name struct {
+	Name string `protobuf:"bytes,3,opt,name=name,proto3,oneof"`
+}
+
+func (*GroupChatEvent_Members) isGroupChatEvent_Data() {}
+
+func (*GroupChatEvent_Name) isGroupChatEvent_Data() {}
+
+func (m *GroupChatEvent) GetData() isGroupChatEvent_Data {
+	if m != nil {
+		return m.Data
+	}
+	return nil
+}
+
+func (m *GroupChatEvent) GetMembers() string {
+	if x, ok := m.GetData().(*GroupChatEvent_Members); ok {
+		return x.Members
+	}
+	return ""
+}
+
+func (m *GroupChatEvent) GetName() string {
+	if x, ok := m.GetData().(*GroupChatEvent_Name); ok {
+		return x.Name
+	}
+	return ""
+}
+
+// XXX_OneofWrappers is for the internal use of the proto package.
+func (*GroupChatEvent) XXX_OneofWrappers() []interface{} {
+	return []interface{}{
+		(*GroupChatEvent_Members)(nil),
+		(*GroupChatEvent_Name)(nil),
+	}
+}
+
+type MembershipUpdate struct {
+	// The chat id of the private group chat
+	ChatId string `protobuf:"bytes,1,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
+	// Signature of the concatenated array bytes of the events
+	Signature string `protobuf:"bytes,2,opt,name=signature,proto3" json:"signature,omitempty"`
+	// The protobuf encoded events
+	Events               [][]byte `protobuf:"bytes,3,rep,name=events,proto3" json:"events,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *MembershipUpdate) Reset()         { *m = MembershipUpdate{} }
+func (m *MembershipUpdate) String() string { return proto.CompactTextString(m) }
+func (*MembershipUpdate) ProtoMessage()    {}
+func (*MembershipUpdate) Descriptor() ([]byte, []int) {
+	return fileDescriptor_33c57e4bae7b9afd, []int{7}
+}
+
+func (m *MembershipUpdate) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_MembershipUpdate.Unmarshal(m, b)
+}
+func (m *MembershipUpdate) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_MembershipUpdate.Marshal(b, m, deterministic)
+}
+func (m *MembershipUpdate) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_MembershipUpdate.Merge(m, src)
+}
+func (m *MembershipUpdate) XXX_Size() int {
+	return xxx_messageInfo_MembershipUpdate.Size(m)
+}
+func (m *MembershipUpdate) XXX_DiscardUnknown() {
+	xxx_messageInfo_MembershipUpdate.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_MembershipUpdate proto.InternalMessageInfo
+
+func (m *MembershipUpdate) GetChatId() string {
+	if m != nil {
+		return m.ChatId
+	}
+	return ""
+}
+
+func (m *MembershipUpdate) GetSignature() string {
+	if m != nil {
+		return m.Signature
+	}
+	return ""
+}
+
+func (m *MembershipUpdate) GetEvents() [][]byte {
+	if m != nil {
+		return m.Events
+	}
+	return nil
+}
+
+type ChatMessage struct {
+	// Lamport timestamp of the chat message
+	Clock uint64 `protobuf:"varint,1,opt,name=clock,proto3" json:"clock,omitempty"`
+	// Unix timestamps in milliseconds, currently not used as we use whisper as more reliable, but here
+	// so that we don't rely on it
+	Timestamp uint64 `protobuf:"varint,2,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	// Text of the message
+	Text string `protobuf:"bytes,3,opt,name=text,proto3" json:"text,omitempty"`
+	// Id of the message that we are replying to
+	ResponseTo string `protobuf:"bytes,4,opt,name=response_to,json=responseTo,proto3" json:"response_to,omitempty"`
+	// Ens name of the sender
+	EnsName string `protobuf:"bytes,5,opt,name=ens_name,json=ensName,proto3" json:"ens_name,omitempty"`
+	// Chat id, this field is symmetric for public-chats and private group chats,
+	// but asymmetric in case of one-to-ones, as the sender will use the chat-id
+	// of the received, while the receiver will use the chat-id of the sender.
+	// Probably should be the concatenation of sender-pk & receiver-pk in alphabetical order
+	ChatId string `protobuf:"bytes,6,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
+	// The type of message (public/one-to-one/private-group-chat)
+	MessageType ChatMessage_MessageType `protobuf:"varint,7,opt,name=message_type,json=messageType,proto3,enum=applicationmetadata.ChatMessage_MessageType" json:"message_type,omitempty"`
+	// The type of the content of the message
+	ContentType          ChatMessage_ContentType `protobuf:"varint,8,opt,name=content_type,json=contentType,proto3,enum=applicationmetadata.ChatMessage_ContentType" json:"content_type,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                `json:"-"`
+	XXX_unrecognized     []byte                  `json:"-"`
+	XXX_sizecache        int32                   `json:"-"`
+}
+
+func (m *ChatMessage) Reset()         { *m = ChatMessage{} }
+func (m *ChatMessage) String() string { return proto.CompactTextString(m) }
+func (*ChatMessage) ProtoMessage()    {}
+func (*ChatMessage) Descriptor() ([]byte, []int) {
+	return fileDescriptor_33c57e4bae7b9afd, []int{8}
+}
+
+func (m *ChatMessage) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_ChatMessage.Unmarshal(m, b)
+}
+func (m *ChatMessage) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_ChatMessage.Marshal(b, m, deterministic)
+}
+func (m *ChatMessage) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ChatMessage.Merge(m, src)
+}
+func (m *ChatMessage) XXX_Size() int {
+	return xxx_messageInfo_ChatMessage.Size(m)
+}
+func (m *ChatMessage) XXX_DiscardUnknown() {
+	xxx_messageInfo_ChatMessage.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ChatMessage proto.InternalMessageInfo
+
+func (m *ChatMessage) GetClock() uint64 {
+	if m != nil {
+		return m.Clock
+	}
+	return 0
+}
+
+func (m *ChatMessage) GetTimestamp() uint64 {
+	if m != nil {
+		return m.Timestamp
+	}
+	return 0
+}
+
+func (m *ChatMessage) GetText() string {
+	if m != nil {
+		return m.Text
+	}
+	return ""
+}
+
+func (m *ChatMessage) GetResponseTo() string {
+	if m != nil {
+		return m.ResponseTo
+	}
+	return ""
+}
+
+func (m *ChatMessage) GetEnsName() string {
+	if m != nil {
+		return m.EnsName
+	}
+	return ""
+}
+
+func (m *ChatMessage) GetChatId() string {
+	if m != nil {
+		return m.ChatId
+	}
+	return ""
+}
+
+func (m *ChatMessage) GetMessageType() ChatMessage_MessageType {
+	if m != nil {
+		return m.MessageType
+	}
+	return ChatMessage_ONE_TO_ONE
+}
+
+func (m *ChatMessage) GetContentType() ChatMessage_ContentType {
+	if m != nil {
+		return m.ContentType
+	}
+	return ChatMessage_TEXT_PLAIN
+}
+
 type Message struct {
-	Signature            []byte   `protobuf:"bytes,4001,opt,name=signature,proto3" json:"signature,omitempty"`
-	Payload              []byte   `protobuf:"bytes,4002,opt,name=payload,proto3" json:"payload,omitempty"`
+	// Signature of the payload field
+	Signature []byte `protobuf:"bytes,1,opt,name=signature,proto3" json:"signature,omitempty"`
+	// This is the encoded protobuf of the application level message
+	Payload              []byte   `protobuf:"bytes,2,opt,name=payload,proto3" json:"payload,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -32,7 +772,7 @@ func (m *Message) Reset()         { *m = Message{} }
 func (m *Message) String() string { return proto.CompactTextString(m) }
 func (*Message) ProtoMessage()    {}
 func (*Message) Descriptor() ([]byte, []int) {
-	return fileDescriptor_33c57e4bae7b9afd, []int{0}
+	return fileDescriptor_33c57e4bae7b9afd, []int{9}
 }
 
 func (m *Message) XXX_Unmarshal(b []byte) error {
@@ -67,19 +807,169 @@ func (m *Message) GetPayload() []byte {
 	return nil
 }
 
+type StatusMessage struct {
+	// Types that are valid to be assigned to Payload:
+	//	*StatusMessage_ApplicationMetadataMessage
+	//	*StatusMessage_DatasyncMessage
+	Payload              isStatusMessage_Payload `protobuf_oneof:"payload"`
+	XXX_NoUnkeyedLiteral struct{}                `json:"-"`
+	XXX_unrecognized     []byte                  `json:"-"`
+	XXX_sizecache        int32                   `json:"-"`
+}
+
+func (m *StatusMessage) Reset()         { *m = StatusMessage{} }
+func (m *StatusMessage) String() string { return proto.CompactTextString(m) }
+func (*StatusMessage) ProtoMessage()    {}
+func (*StatusMessage) Descriptor() ([]byte, []int) {
+	return fileDescriptor_33c57e4bae7b9afd, []int{10}
+}
+
+func (m *StatusMessage) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_StatusMessage.Unmarshal(m, b)
+}
+func (m *StatusMessage) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_StatusMessage.Marshal(b, m, deterministic)
+}
+func (m *StatusMessage) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StatusMessage.Merge(m, src)
+}
+func (m *StatusMessage) XXX_Size() int {
+	return xxx_messageInfo_StatusMessage.Size(m)
+}
+func (m *StatusMessage) XXX_DiscardUnknown() {
+	xxx_messageInfo_StatusMessage.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_StatusMessage proto.InternalMessageInfo
+
+type isStatusMessage_Payload interface {
+	isStatusMessage_Payload()
+}
+
+type StatusMessage_ApplicationMetadataMessage struct {
+	ApplicationMetadataMessage *Message `protobuf:"bytes,1,opt,name=application_metadata_message,json=applicationMetadataMessage,proto3,oneof"`
+}
+
+type StatusMessage_DatasyncMessage struct {
+	DatasyncMessage []byte `protobuf:"bytes,2,opt,name=datasync_message,json=datasyncMessage,proto3,oneof"`
+}
+
+func (*StatusMessage_ApplicationMetadataMessage) isStatusMessage_Payload() {}
+
+func (*StatusMessage_DatasyncMessage) isStatusMessage_Payload() {}
+
+func (m *StatusMessage) GetPayload() isStatusMessage_Payload {
+	if m != nil {
+		return m.Payload
+	}
+	return nil
+}
+
+func (m *StatusMessage) GetApplicationMetadataMessage() *Message {
+	if x, ok := m.GetPayload().(*StatusMessage_ApplicationMetadataMessage); ok {
+		return x.ApplicationMetadataMessage
+	}
+	return nil
+}
+
+func (m *StatusMessage) GetDatasyncMessage() []byte {
+	if x, ok := m.GetPayload().(*StatusMessage_DatasyncMessage); ok {
+		return x.DatasyncMessage
+	}
+	return nil
+}
+
+// XXX_OneofWrappers is for the internal use of the proto package.
+func (*StatusMessage) XXX_OneofWrappers() []interface{} {
+	return []interface{}{
+		(*StatusMessage_ApplicationMetadataMessage)(nil),
+		(*StatusMessage_DatasyncMessage)(nil),
+	}
+}
+
 func init() {
+	proto.RegisterEnum("applicationmetadata.SyncContact_SystemTags", SyncContact_SystemTags_name, SyncContact_SystemTags_value)
+	proto.RegisterEnum("applicationmetadata.PairInstallation_DeviceType", PairInstallation_DeviceType_name, PairInstallation_DeviceType_value)
+	proto.RegisterEnum("applicationmetadata.GroupChatEvent_EventType", GroupChatEvent_EventType_name, GroupChatEvent_EventType_value)
+	proto.RegisterEnum("applicationmetadata.ChatMessage_MessageType", ChatMessage_MessageType_name, ChatMessage_MessageType_value)
+	proto.RegisterEnum("applicationmetadata.ChatMessage_ContentType", ChatMessage_ContentType_name, ChatMessage_ContentType_value)
+	proto.RegisterType((*SyncContact)(nil), "applicationmetadata.SyncContact")
+	proto.RegisterType((*SyncPublicChat)(nil), "applicationmetadata.SyncPublicChat")
+	proto.RegisterType((*SyncAccount)(nil), "applicationmetadata.SyncAccount")
+	proto.RegisterType((*SyncInstallation)(nil), "applicationmetadata.SyncInstallation")
+	proto.RegisterType((*PairInstallation)(nil), "applicationmetadata.PairInstallation")
+	proto.RegisterType((*ContactRequest)(nil), "applicationmetadata.ContactRequest")
+	proto.RegisterType((*GroupChatEvent)(nil), "applicationmetadata.GroupChatEvent")
+	proto.RegisterType((*MembershipUpdate)(nil), "applicationmetadata.MembershipUpdate")
+	proto.RegisterType((*ChatMessage)(nil), "applicationmetadata.ChatMessage")
 	proto.RegisterType((*Message)(nil), "applicationmetadata.Message")
+	proto.RegisterType((*StatusMessage)(nil), "applicationmetadata.StatusMessage")
 }
 
 func init() { proto.RegisterFile("message.proto", fileDescriptor_33c57e4bae7b9afd) }
 
 var fileDescriptor_33c57e4bae7b9afd = []byte{
-	// 112 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0xe2, 0xcd, 0x4d, 0x2d, 0x2e,
-	0x4e, 0x4c, 0x4f, 0xd5, 0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x17, 0x12, 0x4e, 0x2c, 0x28, 0xc8, 0xc9,
-	0x4c, 0x4e, 0x2c, 0xc9, 0xcc, 0xcf, 0xcb, 0x4d, 0x2d, 0x49, 0x4c, 0x49, 0x2c, 0x49, 0x54, 0x72,
-	0xe6, 0x62, 0xf7, 0x85, 0xa8, 0x12, 0x92, 0xe5, 0xe2, 0x2c, 0xce, 0x4c, 0xcf, 0x4b, 0x2c, 0x29,
-	0x2d, 0x4a, 0x95, 0x58, 0x28, 0xaf, 0xc0, 0xa8, 0xc1, 0x13, 0x84, 0x10, 0x11, 0x92, 0xe4, 0x62,
-	0x2f, 0x48, 0xac, 0xcc, 0xc9, 0x4f, 0x4c, 0x91, 0x58, 0x04, 0x91, 0x84, 0xf1, 0x93, 0xd8, 0xc0,
-	0x16, 0x18, 0x03, 0x02, 0x00, 0x00, 0xff, 0xff, 0xb0, 0x7f, 0x4a, 0x96, 0x71, 0x00, 0x00, 0x00,
+	// 979 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x55, 0xcf, 0x72, 0xe3, 0xc4,
+	0x13, 0xb6, 0x6c, 0xc7, 0x8e, 0x5b, 0x8e, 0xa3, 0xdf, 0xec, 0xd6, 0x0f, 0xb3, 0x15, 0x8a, 0xa0,
+	0x3d, 0x10, 0x6a, 0x29, 0x43, 0x85, 0x1b, 0x05, 0x07, 0xd9, 0x1e, 0x62, 0x6d, 0x22, 0xcb, 0x3b,
+	0x96, 0xb7, 0xe0, 0x24, 0x26, 0xf2, 0x90, 0xa8, 0xd6, 0xfa, 0x83, 0x67, 0xbc, 0x85, 0xdf, 0x81,
+	0x17, 0xe1, 0x7d, 0x78, 0x00, 0xde, 0x80, 0x13, 0x07, 0x6e, 0xd4, 0xcc, 0x48, 0xb6, 0x0c, 0x49,
+	0xed, 0x9e, 0xac, 0xfe, 0x5a, 0xf3, 0xa9, 0xfb, 0x9b, 0xaf, 0xdb, 0x70, 0x92, 0x30, 0xce, 0xe9,
+	0x1d, 0x1b, 0xe4, 0xeb, 0x4c, 0x64, 0xe8, 0x09, 0xcd, 0xf3, 0x55, 0x1c, 0x51, 0x11, 0x67, 0x69,
+	0xc2, 0x04, 0x5d, 0x52, 0x41, 0xed, 0xbf, 0x0d, 0x30, 0xe7, 0xdb, 0x34, 0x1a, 0x65, 0xa9, 0xa0,
+	0x91, 0x40, 0x1f, 0x01, 0xe4, 0x9b, 0xdb, 0x55, 0x1c, 0x85, 0x6f, 0xd8, 0xb6, 0x6f, 0x9c, 0x1b,
+	0x17, 0x1d, 0xd2, 0xd1, 0xc8, 0x35, 0xdb, 0xa2, 0xe7, 0x70, 0x92, 0xaf, 0xb3, 0x9f, 0xe2, 0x15,
+	0x0b, 0xe3, 0x84, 0xde, 0xb1, 0x7e, 0x5d, 0xbd, 0xd1, 0x2d, 0x40, 0x57, 0x62, 0xe8, 0x43, 0x38,
+	0x66, 0x29, 0x0f, 0x53, 0x9a, 0xb0, 0x7e, 0x43, 0xe5, 0xdb, 0x2c, 0xe5, 0x53, 0x9a, 0x30, 0x74,
+	0x03, 0x26, 0xdf, 0x72, 0xc1, 0x92, 0x50, 0xd0, 0x3b, 0xde, 0x6f, 0x9e, 0x37, 0x2e, 0x7a, 0x97,
+	0x2f, 0x06, 0x0f, 0x54, 0x36, 0xa8, 0x54, 0x35, 0x98, 0xab, 0x33, 0x01, 0xbd, 0xe3, 0x04, 0xf8,
+	0xee, 0xd9, 0xfe, 0x16, 0x60, 0x9f, 0x41, 0xa7, 0x60, 0x3a, 0xe3, 0x31, 0x1e, 0x87, 0xc3, 0x1f,
+	0xc2, 0xc5, 0xdc, 0xaa, 0x21, 0x13, 0xda, 0xc3, 0x1b, 0x7f, 0x74, 0x8d, 0xc7, 0x96, 0x81, 0xfe,
+	0x07, 0x27, 0xbb, 0x6c, 0x30, 0xc1, 0x9e, 0x55, 0xb7, 0x3f, 0x83, 0x9e, 0xfc, 0xc8, 0x4c, 0x75,
+	0x37, 0xba, 0xa7, 0x02, 0x7d, 0x00, 0xed, 0xe8, 0x9e, 0x8a, 0x30, 0x5e, 0x16, 0xad, 0xb7, 0x64,
+	0xe8, 0x2e, 0xed, 0x85, 0x56, 0xc9, 0x89, 0xa2, 0x6c, 0x93, 0x8a, 0xff, 0xca, 0x60, 0x3c, 0x20,
+	0xc3, 0x27, 0xd0, 0x5d, 0x51, 0x2e, 0xc2, 0x4d, 0xbe, 0xa4, 0x82, 0x2d, 0x95, 0x54, 0x4d, 0x62,
+	0x4a, 0x6c, 0xa1, 0x21, 0xfb, 0x77, 0x03, 0x2c, 0xc9, 0xeb, 0xa6, 0x5c, 0xd0, 0xd5, 0x4a, 0x09,
+	0x80, 0xbe, 0x81, 0xe3, 0x48, 0xf7, 0xcd, 0xfb, 0xc6, 0x79, 0xe3, 0xc2, 0xbc, 0x3c, 0x7f, 0x97,
+	0x40, 0x64, 0x77, 0x02, 0x7d, 0x07, 0xdd, 0xe2, 0x02, 0x65, 0xe9, 0xbc, 0x5f, 0x57, 0x0c, 0xcf,
+	0x1f, 0x65, 0xd8, 0x77, 0x4f, 0xcc, 0x7c, 0xf7, 0xcc, 0xd1, 0xd7, 0xd0, 0xa6, 0xba, 0xdb, 0x7e,
+	0xe3, 0x1d, 0x45, 0x14, 0xaa, 0x90, 0xf2, 0x80, 0xfd, 0x87, 0x01, 0xd6, 0x8c, 0xc6, 0xeb, 0x83,
+	0xb6, 0x3e, 0x06, 0x73, 0xc9, 0xde, 0xc6, 0x11, 0xd3, 0xc6, 0xd0, 0x8a, 0x81, 0x86, 0x94, 0x37,
+	0x3e, 0x85, 0xd3, 0xb8, 0x72, 0x40, 0x5e, 0x82, 0x76, 0x57, 0xaf, 0x0a, 0xbb, 0x4b, 0xf4, 0x6a,
+	0xc7, 0x24, 0xb6, 0xb9, 0xb6, 0x58, 0xef, 0xf2, 0xcb, 0x07, 0xcb, 0xfb, 0x77, 0x15, 0x83, 0xb1,
+	0x3a, 0x18, 0x6c, 0x73, 0x56, 0x7e, 0x5b, 0x3e, 0xdb, 0x5f, 0x00, 0xec, 0x33, 0xd2, 0x38, 0xce,
+	0x74, 0x4c, 0x7c, 0x77, 0x6c, 0xd5, 0x50, 0x1b, 0x1a, 0xae, 0x3f, 0xb7, 0x0c, 0x89, 0x8e, 0xf1,
+	0xfc, 0x3a, 0xf0, 0x67, 0x56, 0xdd, 0x9e, 0x41, 0xaf, 0xd4, 0x9e, 0xfd, 0xbc, 0x61, 0x5c, 0x1c,
+	0xb8, 0xde, 0x38, 0x74, 0xfd, 0xfb, 0x4c, 0x8d, 0xfd, 0xa7, 0x01, 0xbd, 0xab, 0x75, 0xb6, 0xc9,
+	0xa5, 0xfe, 0xf8, 0x2d, 0x4b, 0x05, 0x7a, 0x0a, 0x47, 0xd1, 0x2a, 0x8b, 0xde, 0x28, 0xbe, 0x26,
+	0xd1, 0x01, 0x7a, 0x06, 0xed, 0x84, 0x25, 0xb7, 0x6c, 0xcd, 0x35, 0xcf, 0xa4, 0x46, 0x4a, 0x00,
+	0x3d, 0x85, 0xe6, 0x7e, 0xec, 0x26, 0x35, 0xa2, 0x22, 0xfb, 0x57, 0x03, 0x3a, 0x8a, 0x51, 0x75,
+	0x67, 0x41, 0x77, 0x34, 0x71, 0x82, 0x70, 0x44, 0xb0, 0x13, 0x60, 0xd9, 0xa2, 0x05, 0xdd, 0xa9,
+	0xe3, 0xe1, 0x70, 0x34, 0x71, 0xa6, 0x57, 0x6a, 0x5a, 0x2c, 0xe8, 0x7a, 0xd8, 0x1b, 0x62, 0x12,
+	0xaa, 0xa1, 0xb1, 0xea, 0x72, 0x7e, 0x0a, 0xe4, 0xa5, 0xef, 0x4e, 0xf1, 0xd8, 0x6a, 0x20, 0x04,
+	0xbd, 0x02, 0x22, 0xd8, 0xf3, 0x5f, 0xe3, 0xb1, 0xd5, 0xd4, 0x43, 0xe8, 0xb9, 0xd3, 0xe2, 0xdc,
+	0x91, 0x9e, 0x3b, 0x09, 0x94, 0xef, 0xb4, 0x86, 0x2d, 0x68, 0xaa, 0xdd, 0x43, 0xc1, 0xf2, 0x74,
+	0xdd, 0xf7, 0x71, 0xae, 0x47, 0xe2, 0xd1, 0x09, 0x44, 0x67, 0xd0, 0xe1, 0xf1, 0x5d, 0x4a, 0xc5,
+	0x66, 0x5d, 0xea, 0xb7, 0x07, 0xd0, 0xff, 0xa1, 0xc5, 0x64, 0x83, 0x5c, 0x99, 0xb5, 0x4b, 0x8a,
+	0xc8, 0xfe, 0xab, 0x01, 0xa6, 0xd4, 0xd3, 0xd3, 0x9b, 0xf0, 0x11, 0x45, 0xcf, 0xa0, 0x23, 0xe2,
+	0x84, 0x71, 0x41, 0x93, 0xbc, 0x18, 0xd3, 0x3d, 0x80, 0x10, 0x34, 0x05, 0xfb, 0x45, 0x14, 0xab,
+	0x4c, 0x3d, 0x4b, 0x33, 0xaf, 0x19, 0xcf, 0xb3, 0x94, 0xb3, 0x50, 0x64, 0xfd, 0xa6, 0x36, 0x73,
+	0x09, 0x05, 0xd9, 0x81, 0x1b, 0x8e, 0x0e, 0xdd, 0x50, 0x69, 0xb1, 0x75, 0xd0, 0xa2, 0x0f, 0xdd,
+	0x62, 0x63, 0x6b, 0x63, 0xb7, 0x95, 0xb1, 0x3f, 0x7f, 0xd0, 0xd8, 0x95, 0xa6, 0x06, 0xc5, 0xaf,
+	0x32, 0xb5, 0x99, 0xec, 0x03, 0x49, 0x28, 0xf7, 0x02, 0x4b, 0x85, 0x26, 0x3c, 0x7e, 0x4f, 0xc2,
+	0x91, 0x3e, 0xa4, 0x09, 0xa3, 0x7d, 0x60, 0x0f, 0xc1, 0xac, 0x7c, 0x0c, 0xf5, 0x00, 0xfc, 0x29,
+	0x0e, 0x03, 0x3f, 0xf4, 0xa7, 0x58, 0xfb, 0x68, 0xb6, 0x18, 0xde, 0xb8, 0xa3, 0xf0, 0x8a, 0xf8,
+	0x8b, 0x99, 0xde, 0xba, 0x33, 0xe2, 0xbe, 0x76, 0x02, 0x5c, 0x40, 0x0d, 0x3b, 0x02, 0xb3, 0xc2,
+	0x2f, 0x39, 0x02, 0xfc, 0x7d, 0x10, 0xce, 0x6e, 0x1c, 0x77, 0xaa, 0x97, 0xf6, 0x3c, 0x70, 0x47,
+	0xd7, 0x98, 0x58, 0x06, 0x02, 0x68, 0xcd, 0x03, 0x27, 0x58, 0xcc, 0xad, 0xba, 0x4c, 0x8c, 0x7c,
+	0xcf, 0x73, 0xa6, 0xd2, 0x7a, 0x4f, 0xe0, 0xb4, 0x08, 0x42, 0x82, 0x5f, 0x2d, 0xf0, 0x3c, 0xb0,
+	0x9a, 0xa8, 0x03, 0x47, 0xd8, 0xf3, 0x5f, 0xba, 0xd6, 0x91, 0xed, 0x40, 0xbb, 0xbc, 0xf2, 0x03,
+	0xe3, 0xc8, 0x6b, 0xef, 0x56, 0x8d, 0xd3, 0x87, 0x76, 0x4e, 0xb7, 0xab, 0x8c, 0xea, 0x65, 0xd3,
+	0x25, 0x65, 0x68, 0xff, 0x66, 0xc0, 0xc9, 0x5c, 0x50, 0xb1, 0xe1, 0x25, 0xd3, 0x8f, 0x70, 0x56,
+	0x51, 0x2e, 0x2c, 0xa5, 0x0b, 0x0b, 0xc9, 0x15, 0xb9, 0x79, 0x79, 0xf6, 0xa0, 0xbc, 0x05, 0xc7,
+	0xa4, 0x46, 0x9e, 0x55, 0xd2, 0x5e, 0x91, 0x2e, 0xbf, 0xf0, 0x02, 0x2c, 0x19, 0xf2, 0x6d, 0x1a,
+	0xed, 0x58, 0x55, 0x59, 0x93, 0x1a, 0x39, 0x2d, 0x33, 0xc5, 0xcb, 0xc3, 0xce, 0xae, 0xf4, 0xdb,
+	0x96, 0xfa, 0x87, 0xff, 0xea, 0x9f, 0x00, 0x00, 0x00, 0xff, 0xff, 0xf5, 0x3e, 0x6d, 0x46, 0xf2,
+	0x07, 0x00, 0x00,
 }
