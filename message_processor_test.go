@@ -39,11 +39,11 @@ type MessageProcessorSuite struct {
 
 func (s *MessageProcessorSuite) SetupTest() {
 	s.testMessage = protocol.Message{
-		Text:      "abc123",
-		ContentT:  "text/plain",
-		MessageT:  "public-group-user-message",
-		Clock:     154593077368201,
-		Timestamp: 1545930773682,
+		Text:        "abc123",
+		ContentType: 0,
+		MessageType: 2,
+		Clock:       154593077368201,
+		Timestamp:   1545930773682,
 		Content: protocol.Content{
 			ChatID: "testing-adamb",
 			Text:   "abc123",

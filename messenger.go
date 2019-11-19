@@ -4,10 +4,13 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"database/sql"
+	"encoding/hex"
+	"encoding/json"
 	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -17,6 +20,7 @@ import (
 	"github.com/status-im/status-protocol-go/ens"
 	"github.com/status-im/status-protocol-go/identity/alias"
 	"github.com/status-im/status-protocol-go/identity/identicon"
+	"github.com/status-im/status-protocol-go/protobuf"
 	"github.com/status-im/status-protocol-go/sqlite"
 	transport "github.com/status-im/status-protocol-go/transport/whisper"
 	whispertypes "github.com/status-im/status-protocol-go/transport/whisper/types"
@@ -596,6 +600,126 @@ func (m *Messenger) Contacts() ([]*Contact, error) {
 	return m.persistence.Contacts()
 }
 
+type MessengerResponse struct {
+	Chats    []*Chat
+	Messages []*Message
+}
+
+func timestampInMs() uint64 {
+	return uint64(time.Now().UnixNano()) / (uint64(time.Millisecond) / uint64(time.Nanosecond))
+}
+
+func (m *Messenger) SendChatMessage(ctx context.Context, chatID string, text string, responseTo string, ensName string, contentType protobuf.ChatMessage_ContentType) (*MessengerResponse, error) {
+	logger := m.logger.With(zap.String("site", "Send"), zap.String("chatID", chatID))
+	var response *MessengerResponse
+
+	// A valid added chat is required.
+	chat, err := m.chatByID(chatID)
+	if err != nil {
+		return nil, err
+	}
+
+	clock := chat.LastClockValue
+	timestamp := timestampInMs()
+	if clock == 0 || clock < timestamp {
+		clock = timestamp
+	} else {
+		clock = clock + 1
+	}
+
+	message := protobuf.ChatMessage{
+		ChatId:      chatID,
+		Text:        text,
+		Clock:       clock,
+		ResponseTo:  responseTo,
+		EnsName:     ensName,
+		ContentType: contentType,
+	}
+
+	responseMessage := &Message{
+		From:             hex.EncodeToString(crypto.FromECDSAPub(&m.identity.PublicKey)),
+		WhisperTimestamp: timestamp,
+		Timestamp:        timestamp,
+		ContentType:      int32(contentType),
+		ChatID:           chatID,
+		ClockValue:       clock,
+		Seen:             true,
+		ReplyTo:          responseTo,
+		OutgoingStatus:   "sending",
+	}
+
+	logger.Debug("last message clock received", zap.Uint64("clock", clock))
+
+	switch chat.ChatType {
+	case ChatTypeOneToOne:
+		publicKey := crypto.FromECDSAPub(chat.PublicKey)
+		logger.Debug("sending private message", zap.Binary("publicKey", publicKey))
+		message.MessageType = protobuf.ChatMessage_ONE_TO_ONE
+		responseMessage.MessageType = int32(message.MessageType)
+		responseMessage.To = publicKey
+		encodedMessage, err := proto.Marshal(&message)
+		if err != nil {
+			return nil, err
+		}
+
+		id, err := m.processor.SendPrivateRaw(ctx, chat.PublicKey, encodedMessage)
+		if err != nil {
+			return nil, err
+		}
+		responseMessage.ID = "0x" + hex.EncodeToString(id)
+	case ChatTypePublic:
+		logger.Debug("sending public message", zap.String("chatName", chat.Name))
+		message.MessageType = protobuf.ChatMessage_PUBLIC_GROUP
+		responseMessage.MessageType = int32(message.MessageType)
+		encodedMessage, err := proto.Marshal(&message)
+		if err != nil {
+			return nil, err
+		}
+
+		id, err := m.processor.SendPublicRaw(ctx, chat.ID, encodedMessage)
+		if err != nil {
+			return nil, err
+		}
+		responseMessage.ID = "0x" + hex.EncodeToString(id)
+	case ChatTypePrivateGroupChat:
+		logger.Debug("sending public message", zap.String("chatName", chat.Name))
+		message.MessageType = protobuf.ChatMessage_PRIVATE_GROUP
+		responseMessage.MessageType = int32(message.MessageType)
+		encodedMessage, err := proto.Marshal(&message)
+		if err != nil {
+			return nil, err
+		}
+
+		id, err := m.processor.SendPublicRaw(ctx, chat.ID, encodedMessage)
+		if err != nil {
+			return nil, err
+		}
+		responseMessage.ID = "0x" + hex.EncodeToString(id)
+
+	default:
+		return nil, errors.New("chat is neither public nor private")
+	}
+	chat.LastClockValue = clock
+	chat.LastMessageContent = text
+	chat.LastMessageContentType = int32(contentType)
+	chat.LastMessageClockValue = int64(clock)
+	if err := m.SaveChat(*chat); err != nil {
+		return nil, err
+	}
+	content, err := json.Marshal(protocol.PrepareContent(protocol.Content{
+		Text: text,
+	}))
+	if err != nil {
+		return nil, err
+	}
+
+	responseMessage.Content = string(content)
+
+	response.Chats = []*Chat{chat}
+	response.Messages = []*Message{responseMessage}
+	return response, nil
+}
+
 func (m *Messenger) Send(ctx context.Context, chatID string, data []byte) ([][]byte, error) {
 	logger := m.logger.With(zap.String("site", "Send"), zap.String("chatID", chatID))
 
@@ -997,7 +1121,7 @@ func (p *postProcessor) matchMessage(message *protocol.Message, chats []*Chat) (
 	}
 
 	switch {
-	case message.MessageT == protocol.MessageTypePublicGroup:
+	case message.MessageType == int32(protobuf.ChatMessage_PUBLIC_GROUP):
 		// For public messages, all outgoing and incoming messages have the same chatID
 		// equal to a public chat name.
 		chatID := message.Content.ChatID
@@ -1006,7 +1130,7 @@ func (p *postProcessor) matchMessage(message *protocol.Message, chats []*Chat) (
 			return nil, errors.New("received a public message from non-existing chat")
 		}
 		return chat, nil
-	case message.MessageT == protocol.MessageTypePrivate && isPubKeyEqual(message.SigPubKey, p.myPublicKey):
+	case message.MessageType == int32(protobuf.ChatMessage_ONE_TO_ONE) && isPubKeyEqual(message.SigPubKey, p.myPublicKey):
 		// It's a private message coming from us so we rely on Message.Content.ChatID.
 		// If chat does not exist, it should be created to support multidevice synchronization.
 		chatID := message.Content.ChatID
@@ -1020,7 +1144,7 @@ func (p *postProcessor) matchMessage(message *protocol.Message, chats []*Chat) (
 			chat = &newChat
 		}
 		return chat, nil
-	case message.MessageT == protocol.MessageTypePrivate:
+	case message.MessageType == int32(protobuf.ChatMessage_ONE_TO_ONE):
 		// It's an incoming private message. ChatID is calculated from the signature.
 		// If a chat does not exist, a new one is created and saved.
 		chatID := statusproto.EncodeHex(crypto.FromECDSAPub(message.SigPubKey))
@@ -1034,7 +1158,7 @@ func (p *postProcessor) matchMessage(message *protocol.Message, chats []*Chat) (
 			chat = &newChat
 		}
 		return chat, nil
-	case message.MessageT == protocol.MessageTypePrivateGroup:
+	case message.MessageType == int32(protobuf.ChatMessage_PRIVATE_GROUP):
 		// In the case of a group message, ChatID is the same for all messages belonging to a group.
 		// It needs to be verified if the signature public key belongs to the chat.
 		chatID := message.Content.ChatID

@@ -87,7 +87,7 @@ func TestMessageByChatID(t *testing.T) {
 			ID:         strconv.Itoa(i),
 			ChatID:     chatID,
 			From:       "me",
-			ClockValue: int64(i),
+			ClockValue: uint64(i),
 		})
 
 		// Add some other chats.
@@ -96,7 +96,7 @@ func TestMessageByChatID(t *testing.T) {
 				ID:         strconv.Itoa(count + i),
 				ChatID:     "other-chat",
 				From:       "me",
-				ClockValue: int64(i),
+				ClockValue: uint64(i),
 			})
 		}
 	}
@@ -109,7 +109,7 @@ func TestMessageByChatID(t *testing.T) {
 			ID:         strconv.Itoa(count*2 + i),
 			ChatID:     chatID,
 			From:       "me",
-			ClockValue: int64(i), // use very old clock values
+			ClockValue: uint64(i), // use very old clock values
 		})
 	}
 
@@ -158,14 +158,14 @@ func TestMessageReplies(t *testing.T) {
 		ChatID:     chatID,
 		Content:    "content-1",
 		From:       "1",
-		ClockValue: int64(1),
+		ClockValue: uint64(1),
 	}
 	message2 := &Message{
 		ID:         "id-2",
 		ChatID:     chatID,
 		Content:    "content-2",
 		From:       "2",
-		ClockValue: int64(2),
+		ClockValue: uint64(2),
 		ReplyTo:    "id-1",
 	}
 
@@ -174,7 +174,7 @@ func TestMessageReplies(t *testing.T) {
 		ChatID:     chatID,
 		Content:    "content-3",
 		From:       "3",
-		ClockValue: int64(3),
+		ClockValue: uint64(3),
 		ReplyTo:    "non-existing",
 	}
 
@@ -201,7 +201,7 @@ func TestMessageByChatIDWithTheSameClockValues(t *testing.T) {
 	require.NoError(t, err)
 	p := sqlitePersistence{db: db}
 	chatID := "super-chat"
-	clockValues := []int64{10, 10, 9, 9, 9, 11, 12, 11, 100000, 6, 4, 5, 5, 5, 5}
+	clockValues := []uint64{10, 10, 9, 9, 9, 11, 12, 11, 100000, 6, 4, 5, 5, 5, 5}
 	count := len(clockValues)
 	pageSize := 2
 
@@ -242,12 +242,12 @@ func TestMessageByChatIDWithTheSameClockValues(t *testing.T) {
 	require.Empty(t, cursor) // for loop should exit because of cursor being empty
 	require.Len(t, result, count)
 	// Verify the order.
-	expectedClockValues := make([]int64, len(clockValues))
+	expectedClockValues := make([]uint64, len(clockValues))
 	copy(expectedClockValues, clockValues)
 	sort.Slice(expectedClockValues, func(i, j int) bool {
 		return expectedClockValues[i] > expectedClockValues[j]
 	})
-	resultClockValues := make([]int64, 0, len(clockValues))
+	resultClockValues := make([]uint64, 0, len(clockValues))
 	for _, m := range result {
 		resultClockValues = append(resultClockValues, m.ClockValue)
 	}

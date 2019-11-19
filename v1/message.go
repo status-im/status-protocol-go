@@ -15,18 +15,6 @@ import (
 	statusproto "github.com/status-im/status-protocol-go/types"
 )
 
-const (
-	// ContentTypeTextPlain means that the message contains plain text.
-	ContentTypeTextPlain = "text/plain"
-)
-
-// Message types.
-const (
-	MessageTypePublicGroup  = "public-group-user-message"
-	MessageTypePrivate      = "user-message"
-	MessageTypePrivateGroup = "group-user-message"
-)
-
 var (
 	// ErrInvalidDecodedValue means that the decoded message is of wrong type.
 	// This might mean that the status message serialization tag changed.
@@ -63,12 +51,12 @@ const (
 
 // Message is a chat message sent by an user.
 type Message struct {
-	Text      string        `json:"text"` // TODO: why is this duplicated?
-	ContentT  string        `json:"content_type"`
-	MessageT  string        `json:"message_type"`
-	Clock     int64         `json:"clock"` // lamport timestamp; see CalcMessageClock for more details
-	Timestamp TimestampInMs `json:"timestamp"`
-	Content   Content       `json:"content"`
+	Text        string        `json:"text"` // TODO: why is this duplicated?
+	ContentType int32         `json:"content_type"`
+	MessageType int32         `json:"message_type"`
+	Clock       int64         `json:"clock"` // lamport timestamp; see CalcMessageClock for more details
+	Timestamp   TimestampInMs `json:"timestamp"`
+	Content     Content       `json:"content"`
 
 	Flags     Flags            `json:"-"`
 	ID        []byte           `json:"-"`
@@ -90,35 +78,35 @@ func (m *Message) MarshalJSON() ([]byte, error) {
 }
 
 // createTextMessage creates a Message.
-func createTextMessage(data []byte, lastClock int64, chatID, messageType string) Message {
+func createTextMessage(data []byte, lastClock int64, chatID string, messageType int32) Message {
 	text := strings.TrimSpace(string(data))
 	ts := TimestampInMsFromTime(time.Now())
 	clock := CalcMessageClock(lastClock, ts)
 
 	return Message{
-		Text:      text,
-		ContentT:  ContentTypeTextPlain,
-		MessageT:  messageType,
-		Clock:     clock,
-		Timestamp: ts,
-		Content:   Content{ChatID: chatID, Text: text},
+		Text:        text,
+		ContentType: int32(protobuf.ChatMessage_TEXT_PLAIN),
+		MessageType: messageType,
+		Clock:       clock,
+		Timestamp:   ts,
+		Content:     Content{ChatID: chatID, Text: text},
 	}
 }
 
 // CreatePublicTextMessage creates a public text Message.
 func CreatePublicTextMessage(data []byte, lastClock int64, chatID string) Message {
-	m := createTextMessage(data, lastClock, chatID, MessageTypePublicGroup)
+	m := createTextMessage(data, lastClock, chatID, int32(protobuf.ChatMessage_PUBLIC_GROUP))
 	return m
 }
 
 // CreatePrivateTextMessage creates a one-to-one message.
 func CreatePrivateTextMessage(data []byte, lastClock int64, chatID string) Message {
-	return createTextMessage(data, lastClock, chatID, MessageTypePrivate)
+	return createTextMessage(data, lastClock, chatID, int32(protobuf.ChatMessage_ONE_TO_ONE))
 }
 
 // CreatePrivateGroupTextMessage creates a group message.
 func CreatePrivateGroupTextMessage(data []byte, lastClock int64, chatID string) Message {
-	return createTextMessage(data, lastClock, chatID, MessageTypePrivateGroup)
+	return createTextMessage(data, lastClock, chatID, int32(protobuf.ChatMessage_PRIVATE_GROUP))
 }
 
 func decodeTransitMessage(originalPayload []byte) (interface{}, error) {
