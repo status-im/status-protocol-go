@@ -5,8 +5,8 @@ import (
 	"errors"
 	"sync"
 
-	whispertypes "github.com/status-im/status-protocol-go/transport/whisper/types"
-	statusproto "github.com/status-im/status-protocol-go/types"
+	"github.com/status-im/status-eth-node/types"
+	whispertypes "github.com/status-im/status-eth-node/types/whisper"
 	"go.uber.org/zap"
 )
 
@@ -26,7 +26,7 @@ type EnvelopesMonitorConfig struct {
 	EnvelopeEventsHandler          EnvelopeEventsHandler
 	MaxAttempts                    int
 	MailserverConfirmationsEnabled bool
-	IsMailserver                   func(whispertypes.EnodeID) bool
+	IsMailserver                   func(types.EnodeID) bool
 	Logger                         *zap.Logger
 }
 
@@ -34,8 +34,8 @@ type EnvelopesMonitorConfig struct {
 type EnvelopeEventsHandler interface {
 	EnvelopeSent([][]byte)
 	EnvelopeExpired([][]byte, error)
-	MailServerRequestCompleted(statusproto.Hash, statusproto.Hash, []byte, error)
-	MailServerRequestExpired(statusproto.Hash)
+	MailServerRequestCompleted(types.Hash, types.Hash, []byte, error)
+	MailServerRequestExpired(types.Hash)
 }
 
 // NewEnvelopesMonitor returns a pointer to an instance of the EnvelopesMonitor.
@@ -61,13 +61,13 @@ func NewEnvelopesMonitor(w whispertypes.Whisper, config EnvelopesMonitorConfig) 
 		logger:                 logger.With(zap.Namespace("EnvelopesMonitor")),
 
 		// key is envelope hash (event.Hash)
-		envelopes:   map[statusproto.Hash]EnvelopeState{},
-		messages:    map[statusproto.Hash]*whispertypes.NewMessage{},
-		attempts:    map[statusproto.Hash]int{},
-		identifiers: make(map[statusproto.Hash][][]byte),
+		envelopes:   map[types.Hash]EnvelopeState{},
+		messages:    map[types.Hash]*whispertypes.NewMessage{},
+		attempts:    map[types.Hash]int{},
+		identifiers: make(map[types.Hash][][]byte),
 
 		// key is hash of the batch (event.Batch)
-		batches: map[statusproto.Hash]map[statusproto.Hash]struct{}{},
+		batches: map[types.Hash]map[types.Hash]struct{}{},
 	}
 }
 
@@ -80,16 +80,16 @@ type EnvelopesMonitor struct {
 	maxAttempts            int
 
 	mu        sync.Mutex
-	envelopes map[statusproto.Hash]EnvelopeState
-	batches   map[statusproto.Hash]map[statusproto.Hash]struct{}
+	envelopes map[types.Hash]EnvelopeState
+	batches   map[types.Hash]map[types.Hash]struct{}
 
-	messages    map[statusproto.Hash]*whispertypes.NewMessage
-	attempts    map[statusproto.Hash]int
-	identifiers map[statusproto.Hash][][]byte
+	messages    map[types.Hash]*whispertypes.NewMessage
+	attempts    map[types.Hash]int
+	identifiers map[types.Hash][][]byte
 
 	wg           sync.WaitGroup
 	quit         chan struct{}
-	isMailserver func(peer whispertypes.EnodeID) bool
+	isMailserver func(peer types.EnodeID) bool
 
 	logger *zap.Logger
 }
@@ -111,7 +111,7 @@ func (m *EnvelopesMonitor) Stop() {
 }
 
 // Add hash to a tracker.
-func (m *EnvelopesMonitor) Add(identifiers [][]byte, envelopeHash statusproto.Hash, message whispertypes.NewMessage) {
+func (m *EnvelopesMonitor) Add(identifiers [][]byte, envelopeHash types.Hash, message whispertypes.NewMessage) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.envelopes[envelopeHash] = EnvelopePosted
@@ -120,7 +120,7 @@ func (m *EnvelopesMonitor) Add(identifiers [][]byte, envelopeHash statusproto.Ha
 	m.attempts[envelopeHash] = 1
 }
 
-func (m *EnvelopesMonitor) GetState(hash statusproto.Hash) EnvelopeState {
+func (m *EnvelopesMonitor) GetState(hash types.Hash) EnvelopeState {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	state, exist := m.envelopes[hash]
@@ -179,9 +179,9 @@ func (m *EnvelopesMonitor) handleEventEnvelopeSent(event whispertypes.EnvelopeEv
 		return
 	}
 	m.logger.Debug("envelope is sent", zap.String("hash", event.Hash.String()), zap.String("peer", event.Peer.String()))
-	if event.Batch != (statusproto.Hash{}) {
+	if event.Batch != (types.Hash{}) {
 		if _, ok := m.batches[event.Batch]; !ok {
-			m.batches[event.Batch] = map[statusproto.Hash]struct{}{}
+			m.batches[event.Batch] = map[types.Hash]struct{}{}
 		}
 		m.batches[event.Batch][event.Hash] = struct{}{}
 		m.logger.Debug("waiting for a confirmation", zap.String("batch", event.Batch.String()))
@@ -212,7 +212,7 @@ func (m *EnvelopesMonitor) handleAcknowledgedBatch(event whispertypes.EnvelopeEv
 	if event.Data != nil && !ok {
 		m.logger.Error("received unexpected data in the the confirmation event", zap.String("batch", event.Batch.String()))
 	}
-	failedEnvelopes := map[statusproto.Hash]struct{}{}
+	failedEnvelopes := map[types.Hash]struct{}{}
 	for i := range envelopeErrors {
 		envelopeError := envelopeErrors[i]
 		_, exist := m.envelopes[envelopeError.Hash]
@@ -252,7 +252,7 @@ func (m *EnvelopesMonitor) handleEventEnvelopeExpired(event whispertypes.Envelop
 
 // handleEnvelopeFailure is a common code path for processing envelopes failures. not thread safe, lock
 // must be used on a higher level.
-func (m *EnvelopesMonitor) handleEnvelopeFailure(hash statusproto.Hash, err error) {
+func (m *EnvelopesMonitor) handleEnvelopeFailure(hash types.Hash, err error) {
 	if state, ok := m.envelopes[hash]; ok {
 		message, exist := m.messages[hash]
 		if !exist {
@@ -274,7 +274,7 @@ func (m *EnvelopesMonitor) handleEnvelopeFailure(hash statusproto.Hash, err erro
 				}
 
 			}
-			envelopeID := statusproto.BytesToHash(hex)
+			envelopeID := types.BytesToHash(hex)
 			m.envelopes[envelopeID] = EnvelopePosted
 			m.messages[envelopeID] = message
 			m.attempts[envelopeID] = attempt + 1
@@ -309,7 +309,7 @@ func (m *EnvelopesMonitor) handleEventEnvelopeReceived(event whispertypes.Envelo
 
 // clearMessageState removes all message and envelope state.
 // not thread-safe, should be protected on a higher level.
-func (m *EnvelopesMonitor) clearMessageState(envelopeID statusproto.Hash) {
+func (m *EnvelopesMonitor) clearMessageState(envelopeID types.Hash) {
 	delete(m.envelopes, envelopeID)
 	delete(m.messages, envelopeID)
 	delete(m.attempts, envelopeID)

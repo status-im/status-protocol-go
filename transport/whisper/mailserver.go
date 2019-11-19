@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
-	whispertypes "github.com/status-im/status-protocol-go/transport/whisper/types"
+	whispertypes "github.com/status-im/status-eth-node/types/whisper"
 )
 
 const defaultMessagesRequestLimit = 100

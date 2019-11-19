@@ -4,17 +4,17 @@ import (
 	"database/sql/driver"
 
 	"github.com/pkg/errors"
-	statusproto "github.com/status-im/status-protocol-go/types"
+	"github.com/status-im/status-eth-node/types"
 )
 
-type hexutilSQL statusproto.HexBytes
+type hexutilSQL types.HexBytes
 
 func (h hexutilSQL) Value() (driver.Value, error) {
 	return []byte(h), nil
 }
 
 func (h hexutilSQL) String() string {
-	return statusproto.EncodeHex(h)
+	return types.EncodeHex(h)
 }
 
 func (h *hexutilSQL) Scan(value interface{}) error {

@@ -1,7 +1,7 @@
 package gethbridge
 
 import (
-	whispertypes "github.com/status-im/status-protocol-go/transport/whisper/types"
+	whispertypes "github.com/status-im/status-eth-node/types/whisper"
 	whisper "github.com/status-im/whisper/whisperv6"
 )
 

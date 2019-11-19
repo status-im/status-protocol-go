@@ -1,8 +1,8 @@
 package gethbridge
 
 import (
-	whispertypes "github.com/status-im/status-protocol-go/transport/whisper/types"
-	statusproto "github.com/status-im/status-protocol-go/types"
+	"github.com/status-im/status-eth-node/types"
+	whispertypes "github.com/status-im/status-eth-node/types/whisper"
 	whisper "github.com/status-im/whisper/whisperv6"
 )
 
@@ -26,9 +26,9 @@ func NewGethEnvelopeEventWrapper(envelopeEvent *whisper.EnvelopeEvent) *whispert
 	}
 	return &whispertypes.EnvelopeEvent{
 		Event: whispertypes.EventType(envelopeEvent.Event),
-		Hash:  statusproto.Hash(envelopeEvent.Hash),
-		Batch: statusproto.Hash(envelopeEvent.Batch),
-		Peer:  whispertypes.EnodeID(envelopeEvent.Peer),
+		Hash:  types.Hash(envelopeEvent.Hash),
+		Batch: types.Hash(envelopeEvent.Batch),
+		Peer:  types.EnodeID(envelopeEvent.Peer),
 		Data:  wrappedData,
 	}
 }

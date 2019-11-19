@@ -1,6 +1,6 @@
 // Code extracted from vendor/github.com/ethereum/go-ethereum/common/hexutil/json.go
 
-package statusproto
+package types
 
 import (
 	"encoding/hex"

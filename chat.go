@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 
 	"github.com/ethereum/go-ethereum/crypto"
-	statusproto "github.com/status-im/status-protocol-go/types"
+	"github.com/status-im/status-eth-node/types"
 	protocol "github.com/status-im/status-protocol-go/v1"
 )
 
@@ -140,7 +140,7 @@ type ChatMember struct {
 }
 
 func (c ChatMember) PublicKey() (*ecdsa.PublicKey, error) {
-	b, err := statusproto.DecodeHex(c.ID)
+	b, err := types.DecodeHex(c.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +148,7 @@ func (c ChatMember) PublicKey() (*ecdsa.PublicKey, error) {
 }
 
 func oneToOneChatID(publicKey *ecdsa.PublicKey) string {
-	return statusproto.EncodeHex(crypto.FromECDSAPub(publicKey))
+	return types.EncodeHex(crypto.FromECDSAPub(publicKey))
 }
 
 func CreateOneToOneChat(name string, publicKey *ecdsa.PublicKey) Chat {
@@ -194,7 +194,7 @@ func stringSliceToPublicKeys(slice []string, prefixed bool) ([]*ecdsa.PublicKey,
 			err error
 		)
 		if prefixed {
-			b, err = statusproto.DecodeHex(item)
+			b, err = types.DecodeHex(item)
 		} else {
 			b, err = hex.DecodeString(item)
 		}

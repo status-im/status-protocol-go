@@ -13,12 +13,12 @@ import (
 
 	"github.com/ethereum/go-ethereum/crypto"
 	_ "github.com/mutecomm/go-sqlcipher" // require go-sqlcipher that overrides default implementation
-	gethbridge "github.com/status-im/status-protocol-go/bridge/geth"
+	gethbridge "github.com/status-im/status-eth-node/bridge/geth"
 	"github.com/status-im/status-protocol-go/ens"
 	"github.com/status-im/status-protocol-go/sqlite"
-	whispertypes "github.com/status-im/status-protocol-go/transport/whisper/types"
+	whispertypes "github.com/status-im/status-eth-node/types/whisper"
 	"github.com/status-im/status-protocol-go/tt"
-	statusproto "github.com/status-im/status-protocol-go/types"
+	"github.com/status-im/status-eth-node/types"
 	protocol "github.com/status-im/status-protocol-go/v1"
 	whisper "github.com/status-im/whisper/whisperv6"
 	"github.com/stretchr/testify/suite"
@@ -133,7 +133,7 @@ func (s *MessengerSuite) TestInit() {
 				key, err := crypto.GenerateKey()
 				s.Require().NoError(err)
 				privateChat := Chat{
-					ID:        statusproto.EncodeHex(crypto.FromECDSAPub(&key.PublicKey)),
+					ID:        types.EncodeHex(crypto.FromECDSAPub(&key.PublicKey)),
 					ChatType:  ChatTypeOneToOne,
 					PublicKey: &key.PublicKey,
 					Active:    true,
@@ -155,10 +155,10 @@ func (s *MessengerSuite) TestInit() {
 					Active:   true,
 					Members: []ChatMember{
 						{
-							ID: statusproto.EncodeHex(crypto.FromECDSAPub(&key1.PublicKey)),
+							ID: types.EncodeHex(crypto.FromECDSAPub(&key1.PublicKey)),
 						},
 						{
-							ID: statusproto.EncodeHex(crypto.FromECDSAPub(&key2.PublicKey)),
+							ID: types.EncodeHex(crypto.FromECDSAPub(&key2.PublicKey)),
 						},
 					},
 				}
@@ -186,7 +186,7 @@ func (s *MessengerSuite) TestInit() {
 				key, err := crypto.GenerateKey()
 				s.Require().NoError(err)
 				contact := Contact{
-					ID:         statusproto.EncodeHex(crypto.FromECDSAPub(&key.PublicKey)),
+					ID:         types.EncodeHex(crypto.FromECDSAPub(&key.PublicKey)),
 					Name:       "Some Contact",
 					SystemTags: []string{contactAdded},
 				}
@@ -201,7 +201,7 @@ func (s *MessengerSuite) TestInit() {
 				key, err := crypto.GenerateKey()
 				s.Require().NoError(err)
 				contact := Contact{
-					ID:         statusproto.EncodeHex(crypto.FromECDSAPub(&key.PublicKey)),
+					ID:         types.EncodeHex(crypto.FromECDSAPub(&key.PublicKey)),
 					Name:       "Some Contact",
 					SystemTags: []string{contactAdded, contactBlocked},
 				}
@@ -216,7 +216,7 @@ func (s *MessengerSuite) TestInit() {
 				key, err := crypto.GenerateKey()
 				s.Require().NoError(err)
 				contact := Contact{
-					ID:         statusproto.EncodeHex(crypto.FromECDSAPub(&key.PublicKey)),
+					ID:         types.EncodeHex(crypto.FromECDSAPub(&key.PublicKey)),
 					Name:       "Some Contact",
 					SystemTags: []string{contactRequestReceived},
 				}

@@ -1,8 +1,8 @@
 package gethbridge
 
 import (
-	whispertypes "github.com/status-im/status-protocol-go/transport/whisper/types"
-	statusproto "github.com/status-im/status-protocol-go/types"
+	"github.com/status-im/status-eth-node/types"
+	whispertypes "github.com/status-im/status-eth-node/types/whisper"
 	whisper "github.com/status-im/whisper/whisperv6"
 )
 
@@ -22,8 +22,8 @@ func GetGethEnvelopeFrom(f whispertypes.Envelope) *whisper.Envelope {
 	return f.(*gethEnvelopeWrapper).envelope
 }
 
-func (w *gethEnvelopeWrapper) Hash() statusproto.Hash {
-	return statusproto.Hash(w.envelope.Hash())
+func (w *gethEnvelopeWrapper) Hash() types.Hash {
+	return types.Hash(w.envelope.Hash())
 }
 
 func (w *gethEnvelopeWrapper) Bloom() []byte {

@@ -1,8 +1,7 @@
 package whispertypes
 
 import (
-	"github.com/ethereum/go-ethereum/common/hexutil"
-	statusproto "github.com/status-im/status-protocol-go/types"
+	"github.com/status-im/status-eth-node/types"
 )
 
 const (
@@ -32,17 +31,17 @@ func BytesToTopic(b []byte) (t TopicType) {
 
 // String converts a topic byte array to a string representation.
 func (t *TopicType) String() string {
-	return statusproto.EncodeHex(t[:])
+	return types.EncodeHex(t[:])
 }
 
 // MarshalText returns the hex representation of t.
 func (t TopicType) MarshalText() ([]byte, error) {
-	return statusproto.HexBytes(t[:]).MarshalText()
+	return types.HexBytes(t[:]).MarshalText()
 }
 
 // UnmarshalText parses a hex representation to a topic.
 func (t *TopicType) UnmarshalText(input []byte) error {
-	return hexutil.UnmarshalFixedText("Topic", input, t[:])
+	return types.UnmarshalFixedText("Topic", input, t[:])
 }
 
 // TopicToBloom converts the topic (4 bytes) to the bloom filter (64 bytes)

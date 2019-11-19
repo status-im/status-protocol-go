@@ -8,7 +8,7 @@ import (
 	"os"
 	"testing"
 
-	gethbridge "github.com/status-im/status-protocol-go/bridge/geth"
+	gethbridge "github.com/status-im/status-eth-node/bridge/geth"
 	"github.com/status-im/status-protocol-go/sqlite"
 	"github.com/status-im/status-protocol-go/tt"
 

@@ -3,7 +3,7 @@ package whispertypes
 import (
 	"time"
 
-	statusproto "github.com/status-im/status-protocol-go/types"
+	"github.com/status-im/status-eth-node/types"
 )
 
 const (
@@ -49,7 +49,7 @@ func (r *MessagesRequest) SetDefaults(now time.Time) {
 
 // MailServerResponse is the response payload sent by the mailserver.
 type MailServerResponse struct {
-	LastEnvelopeHash statusproto.Hash
+	LastEnvelopeHash types.Hash
 	Cursor           []byte
 	Error            error
 }

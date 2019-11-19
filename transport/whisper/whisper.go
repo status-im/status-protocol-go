@@ -1,7 +1,7 @@
 package whisper
 
 import (
-	whispertypes "github.com/status-im/status-protocol-go/transport/whisper/types"
+	whispertypes "github.com/status-im/status-eth-node/types/whisper"
 )
 
 type RequestOptions struct {

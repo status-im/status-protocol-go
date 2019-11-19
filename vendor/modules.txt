@@ -20,7 +20,7 @@ github.com/davecgh/go-spew/spew
 github.com/deckarep/golang-set
 # github.com/edsrzf/mmap-go v1.0.0
 github.com/edsrzf/mmap-go
-# github.com/elastic/gosigar v0.10.4
+# github.com/elastic/gosigar v0.10.5
 github.com/elastic/gosigar
 github.com/elastic/gosigar/sys/windows
 # github.com/ethereum/go-ethereum v1.9.5 => github.com/status-im/go-ethereum v1.9.5-status.5
@@ -123,8 +123,6 @@ github.com/jinzhu/copier
 github.com/karalabe/usb
 # github.com/lucasb-eyer/go-colorful v1.0.2
 github.com/lucasb-eyer/go-colorful
-# github.com/mattn/go-pointer v0.0.0-20190911064623-a0a44394634f
-github.com/mattn/go-pointer
 # github.com/mattn/go-runewidth v0.0.4
 github.com/mattn/go-runewidth
 # github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
@@ -168,6 +166,10 @@ github.com/status-im/migrate/v4
 github.com/status-im/migrate/v4/database/sqlcipher
 github.com/status-im/migrate/v4/internal/url
 github.com/status-im/migrate/v4/source/go_bindata
+# github.com/status-im/status-eth-node v0.0.0-20191119133353-5cbb7e8e13f1
+github.com/status-im/status-eth-node/bridge/geth
+github.com/status-im/status-eth-node/types
+github.com/status-im/status-eth-node/types/whisper
 # github.com/status-im/whisper v1.5.2
 github.com/status-im/whisper/whisperv6
 # github.com/steakknife/bloomfilter v0.0.0-20180922174646-6819c0d2a570

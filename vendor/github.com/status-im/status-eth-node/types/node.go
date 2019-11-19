@@ -1,4 +1,4 @@
-package whispertypes
+package types
 
 import "fmt"
 

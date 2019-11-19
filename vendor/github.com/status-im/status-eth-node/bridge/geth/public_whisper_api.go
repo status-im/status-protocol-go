@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	whispertypes "github.com/status-im/status-protocol-go/transport/whisper/types"
-	statusproto "github.com/status-im/status-protocol-go/types"
+	"github.com/status-im/status-eth-node/types"
+	whispertypes "github.com/status-im/status-eth-node/types/whisper"
 	whisper "github.com/status-im/whisper/whisperv6"
 )
 
@@ -25,7 +25,7 @@ func NewGethPublicWhisperAPIWrapper(publicWhisperAPI *whisper.PublicWhisperAPI) 
 }
 
 // AddPrivateKey imports the given private key.
-func (w *gethPublicWhisperAPIWrapper) AddPrivateKey(ctx context.Context, privateKey statusproto.HexBytes) (string, error) {
+func (w *gethPublicWhisperAPIWrapper) AddPrivateKey(ctx context.Context, privateKey types.HexBytes) (string, error) {
 	return w.publicWhisperAPI.AddPrivateKey(ctx, hexutil.Bytes(privateKey))
 }
 

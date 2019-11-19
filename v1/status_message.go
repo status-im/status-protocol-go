@@ -11,8 +11,8 @@ import (
 	"github.com/status-im/status-protocol-go/applicationmetadata"
 	"github.com/status-im/status-protocol-go/datasync"
 	"github.com/status-im/status-protocol-go/encryption"
-	whispertypes "github.com/status-im/status-protocol-go/transport/whisper/types"
-	statusproto "github.com/status-im/status-protocol-go/types"
+	whispertypes "github.com/status-im/status-eth-node/types/whisper"
+  "github.com/status-im/status-eth-node/types"
 )
 
 type StatusMessageT int
@@ -38,7 +38,7 @@ type StatusMessage struct {
 	DecryptedPayload []byte
 
 	// ID is the canonical ID of the message
-	ID statusproto.HexBytes
+	ID types.HexBytes
 	// Hash is the transport layer hash
 	Hash []byte
 

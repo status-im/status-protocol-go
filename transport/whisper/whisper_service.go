@@ -11,8 +11,8 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	whispertypes "github.com/status-im/status-protocol-go/transport/whisper/types"
-	statusproto "github.com/status-im/status-protocol-go/types"
+	whispertypes "github.com/status-im/status-eth-node/types/whisper"
+  "github.com/status-im/status-eth-node/types"
 )
 
 var (
@@ -372,7 +372,7 @@ func (a *WhisperServiceTransport) addSig(newMessage *whispertypes.NewMessage) er
 
 func (a *WhisperServiceTransport) Track(identifiers [][]byte, hash []byte, newMessage *whispertypes.NewMessage) {
 	if a.envelopesMonitor != nil {
-		a.envelopesMonitor.Add(identifiers, statusproto.BytesToHash(hash), *newMessage)
+		a.envelopesMonitor.Add(identifiers, types.BytesToHash(hash), *newMessage)
 	}
 }
 

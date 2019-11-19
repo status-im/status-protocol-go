@@ -8,7 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/status-im/status-protocol-go/identity/alias"
 	"github.com/status-im/status-protocol-go/identity/identicon"
-	statusproto "github.com/status-im/status-protocol-go/types"
+	"github.com/status-im/status-eth-node/types"
 )
 
 const (
@@ -58,7 +58,7 @@ type Contact struct {
 }
 
 func (c Contact) PublicKey() (*ecdsa.PublicKey, error) {
-	b, err := statusproto.DecodeHex(c.ID)
+	b, err := types.DecodeHex(c.ID)
 	if err != nil {
 		return nil, err
 	}
