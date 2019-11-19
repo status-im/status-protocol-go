@@ -11,6 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
+	"github.com/status-im/status-protocol-go/protobuf"
 	statusproto "github.com/status-im/status-protocol-go/types"
 )
 
@@ -162,7 +163,7 @@ func WrapMessageV1(payload []byte, identity *ecdsa.PrivateKey) ([]byte, error) {
 		}
 	}
 
-	message := &StatusProtocolMessage{
+	message := &protobuf.ApplicationMetadataMessage{
 		Signature: signature,
 		Payload:   payload,
 	}

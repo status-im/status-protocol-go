@@ -85,27 +85,11 @@ func (s *FiltersManagerSuite) TearDownTest() {
 	_ = s.logger.Sync()
 }
 
-func (s *FiltersManagerSuite) TestDiscoveryAndPartitionedTopic() {
-	_, err := s.chats.Init(nil, nil, true)
-	s.Require().NoError(err)
-
-	s.Require().Equal(4, len(s.chats.filters), "It creates four filters")
-
-	discoveryFilter := s.chats.filters[discoveryTopic]
-	s.Require().NotNil(discoveryFilter, "It adds the discovery filter")
-	s.Require().True(discoveryFilter.Listen)
-
-	s.assertRequiredFilters()
-}
-
-func (s *FiltersManagerSuite) TestPartitionedTopicWithDiscoveryDisabled() {
-	_, err := s.chats.Init(nil, nil, false)
+func (s *FiltersManagerSuite) TestPartitionedTopic() {
+	_, err := s.chats.Init(nil, nil)
 	s.Require().NoError(err)
 
 	s.Require().Equal(3, len(s.chats.filters), "It creates three filters")
-
-	discoveryFilter := s.chats.filters[discoveryTopic]
-	s.Require().Nil(discoveryFilter, "It does not add the discovery filter")
 
 	s.assertRequiredFilters()
 }

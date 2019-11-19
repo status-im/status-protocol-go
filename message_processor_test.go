@@ -110,48 +110,6 @@ func (s *MessageProcessorSuite) TearDownTest() {
 	_ = s.logger.Sync()
 }
 
-func (s *MessageProcessorSuite) TestHandleDecodedMessagesSingle() {
-	privateKey, err := crypto.GenerateKey()
-	s.Require().NoError(err)
-
-	encodedPayload, err := protocol.EncodeMessage(s.testMessage)
-	s.Require().NoError(err)
-
-	message := &whispertypes.Message{}
-	message.Sig = crypto.FromECDSAPub(&privateKey.PublicKey)
-	message.Payload = encodedPayload
-
-	decodedMessages, err := s.processor.handleMessages(message, true)
-	s.Require().NoError(err)
-	s.Require().Equal(1, len(decodedMessages))
-	s.Require().Equal(encodedPayload, decodedMessages[0].DecryptedPayload)
-	s.Require().Equal(&privateKey.PublicKey, decodedMessages[0].SigPubKey())
-	s.Require().Equal(protocol.MessageID(&privateKey.PublicKey, encodedPayload), decodedMessages[0].ID)
-	s.Require().Equal(s.testMessage, decodedMessages[0].ParsedMessage)
-	s.Require().Equal(protocol.MessageT, decodedMessages[0].MessageType)
-}
-
-func (s *MessageProcessorSuite) TestHandleDecodedMessagesRaw() {
-	privateKey, err := crypto.GenerateKey()
-	s.Require().NoError(err)
-
-	encodedPayload, err := protocol.EncodeMessage(s.testMessage)
-	s.Require().NoError(err)
-
-	message := &whispertypes.Message{}
-	message.Sig = crypto.FromECDSAPub(&privateKey.PublicKey)
-	message.Payload = encodedPayload
-
-	decodedMessages, err := s.processor.handleMessages(message, false)
-	s.Require().NoError(err)
-	s.Require().Equal(1, len(decodedMessages))
-	s.Require().Equal(message, decodedMessages[0].TransportMessage)
-	s.Require().Equal(encodedPayload, decodedMessages[0].DecryptedPayload)
-	s.Require().Equal(&privateKey.PublicKey, decodedMessages[0].SigPubKey())
-	s.Require().Equal(protocol.MessageID(&privateKey.PublicKey, encodedPayload), decodedMessages[0].ID)
-	s.Require().Equal(nil, decodedMessages[0].ParsedMessage)
-}
-
 func (s *MessageProcessorSuite) TestHandleDecodedMessagesWrapped() {
 	relayerKey, err := crypto.GenerateKey()
 	s.Require().NoError(err)
@@ -195,7 +153,6 @@ func (s *MessageProcessorSuite) TestHandleDecodedMessagesDatasync() {
 
 	dataSyncMessage := datasyncproto.Payload{
 		Messages: []*datasyncproto.Message{
-			{Body: encodedPayload},
 			{Body: wrappedPayload},
 		},
 	}
@@ -209,18 +166,12 @@ func (s *MessageProcessorSuite) TestHandleDecodedMessagesDatasync() {
 	s.Require().NoError(err)
 
 	// We send two messages, the unwrapped one will be attributed to the relayer, while the wrapped one will be attributed to the author
-	s.Require().Equal(2, len(decodedMessages))
-	s.Require().Equal(&relayerKey.PublicKey, decodedMessages[0].SigPubKey())
-	s.Require().Equal(protocol.MessageID(&relayerKey.PublicKey, encodedPayload), decodedMessages[0].ID)
+	s.Require().Equal(1, len(decodedMessages))
+	s.Require().Equal(&authorKey.PublicKey, decodedMessages[0].SigPubKey())
+	s.Require().Equal(protocol.MessageID(&authorKey.PublicKey, wrappedPayload), decodedMessages[0].ID)
 	s.Require().Equal(encodedPayload, decodedMessages[0].DecryptedPayload)
 	s.Require().Equal(s.testMessage, decodedMessages[0].ParsedMessage)
 	s.Require().Equal(protocol.MessageT, decodedMessages[0].MessageType)
-
-	s.Require().Equal(&authorKey.PublicKey, decodedMessages[1].SigPubKey())
-	s.Require().Equal(protocol.MessageID(&authorKey.PublicKey, wrappedPayload), decodedMessages[1].ID)
-	s.Require().Equal(encodedPayload, decodedMessages[1].DecryptedPayload)
-	s.Require().Equal(s.testMessage, decodedMessages[1].ParsedMessage)
-	s.Require().Equal(protocol.MessageT, decodedMessages[1].MessageType)
 }
 
 func (s *MessageProcessorSuite) TestHandleDecodedMessagesDatasyncEncrypted() {
@@ -238,7 +189,6 @@ func (s *MessageProcessorSuite) TestHandleDecodedMessagesDatasyncEncrypted() {
 
 	dataSyncMessage := datasyncproto.Payload{
 		Messages: []*datasyncproto.Message{
-			&datasyncproto.Message{Body: encodedPayload},
 			&datasyncproto.Message{Body: wrappedPayload},
 		},
 	}
@@ -276,16 +226,10 @@ func (s *MessageProcessorSuite) TestHandleDecodedMessagesDatasyncEncrypted() {
 
 	// We send two messages, the unwrapped one will be attributed to the relayer,
 	// while the wrapped one will be attributed to the author.
-	s.Require().Equal(2, len(decodedMessages))
-	s.Require().Equal(&relayerKey.PublicKey, decodedMessages[0].SigPubKey())
-	s.Require().Equal(protocol.MessageID(&relayerKey.PublicKey, encodedPayload), decodedMessages[0].ID)
+	s.Require().Equal(1, len(decodedMessages))
+	s.Require().Equal(&authorKey.PublicKey, decodedMessages[0].SigPubKey())
+	s.Require().Equal(protocol.MessageID(&authorKey.PublicKey, wrappedPayload), decodedMessages[0].ID)
 	s.Require().Equal(encodedPayload, decodedMessages[0].DecryptedPayload)
 	s.Require().Equal(s.testMessage, decodedMessages[0].ParsedMessage)
 	s.Require().Equal(protocol.MessageT, decodedMessages[0].MessageType)
-
-	s.Require().Equal(&authorKey.PublicKey, decodedMessages[1].SigPubKey())
-	s.Require().Equal(protocol.MessageID(&authorKey.PublicKey, wrappedPayload), decodedMessages[1].ID)
-	s.Require().Equal(encodedPayload, decodedMessages[1].DecryptedPayload)
-	s.Require().Equal(s.testMessage, decodedMessages[1].ParsedMessage)
-	s.Require().Equal(protocol.MessageT, decodedMessages[1].MessageType)
 }

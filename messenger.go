@@ -53,13 +53,6 @@ type Messenger struct {
 }
 
 type featureFlags struct {
-	genericDiscoveryTopicEnabled bool
-	// sendV1Messages indicates whether we should send
-	// messages compatible only with V1 and later.
-	// V1 messages adds additional wrapping
-	// which contains a signature and payload.
-	sendV1Messages bool
-
 	// datasync indicates whether direct messages should be sent exclusively
 	// using datasync, breaking change for non-v1 clients. Public messages
 	// are not impacted
@@ -117,13 +110,6 @@ func WithCustomLogger(logger *zap.Logger) Option {
 	}
 }
 
-func WithGenericDiscoveryTopicSupport() Option {
-	return func(c *config) error {
-		c.featureFlags.genericDiscoveryTopicEnabled = true
-		return nil
-	}
-}
-
 func WithMessagesPersistenceEnabled() Option {
 	return func(c *config) error {
 		c.messagesPersistenceEnabled = true
@@ -141,13 +127,6 @@ func WithDatabaseConfig(dbPath, dbKey string) Option {
 func WithDatabase(db *sql.DB) Option {
 	return func(c *config) error {
 		c.db = db
-		return nil
-	}
-}
-
-func WithSendV1Messages() Option {
-	return func(c *config) error {
-		c.featureFlags.sendV1Messages = true
 		return nil
 	}
 }
@@ -262,7 +241,6 @@ func NewMessenger(
 		nil,
 		c.envelopesMonitorConfig,
 		logger,
-		transport.SetGenericDiscoveryTopicSupport(c.featureFlags.genericDiscoveryTopicEnabled),
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create a WhisperServiceTransport")

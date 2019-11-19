@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package applicationmetadata;
+package protobuf;
 
 message SyncContact {
   // The public key of the contact to be synced
@@ -64,32 +64,38 @@ message ContactRequest {
 message GroupChatEvent {
   // Lamport timestamp of the event
   uint64 clock = 1;
-  // The data of the event
-  oneof data {
-    // List of public keys of objects of the action
-    string members = 2;
-    // Name of the chat for the CHAT_CREATED/NAME_CHANGED event types
-    string name = 3;
-  }
+  // List of public keys of objects of the action
+  repeated string members = 2;
+  // Name of the chat for the CHAT_CREATED/NAME_CHANGED event types
+  string name = 3;
+  // The type of the event
+  EventType type = 4;
 
   enum EventType {
     CHAT_CREATED = 0;
     NAME_CHANGED = 1;
-    MEMBER_ADDED = 2;
+    MEMBERS_ADDED = 2;
     MEMBER_JOINED = 3;
     MEMBER_REMOVED = 4;
-    ADMIN_ADDED = 5;
+    ADMINS_ADDED = 5;
     ADMIN_REMOVED = 6;
   }
 }
 
-message MembershipUpdate {
+message MembershipUpdateMessage {
   // The chat id of the private group chat
   string chat_id = 1;
+  // A list of updates for this group chat
+  repeated MembershipUpdate updates = 2;
+  // An optional chat message
+  ChatMessage message = 3;
+}
+
+message MembershipUpdate {
   // Signature of the concatenated array bytes of the events
-  string signature = 2;
+  string signature = 1;
   // The protobuf encoded events
-  repeated bytes events = 3;
+  repeated bytes events = 2;
 }
 
 message ChatMessage {
@@ -130,16 +136,27 @@ message ChatMessage {
   }
 }
 
-message Message {
+message ApplicationMetadataMessage {
   // Signature of the payload field
   bytes signature = 1;
   // This is the encoded protobuf of the application level message
   bytes payload = 2;
+
+  // The type of protobuf message sent
+  MessageType message_type = 3;
+
+  enum MessageType {
+    TEXT_MESSAGE = 0;
+    CONTACT_REQUEST = 1;
+    MEMBERSHIP_UPDATE = 2;
+    PAIR_INSTALLATION = 3;
+    SYNC_INSTALLATION = 4;
+  }
 }
 
 message StatusMessage {
   oneof payload {
-    Message application_metadata_message = 1;
+    ApplicationMetadataMessage application_metadata_message = 1;
     // Datasync messages will contain an array of Message
     bytes datasync_message = 2;
   }
