@@ -4,7 +4,7 @@ import (
 	"crypto/ecdsa"
 	"log"
 
-	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/status-im/status-eth-node/crypto"
 	"github.com/golang/protobuf/proto"
 	"github.com/jinzhu/copier"
 	"github.com/pkg/errors"

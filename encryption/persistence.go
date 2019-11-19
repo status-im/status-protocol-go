@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"strings"
 
-	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/status-im/status-eth-node/crypto"
 	dr "github.com/status-im/doubleratchet"
 
 	ecrypto "github.com/status-im/status-protocol-go/crypto"

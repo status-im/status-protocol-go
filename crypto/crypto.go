@@ -9,7 +9,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/status-im/status-eth-node/crypto"
 )
 
 const (

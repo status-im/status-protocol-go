@@ -8,7 +8,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/status-im/status-eth-node/crypto"
 	"github.com/pkg/errors"
 
 	"github.com/status-im/status-protocol-go/encryption/multidevice"

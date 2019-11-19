@@ -5,7 +5,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 
-	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/status-im/status-eth-node/crypto"
 	"github.com/status-im/status-eth-node/types"
 	protocol "github.com/status-im/status-protocol-go/v1"
 )

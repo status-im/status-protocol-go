@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/status-im/status-eth-node/crypto"
 	"github.com/pkg/errors"
 	whispertypes "github.com/status-im/status-eth-node/types/whisper"
 	"go.uber.org/zap"

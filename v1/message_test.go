@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/status-im/status-eth-node/crypto"
 	"github.com/status-im/status-eth-node/types"
 	"github.com/stretchr/testify/require"
 )

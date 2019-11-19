@@ -6,8 +6,8 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"encoding/hex"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/status-im/status-eth-node/crypto"
 	ens "github.com/wealdtech/go-ens/v3"
 	"go.uber.org/zap"
 	"math/big"
@@ -40,7 +40,7 @@ func NewVerifier(logger *zap.Logger) *ENSVerifier {
 	return &ENSVerifier{logger: logger}
 }
 
-func (m *ENSVerifier) verifyENSName(ensInfo ENSDetails, ethclient *ethclient.Client) ENSResponse {
+func (m *ENSVerifier) verifyENSName(ensInfo ENSDetails, ethclient *ethclient.Client) ENSResponse { // TODO: replace ethclient.Client usage so we don't depend on Geth directly
 	publicKeyStr := ensInfo.PublicKeyString
 	ensName := ensInfo.Name
 	m.logger.Info("Resolving ENS name", zap.String("name", ensName), zap.String("publicKey", publicKeyStr))

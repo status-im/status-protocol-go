@@ -166,8 +166,10 @@ github.com/status-im/migrate/v4
 github.com/status-im/migrate/v4/database/sqlcipher
 github.com/status-im/migrate/v4/internal/url
 github.com/status-im/migrate/v4/source/go_bindata
-# github.com/status-im/status-eth-node v0.0.0-20191119133353-5cbb7e8e13f1
+# github.com/status-im/status-eth-node v0.0.0-20191119163418-a0046b71b787
 github.com/status-im/status-eth-node/bridge/geth
+github.com/status-im/status-eth-node/crypto
+github.com/status-im/status-eth-node/crypto/ecies
 github.com/status-im/status-eth-node/types
 github.com/status-im/status-eth-node/types/whisper
 # github.com/status-im/whisper v1.5.2

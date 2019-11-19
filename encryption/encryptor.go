@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	ecrypto "github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/crypto/ecies"
+	ecrypto "github.com/status-im/status-eth-node/crypto"
+	"github.com/status-im/status-eth-node/crypto/ecies"
 	dr "github.com/status-im/doubleratchet"
 	"go.uber.org/zap"
 

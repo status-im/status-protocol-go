@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/status-im/status-eth-node/crypto"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 

@@ -7,7 +7,7 @@ import (
 
 	"github.com/status-im/status-protocol-go/tt"
 
-	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/status-im/status-eth-node/crypto"
 	"github.com/status-im/status-protocol-go/sqlite"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"

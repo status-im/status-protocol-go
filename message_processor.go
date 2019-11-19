@@ -6,7 +6,7 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/status-im/status-eth-node/crypto"
 	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
 	"github.com/status-im/status-protocol-go/datasync"

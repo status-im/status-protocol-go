@@ -21,7 +21,7 @@ require (
 	github.com/russolsen/transit v0.0.0-20180705123435-0794b4c4505a
 	github.com/status-im/doubleratchet v3.0.0+incompatible
 	github.com/status-im/migrate/v4 v4.6.2-status.2
-	github.com/status-im/status-eth-node v0.0.0-20191119133353-5cbb7e8e13f1
+	github.com/status-im/status-eth-node v0.0.0-20191119163418-a0046b71b787
 	github.com/status-im/whisper v1.5.2
 	github.com/stretchr/testify v1.4.0
 	github.com/vacp2p/mvds v0.0.23

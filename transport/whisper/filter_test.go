@@ -12,7 +12,7 @@ import (
 	"github.com/status-im/status-protocol-go/sqlite"
 	"github.com/status-im/status-protocol-go/tt"
 
-	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/status-im/status-eth-node/crypto"
 	_ "github.com/mutecomm/go-sqlcipher"
 	whisper "github.com/status-im/whisper/whisperv6"
 	"github.com/stretchr/testify/suite"

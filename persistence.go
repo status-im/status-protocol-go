@@ -8,7 +8,7 @@ import (
 	"encoding/hex"
 	"time"
 
-	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/status-im/status-eth-node/crypto"
 	"github.com/pkg/errors"
 
 	protocol "github.com/status-im/status-protocol-go/v1"
@@ -442,8 +442,8 @@ func (db sqlitePersistence) Messages(from, to time.Time) (result []*protocol.Mes
 		SELECT
 			id,
 			chat_id,
-			content_type, 
-			message_type, 
+			content_type,
+			message_type,
 			text,
 			clock,
 			timestamp,
@@ -452,7 +452,7 @@ func (db sqlitePersistence) Messages(from, to time.Time) (result []*protocol.Mes
 			public_key,
 			flags
 		FROM user_messages
-		WHERE timestamp >= ? AND timestamp <= ? 
+		WHERE timestamp >= ? AND timestamp <= ?
 		ORDER BY timestamp`,
 		protocol.TimestampInMsFromTime(from),
 		protocol.TimestampInMsFromTime(to),
@@ -502,8 +502,8 @@ func (db sqlitePersistence) SaveMessages(messages []*protocol.Message) (last int
 	stmt, err := tx.Prepare(`
 		INSERT OR IGNORE INTO user_messages(
 			id,
-			chat_id, 
-			content_type, 
+			chat_id,
+			content_type,
 			message_type,
 			text,
 			clock,

@@ -7,11 +7,11 @@ import (
 	"database/sql"
 	"sync"
 
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	whispertypes "github.com/status-im/status-eth-node/types/whisper"
+	"github.com/status-im/status-eth-node/crypto"
   "github.com/status-im/status-eth-node/types"
 )
 

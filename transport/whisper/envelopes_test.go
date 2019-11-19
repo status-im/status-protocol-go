@@ -5,8 +5,8 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/status-im/status-eth-node/crypto"
 	"github.com/status-im/status-eth-node/types"
 	whispertypes "github.com/status-im/status-eth-node/types/whisper"
 	"github.com/stretchr/testify/suite"
