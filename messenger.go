@@ -609,12 +609,12 @@ func timestampInMs() uint64 {
 	return uint64(time.Now().UnixNano()) / (uint64(time.Millisecond) / uint64(time.Nanosecond))
 }
 
-func (m *Messenger) SendChatMessage(ctx context.Context, chatID string, text string, responseTo string, ensName string, contentType protobuf.ChatMessage_ContentType) (*MessengerResponse, error) {
-	logger := m.logger.With(zap.String("site", "Send"), zap.String("chatID", chatID))
-	var response *MessengerResponse
+func (m *Messenger) SendChatMessage(ctx context.Context, message *protocol.Message) (*MessengerResponse, error) {
+	logger := m.logger.With(zap.String("site", "Send"), zap.String("chatID", message.ChatId))
+	var response MessengerResponse
 
 	// A valid added chat is required.
-	chat, err := m.chatByID(chatID)
+	chat, err := m.chatByID(message.ChatId)
 	if err != nil {
 		return nil, err
 	}
@@ -627,24 +627,18 @@ func (m *Messenger) SendChatMessage(ctx context.Context, chatID string, text str
 		clock = clock + 1
 	}
 
-	message := protobuf.ChatMessage{
-		ChatId:      chatID,
-		Text:        text,
-		Clock:       clock,
-		ResponseTo:  responseTo,
-		EnsName:     ensName,
-		ContentType: contentType,
-	}
+	message.Clock = clock
+	message.Timestamp = timestamp
 
 	responseMessage := &Message{
 		From:             hex.EncodeToString(crypto.FromECDSAPub(&m.identity.PublicKey)),
 		WhisperTimestamp: timestamp,
 		Timestamp:        timestamp,
-		ContentType:      int32(contentType),
-		ChatID:           chatID,
+		ContentType:      int32(message.ContentType),
+		ChatID:           message.ChatId,
 		ClockValue:       clock,
 		Seen:             true,
-		ReplyTo:          responseTo,
+		ReplyTo:          message.ResponseTo,
 		OutgoingStatus:   "sending",
 	}
 
@@ -657,7 +651,7 @@ func (m *Messenger) SendChatMessage(ctx context.Context, chatID string, text str
 		message.MessageType = protobuf.ChatMessage_ONE_TO_ONE
 		responseMessage.MessageType = int32(message.MessageType)
 		responseMessage.To = publicKey
-		encodedMessage, err := proto.Marshal(&message)
+		encodedMessage, err := proto.Marshal(message)
 		if err != nil {
 			return nil, err
 		}
@@ -671,7 +665,7 @@ func (m *Messenger) SendChatMessage(ctx context.Context, chatID string, text str
 		logger.Debug("sending public message", zap.String("chatName", chat.Name))
 		message.MessageType = protobuf.ChatMessage_PUBLIC_GROUP
 		responseMessage.MessageType = int32(message.MessageType)
-		encodedMessage, err := proto.Marshal(&message)
+		encodedMessage, err := proto.Marshal(message)
 		if err != nil {
 			return nil, err
 		}
@@ -685,7 +679,7 @@ func (m *Messenger) SendChatMessage(ctx context.Context, chatID string, text str
 		logger.Debug("sending public message", zap.String("chatName", chat.Name))
 		message.MessageType = protobuf.ChatMessage_PRIVATE_GROUP
 		responseMessage.MessageType = int32(message.MessageType)
-		encodedMessage, err := proto.Marshal(&message)
+		encodedMessage, err := proto.Marshal(message)
 		if err != nil {
 			return nil, err
 		}
@@ -700,14 +694,14 @@ func (m *Messenger) SendChatMessage(ctx context.Context, chatID string, text str
 		return nil, errors.New("chat is neither public nor private")
 	}
 	chat.LastClockValue = clock
-	chat.LastMessageContent = text
-	chat.LastMessageContentType = int32(contentType)
+	chat.LastMessageContent = message.Text
+	chat.LastMessageContentType = int32(message.ContentType)
 	chat.LastMessageClockValue = int64(clock)
 	if err := m.SaveChat(*chat); err != nil {
 		return nil, err
 	}
 	content, err := json.Marshal(protocol.PrepareContent(protocol.Content{
-		Text: text,
+		Text: message.Text,
 	}))
 	if err != nil {
 		return nil, err
@@ -717,7 +711,7 @@ func (m *Messenger) SendChatMessage(ctx context.Context, chatID string, text str
 
 	response.Chats = []*Chat{chat}
 	response.Messages = []*Message{responseMessage}
-	return response, nil
+	return &response, nil
 }
 
 func (m *Messenger) Send(ctx context.Context, chatID string, data []byte) ([][]byte, error) {

@@ -73,6 +73,31 @@ func (m *Message) MarshalJSON() ([]byte, error) {
 	return json.Marshal(item)
 }
 
+func (m *Message) UnmarshalJSON(data []byte) error {
+	type Alias Message
+	aux := &struct {
+		*Alias
+		ResponseTo  string                           `json:"responseTo"`
+		EnsName     string                           `json:"ensName"`
+		ChatID      string                           `json:"chatId"`
+		Sticker     *protobuf.StickerMessage         `json:"sticker"`
+		ContentType protobuf.ChatMessage_ContentType `json:"contentType"`
+	}{
+		Alias: (*Alias)(m),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	if aux.ContentType == protobuf.ChatMessage_STICKER {
+		m.Payload = &protobuf.ChatMessage_Sticker{Sticker: aux.Sticker}
+	}
+	m.ResponseTo = aux.ResponseTo
+	m.EnsName = aux.EnsName
+	m.ChatId = aux.ChatID
+	m.ContentType = aux.ContentType
+	return nil
+}
+
 // createTextMessage creates a Message.
 func createTextMessage(data []byte, lastClock int64, chatID string, messageType protobuf.ChatMessage_MessageType) Message {
 	text := strings.TrimSpace(string(data))

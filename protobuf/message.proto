@@ -98,6 +98,11 @@ message MembershipUpdate {
   repeated bytes events = 2;
 }
 
+message StickerMessage {
+  string hash = 1;
+  int32 pack = 2;
+}
+
 message ChatMessage {
   // Lamport timestamp of the chat message
   uint64 clock = 1;
@@ -120,6 +125,10 @@ message ChatMessage {
   MessageType message_type = 7;
   // The type of the content of the message
   ContentType content_type = 8;
+
+  oneof payload {
+    StickerMessage sticker = 9;
+  }
 
   enum MessageType {
     ONE_TO_ONE = 0;
