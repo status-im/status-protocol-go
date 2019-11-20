@@ -5,6 +5,7 @@ go 1.13
 require (
 	github.com/aristanetworks/goarista v0.0.0-20190704150520-f44d68189fd7 // indirect
 	github.com/cenkalti/backoff/v3 v3.0.0
+	github.com/elastic/gosigar v0.10.5 // indirect
 	github.com/ethereum/go-ethereum v1.9.5
 	github.com/golang/protobuf v1.3.2
 	github.com/gomarkdown/markdown v0.0.0-20191113114344-af599402d015
@@ -21,12 +22,11 @@ require (
 	github.com/russolsen/transit v0.0.0-20180705123435-0794b4c4505a
 	github.com/status-im/doubleratchet v3.0.0+incompatible
 	github.com/status-im/migrate/v4 v4.6.2-status.2
-	github.com/status-im/status-eth-node v0.0.0-20191119163418-a0046b71b787
+	github.com/status-im/status-eth-node v0.0.0-20191120100713-5053b0b6835b
 	github.com/status-im/whisper v1.5.2
 	github.com/stretchr/testify v1.4.0
 	github.com/vacp2p/mvds v0.0.23
-	github.com/wealdtech/go-ens/v3 v3.0.7
-	go.uber.org/zap v1.10.0
+	go.uber.org/zap v1.13.0
 	golang.org/x/crypto v0.0.0-20191029031824-8986dd9e96cf
 	golang.org/x/net v0.0.0-20190930134127-c5a3c61f89f3 // indirect
 	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e // indirect

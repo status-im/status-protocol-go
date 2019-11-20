@@ -5,7 +5,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/status-im/status-eth-node/types"
-	whispertypes "github.com/status-im/status-eth-node/types/whisper"
 	whisper "github.com/status-im/whisper/whisperv6"
 )
 
@@ -13,8 +12,8 @@ type gethPublicWhisperAPIWrapper struct {
 	publicWhisperAPI *whisper.PublicWhisperAPI
 }
 
-// NewGethPublicWhisperAPIWrapper returns an object that wraps Geth's PublicWhisperAPI in a whispertypes interface
-func NewGethPublicWhisperAPIWrapper(publicWhisperAPI *whisper.PublicWhisperAPI) whispertypes.PublicWhisperAPI {
+// NewGethPublicWhisperAPIWrapper returns an object that wraps Geth's PublicWhisperAPI in a types interface
+func NewGethPublicWhisperAPIWrapper(publicWhisperAPI *whisper.PublicWhisperAPI) types.PublicWhisperAPI {
 	if publicWhisperAPI == nil {
 		panic("publicWhisperAPI cannot be nil")
 	}
@@ -41,7 +40,7 @@ func (w *gethPublicWhisperAPIWrapper) DeleteKeyPair(ctx context.Context, key str
 
 // NewMessageFilter creates a new filter that can be used to poll for
 // (new) messages that satisfy the given criteria.
-func (w *gethPublicWhisperAPIWrapper) NewMessageFilter(req whispertypes.Criteria) (string, error) {
+func (w *gethPublicWhisperAPIWrapper) NewMessageFilter(req types.Criteria) (string, error) {
 	topics := make([]whisper.TopicType, len(req.Topics))
 	for index, tt := range req.Topics {
 		topics[index] = whisper.TopicType(tt)
@@ -60,19 +59,19 @@ func (w *gethPublicWhisperAPIWrapper) NewMessageFilter(req whispertypes.Criteria
 
 // GetFilterMessages returns the messages that match the filter criteria and
 // are received between the last poll and now.
-func (w *gethPublicWhisperAPIWrapper) GetFilterMessages(id string) ([]*whispertypes.Message, error) {
+func (w *gethPublicWhisperAPIWrapper) GetFilterMessages(id string) ([]*types.Message, error) {
 	msgs, err := w.publicWhisperAPI.GetFilterMessages(id)
 	if err != nil {
 		return nil, err
 	}
 
-	wrappedMsgs := make([]*whispertypes.Message, len(msgs))
+	wrappedMsgs := make([]*types.Message, len(msgs))
 	for index, msg := range msgs {
-		wrappedMsgs[index] = &whispertypes.Message{
+		wrappedMsgs[index] = &types.Message{
 			Sig:       msg.Sig,
 			TTL:       msg.TTL,
 			Timestamp: msg.Timestamp,
-			Topic:     whispertypes.TopicType(msg.Topic),
+			Topic:     types.TopicType(msg.Topic),
 			Payload:   msg.Payload,
 			Padding:   msg.Padding,
 			PoW:       msg.PoW,
@@ -86,7 +85,7 @@ func (w *gethPublicWhisperAPIWrapper) GetFilterMessages(id string) ([]*whisperty
 
 // Post posts a message on the Whisper network.
 // returns the hash of the message in case of success.
-func (w *gethPublicWhisperAPIWrapper) Post(ctx context.Context, req whispertypes.NewMessage) ([]byte, error) {
+func (w *gethPublicWhisperAPIWrapper) Post(ctx context.Context, req types.NewMessage) ([]byte, error) {
 	msg := whisper.NewMessage{
 		SymKeyID:   req.SymKeyID,
 		PublicKey:  req.PublicKey,

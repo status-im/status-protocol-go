@@ -4,7 +4,7 @@ import (
 	"crypto/ecdsa"
 	"time"
 
-	whispertypes "github.com/status-im/status-eth-node/types/whisper"
+	"github.com/status-im/status-eth-node/types"
 	whisper "github.com/status-im/whisper/whisperv6"
 )
 
@@ -12,8 +12,8 @@ type gethWhisperWrapper struct {
 	whisper *whisper.Whisper
 }
 
-// NewGethWhisperWrapper returns an object that wraps Geth's Whisper in a whispertypes interface
-func NewGethWhisperWrapper(w *whisper.Whisper) whispertypes.Whisper {
+// NewGethWhisperWrapper returns an object that wraps Geth's Whisper in a types interface
+func NewGethWhisperWrapper(w *whisper.Whisper) types.Whisper {
 	if w == nil {
 		panic("w cannot be nil")
 	}
@@ -24,11 +24,11 @@ func NewGethWhisperWrapper(w *whisper.Whisper) whispertypes.Whisper {
 }
 
 // GetGethWhisperFrom retrieves the underlying whisper Whisper struct from a wrapped Whisper interface
-func GetGethWhisperFrom(m whispertypes.Whisper) *whisper.Whisper {
+func GetGethWhisperFrom(m types.Whisper) *whisper.Whisper {
 	return m.(*gethWhisperWrapper).whisper
 }
 
-func (w *gethWhisperWrapper) PublicWhisperAPI() whispertypes.PublicWhisperAPI {
+func (w *gethWhisperWrapper) PublicWhisperAPI() types.PublicWhisperAPI {
 	return NewGethPublicWhisperAPIWrapper(whisper.NewPublicWhisperAPI(w.whisper))
 }
 
@@ -59,7 +59,7 @@ func (w *gethWhisperWrapper) SetTimeSource(timesource func() time.Time) {
 	w.whisper.SetTimeSource(timesource)
 }
 
-func (w *gethWhisperWrapper) SubscribeEnvelopeEvents(eventsProxy chan<- whispertypes.EnvelopeEvent) whispertypes.Subscription {
+func (w *gethWhisperWrapper) SubscribeEnvelopeEvents(eventsProxy chan<- types.EnvelopeEvent) types.Subscription {
 	events := make(chan whisper.EnvelopeEvent, 100) // must be buffered to prevent blocking whisper
 	go func() {
 		for e := range events {
@@ -112,7 +112,7 @@ func (w *gethWhisperWrapper) GetSymKey(id string) ([]byte, error) {
 	return w.whisper.GetSymKey(id)
 }
 
-func (w *gethWhisperWrapper) Subscribe(opts *whispertypes.SubscriptionOptions) (string, error) {
+func (w *gethWhisperWrapper) Subscribe(opts *types.SubscriptionOptions) (string, error) {
 	var (
 		err     error
 		keyAsym *ecdsa.PrivateKey
@@ -146,7 +146,7 @@ func (w *gethWhisperWrapper) Subscribe(opts *whispertypes.SubscriptionOptions) (
 	return id, nil
 }
 
-func (w *gethWhisperWrapper) GetFilter(id string) whispertypes.Filter {
+func (w *gethWhisperWrapper) GetFilter(id string) types.Filter {
 	return NewGethFilterWrapper(w.whisper.GetFilter(id), id)
 }
 
@@ -154,7 +154,7 @@ func (w *gethWhisperWrapper) Unsubscribe(id string) error {
 	return w.whisper.Unsubscribe(id)
 }
 
-func (w *gethWhisperWrapper) createFilterWrapper(id string, keyAsym *ecdsa.PrivateKey, keySym []byte, pow float64, topics [][]byte) (whispertypes.Filter, error) {
+func (w *gethWhisperWrapper) createFilterWrapper(id string, keyAsym *ecdsa.PrivateKey, keySym []byte, pow float64, topics [][]byte) (types.Filter, error) {
 	return NewGethFilterWrapper(&whisper.Filter{
 		KeyAsym:  keyAsym,
 		KeySym:   keySym,
@@ -165,7 +165,7 @@ func (w *gethWhisperWrapper) createFilterWrapper(id string, keyAsym *ecdsa.Priva
 	}, id), nil
 }
 
-func (w *gethWhisperWrapper) SendMessagesRequest(peerID []byte, r whispertypes.MessagesRequest) error {
+func (w *gethWhisperWrapper) SendMessagesRequest(peerID []byte, r types.MessagesRequest) error {
 	return w.whisper.SendMessagesRequest(peerID, whisper.MessagesRequest{
 		ID:     r.ID,
 		From:   r.From,
@@ -181,11 +181,11 @@ func (w *gethWhisperWrapper) SendMessagesRequest(peerID []byte, r whispertypes.M
 // request and respond with a number of peer-to-peer messages (possibly expired),
 // which are not supposed to be forwarded any further.
 // The whisper protocol is agnostic of the format and contents of envelope.
-func (w *gethWhisperWrapper) RequestHistoricMessagesWithTimeout(peerID []byte, envelope whispertypes.Envelope, timeout time.Duration) error {
+func (w *gethWhisperWrapper) RequestHistoricMessagesWithTimeout(peerID []byte, envelope types.Envelope, timeout time.Duration) error {
 	return w.whisper.RequestHistoricMessagesWithTimeout(peerID, GetGethEnvelopeFrom(envelope), timeout)
 }
 
 // SyncMessages can be sent between two Mail Servers and syncs envelopes between them.
-func (w *gethWhisperWrapper) SyncMessages(peerID []byte, req whispertypes.SyncMailRequest) error {
+func (w *gethWhisperWrapper) SyncMessages(peerID []byte, req types.SyncMailRequest) error {
 	return w.whisper.SyncMessages(peerID, *GetGethSyncMailRequestFrom(&req))
 }

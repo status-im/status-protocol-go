@@ -2,12 +2,11 @@ package gethbridge
 
 import (
 	"github.com/status-im/status-eth-node/types"
-	whispertypes "github.com/status-im/status-eth-node/types/whisper"
 	whisper "github.com/status-im/whisper/whisperv6"
 )
 
-// NewGethEnvelopeEventWrapper returns a whispertypes.EnvelopeEvent object that mimics Geth's EnvelopeEvent
-func NewGethEnvelopeEventWrapper(envelopeEvent *whisper.EnvelopeEvent) *whispertypes.EnvelopeEvent {
+// NewGethEnvelopeEventWrapper returns a types.EnvelopeEvent object that mimics Geth's EnvelopeEvent
+func NewGethEnvelopeEventWrapper(envelopeEvent *whisper.EnvelopeEvent) *types.EnvelopeEvent {
 	if envelopeEvent == nil {
 		panic("envelopeEvent should not be nil")
 	}
@@ -15,7 +14,7 @@ func NewGethEnvelopeEventWrapper(envelopeEvent *whisper.EnvelopeEvent) *whispert
 	wrappedData := envelopeEvent.Data
 	switch data := envelopeEvent.Data.(type) {
 	case []whisper.EnvelopeError:
-		wrappedData := make([]whispertypes.EnvelopeError, len(data))
+		wrappedData := make([]types.EnvelopeError, len(data))
 		for index, envError := range data {
 			wrappedData[index] = *NewGethEnvelopeErrorWrapper(&envError)
 		}
@@ -24,8 +23,8 @@ func NewGethEnvelopeEventWrapper(envelopeEvent *whisper.EnvelopeEvent) *whispert
 	case whisper.SyncEventResponse:
 		wrappedData = NewGethSyncEventResponseWrapper(data)
 	}
-	return &whispertypes.EnvelopeEvent{
-		Event: whispertypes.EventType(envelopeEvent.Event),
+	return &types.EnvelopeEvent{
+		Event: types.EventType(envelopeEvent.Event),
 		Hash:  types.Hash(envelopeEvent.Hash),
 		Batch: types.Hash(envelopeEvent.Batch),
 		Peer:  types.EnodeID(envelopeEvent.Peer),

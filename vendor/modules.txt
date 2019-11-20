@@ -1,3 +1,5 @@
+# github.com/BurntSushi/toml v0.3.1
+github.com/BurntSushi/toml
 # github.com/allegro/bigcache v1.2.0
 github.com/allegro/bigcache
 github.com/allegro/bigcache/queue
@@ -62,9 +64,13 @@ github.com/ethereum/go-ethereum/ethdb
 github.com/ethereum/go-ethereum/ethdb/leveldb
 github.com/ethereum/go-ethereum/ethdb/memorydb
 github.com/ethereum/go-ethereum/event
+github.com/ethereum/go-ethereum/internal/debug
 github.com/ethereum/go-ethereum/internal/ethapi
 github.com/ethereum/go-ethereum/log
 github.com/ethereum/go-ethereum/metrics
+github.com/ethereum/go-ethereum/metrics/exp
+github.com/ethereum/go-ethereum/metrics/prometheus
+github.com/ethereum/go-ethereum/node
 github.com/ethereum/go-ethereum/p2p
 github.com/ethereum/go-ethereum/p2p/discover
 github.com/ethereum/go-ethereum/p2p/discv5
@@ -78,6 +84,9 @@ github.com/ethereum/go-ethereum/rpc
 github.com/ethereum/go-ethereum/signer/core
 github.com/ethereum/go-ethereum/signer/storage
 github.com/ethereum/go-ethereum/trie
+# github.com/fjl/memsize v0.0.0-20180929194037-2a09253e352a
+github.com/fjl/memsize
+github.com/fjl/memsize/memsizeui
 # github.com/gballet/go-libpcsclite v0.0.0-20190607065134-2772fd86a8ff
 github.com/gballet/go-libpcsclite
 # github.com/go-stack/stack v1.8.0
@@ -123,6 +132,10 @@ github.com/jinzhu/copier
 github.com/karalabe/usb
 # github.com/lucasb-eyer/go-colorful v1.0.2
 github.com/lucasb-eyer/go-colorful
+# github.com/mattn/go-colorable v0.1.1
+github.com/mattn/go-colorable
+# github.com/mattn/go-isatty v0.0.7
+github.com/mattn/go-isatty
 # github.com/mattn/go-runewidth v0.0.4
 github.com/mattn/go-runewidth
 # github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
@@ -166,12 +179,13 @@ github.com/status-im/migrate/v4
 github.com/status-im/migrate/v4/database/sqlcipher
 github.com/status-im/migrate/v4/internal/url
 github.com/status-im/migrate/v4/source/go_bindata
-# github.com/status-im/status-eth-node v0.0.0-20191119163418-a0046b71b787
+# github.com/status-im/status-eth-node v0.0.0-20191120100713-5053b0b6835b
 github.com/status-im/status-eth-node/bridge/geth
+github.com/status-im/status-eth-node/bridge/geth/ens
 github.com/status-im/status-eth-node/crypto
 github.com/status-im/status-eth-node/crypto/ecies
 github.com/status-im/status-eth-node/types
-github.com/status-im/status-eth-node/types/whisper
+github.com/status-im/status-eth-node/types/ens
 # github.com/status-im/whisper v1.5.2
 github.com/status-im/whisper/whisperv6
 # github.com/steakknife/bloomfilter v0.0.0-20180922174646-6819c0d2a570
@@ -210,7 +224,7 @@ github.com/vacp2p/mvds/state/migrations
 github.com/vacp2p/mvds/store
 github.com/vacp2p/mvds/store/migrations
 github.com/vacp2p/mvds/transport
-# github.com/wealdtech/go-ens/v3 v3.0.7
+# github.com/wealdtech/go-ens/v3 v3.0.9
 github.com/wealdtech/go-ens/v3
 github.com/wealdtech/go-ens/v3/contracts/auctionregistrar
 github.com/wealdtech/go-ens/v3/contracts/baseregistrar
@@ -228,11 +242,13 @@ github.com/wealdtech/go-ens/v3/util
 github.com/wealdtech/go-multicodec
 # github.com/wsddn/go-ecdh v0.0.0-20161211032359-48726bab9208
 github.com/wsddn/go-ecdh
-# go.uber.org/atomic v1.4.0
+# go.uber.org/atomic v1.5.0
 go.uber.org/atomic
-# go.uber.org/multierr v1.1.0
+# go.uber.org/multierr v1.3.0
 go.uber.org/multierr
-# go.uber.org/zap v1.10.0
+# go.uber.org/tools v0.0.0-20190618225709-2cfd321de3ee
+go.uber.org/tools/update-license
+# go.uber.org/zap v1.13.0
 go.uber.org/zap
 go.uber.org/zap/buffer
 go.uber.org/zap/internal/bufferpool
@@ -248,6 +264,9 @@ golang.org/x/crypto/ripemd160
 golang.org/x/crypto/scrypt
 golang.org/x/crypto/sha3
 golang.org/x/crypto/ssh/terminal
+# golang.org/x/lint v0.0.0-20190930215403-16217165b5de
+golang.org/x/lint
+golang.org/x/lint/golint
 # golang.org/x/net v0.0.0-20190930134127-c5a3c61f89f3
 golang.org/x/net/context
 golang.org/x/net/html
@@ -281,7 +300,51 @@ golang.org/x/text/secure/bidirule
 golang.org/x/text/transform
 golang.org/x/text/unicode/bidi
 golang.org/x/text/unicode/norm
+# golang.org/x/tools v0.0.0-20191109212701-97ad0ed33101
+golang.org/x/tools/go/analysis
+golang.org/x/tools/go/analysis/passes/inspect
+golang.org/x/tools/go/ast/astutil
+golang.org/x/tools/go/ast/inspector
+golang.org/x/tools/go/buildutil
+golang.org/x/tools/go/gcexportdata
+golang.org/x/tools/go/internal/gcimporter
+golang.org/x/tools/go/internal/packagesdriver
+golang.org/x/tools/go/packages
+golang.org/x/tools/go/types/objectpath
+golang.org/x/tools/go/types/typeutil
+golang.org/x/tools/internal/fastwalk
+golang.org/x/tools/internal/gopathwalk
+golang.org/x/tools/internal/semver
+golang.org/x/tools/internal/span
 # gopkg.in/natefinch/npipe.v2 v2.0.0-20160621034901-c1b8fa8bdcce
 gopkg.in/natefinch/npipe.v2
+# gopkg.in/urfave/cli.v1 v1.20.0
+gopkg.in/urfave/cli.v1
 # gopkg.in/yaml.v2 v2.2.2
 gopkg.in/yaml.v2
+# honnef.co/go/tools v0.0.1-2019.2.3
+honnef.co/go/tools/arg
+honnef.co/go/tools/cmd/staticcheck
+honnef.co/go/tools/config
+honnef.co/go/tools/deprecated
+honnef.co/go/tools/facts
+honnef.co/go/tools/functions
+honnef.co/go/tools/go/types/typeutil
+honnef.co/go/tools/internal/cache
+honnef.co/go/tools/internal/passes/buildssa
+honnef.co/go/tools/internal/renameio
+honnef.co/go/tools/internal/sharedcheck
+honnef.co/go/tools/lint
+honnef.co/go/tools/lint/lintdsl
+honnef.co/go/tools/lint/lintutil
+honnef.co/go/tools/lint/lintutil/format
+honnef.co/go/tools/loader
+honnef.co/go/tools/printf
+honnef.co/go/tools/simple
+honnef.co/go/tools/ssa
+honnef.co/go/tools/ssautil
+honnef.co/go/tools/staticcheck
+honnef.co/go/tools/staticcheck/vrp
+honnef.co/go/tools/stylecheck
+honnef.co/go/tools/unused
+honnef.co/go/tools/version

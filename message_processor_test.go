@@ -12,13 +12,13 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 
+	"github.com/status-im/status-eth-node/types"
 	gethbridge "github.com/status-im/status-eth-node/bridge/geth"
 	"github.com/status-im/status-protocol-go/encryption"
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
 	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
 	"github.com/status-im/status-protocol-go/sqlite"
 	transport "github.com/status-im/status-protocol-go/transport/whisper"
-	whispertypes "github.com/status-im/status-eth-node/types/whisper"
 	protocol "github.com/status-im/status-protocol-go/v1"
 	whisper "github.com/status-im/whisper/whisperv6"
 	datasyncproto "github.com/vacp2p/mvds/protobuf"
@@ -117,7 +117,7 @@ func (s *MessageProcessorSuite) TestHandleDecodedMessagesSingle() {
 	encodedPayload, err := protocol.EncodeMessage(s.testMessage)
 	s.Require().NoError(err)
 
-	message := &whispertypes.Message{}
+	message := &types.Message{}
 	message.Sig = crypto.FromECDSAPub(&privateKey.PublicKey)
 	message.Payload = encodedPayload
 
@@ -138,7 +138,7 @@ func (s *MessageProcessorSuite) TestHandleDecodedMessagesRaw() {
 	encodedPayload, err := protocol.EncodeMessage(s.testMessage)
 	s.Require().NoError(err)
 
-	message := &whispertypes.Message{}
+	message := &types.Message{}
 	message.Sig = crypto.FromECDSAPub(&privateKey.PublicKey)
 	message.Payload = encodedPayload
 
@@ -165,7 +165,7 @@ func (s *MessageProcessorSuite) TestHandleDecodedMessagesWrapped() {
 	wrappedPayload, err := protocol.WrapMessageV1(encodedPayload, authorKey)
 	s.Require().NoError(err)
 
-	message := &whispertypes.Message{}
+	message := &types.Message{}
 	message.Sig = crypto.FromECDSAPub(&relayerKey.PublicKey)
 	message.Payload = wrappedPayload
 
@@ -201,7 +201,7 @@ func (s *MessageProcessorSuite) TestHandleDecodedMessagesDatasync() {
 	}
 	marshalledDataSyncMessage, err := proto.Marshal(&dataSyncMessage)
 	s.Require().NoError(err)
-	message := &whispertypes.Message{}
+	message := &types.Message{}
 	message.Sig = crypto.FromECDSAPub(&relayerKey.PublicKey)
 	message.Payload = marshalledDataSyncMessage
 
@@ -267,7 +267,7 @@ func (s *MessageProcessorSuite) TestHandleDecodedMessagesDatasyncEncrypted() {
 	encryptedPayload, err := proto.Marshal(messageSpec.Message)
 	s.Require().NoError(err)
 
-	message := &whispertypes.Message{}
+	message := &types.Message{}
 	message.Sig = crypto.FromECDSAPub(&relayerKey.PublicKey)
 	message.Payload = encryptedPayload
 

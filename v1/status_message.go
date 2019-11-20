@@ -4,15 +4,14 @@ import (
 	"crypto/ecdsa"
 	"log"
 
-	"github.com/status-im/status-eth-node/crypto"
 	"github.com/golang/protobuf/proto"
 	"github.com/jinzhu/copier"
 	"github.com/pkg/errors"
+	"github.com/status-im/status-eth-node/crypto"
+	"github.com/status-im/status-eth-node/types"
 	"github.com/status-im/status-protocol-go/applicationmetadata"
 	"github.com/status-im/status-protocol-go/datasync"
 	"github.com/status-im/status-protocol-go/encryption"
-	whispertypes "github.com/status-im/status-eth-node/types/whisper"
-  "github.com/status-im/status-eth-node/types"
 )
 
 type StatusMessageT int
@@ -26,7 +25,7 @@ const (
 // StatusMessage is any Status Protocol message.
 type StatusMessage struct {
 	// TransportMessage is the parsed message received from the transport layer, i.e the input
-	TransportMessage *whispertypes.Message
+	TransportMessage *types.Message
 	// MessageType is the type of application message contained
 	MessageType StatusMessageT
 	// ParsedMessage is the parsed message by the application layer, i.e the output
@@ -64,7 +63,7 @@ func (s *StatusMessage) Clone() (*StatusMessage, error) {
 	return copy, err
 }
 
-func (m *StatusMessage) HandleTransport(shhMessage *whispertypes.Message) error {
+func (m *StatusMessage) HandleTransport(shhMessage *types.Message) error {
 	publicKey, err := crypto.UnmarshalPubkey(shhMessage.Sig)
 	if err != nil {
 		return errors.Wrap(err, "failed to get signature")

@@ -8,7 +8,6 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/status-im/status-eth-node/crypto"
 	"github.com/status-im/status-eth-node/types"
-	whispertypes "github.com/status-im/status-eth-node/types/whisper"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -41,11 +40,11 @@ func (s *EnvelopesMonitorSuite) SetupTest() {
 }
 
 func (s *EnvelopesMonitorSuite) TestConfirmed() {
-	s.monitor.Add(testIDs, testHash, whispertypes.NewMessage{})
+	s.monitor.Add(testIDs, testHash, types.NewMessage{})
 	s.Contains(s.monitor.envelopes, testHash)
 	s.Equal(EnvelopePosted, s.monitor.envelopes[testHash])
-	s.monitor.handleEvent(whispertypes.EnvelopeEvent{
-		Event: whispertypes.EventEnvelopeSent,
+	s.monitor.handleEvent(types.EnvelopeEvent{
+		Event: types.EventEnvelopeSent,
 		Hash:  testHash,
 	})
 	s.Contains(s.monitor.envelopes, testHash)
@@ -57,17 +56,17 @@ func (s *EnvelopesMonitorSuite) TestConfirmedWithAcknowledge() {
 	pkey, err := crypto.GenerateKey()
 	s.Require().NoError(err)
 	node := enode.NewV4(&pkey.PublicKey, nil, 0, 0)
-	s.monitor.Add(testIDs, testHash, whispertypes.NewMessage{})
+	s.monitor.Add(testIDs, testHash, types.NewMessage{})
 	s.Contains(s.monitor.envelopes, testHash)
 	s.Equal(EnvelopePosted, s.monitor.envelopes[testHash])
-	s.monitor.handleEvent(whispertypes.EnvelopeEvent{
-		Event: whispertypes.EventEnvelopeSent,
+	s.monitor.handleEvent(types.EnvelopeEvent{
+		Event: types.EventEnvelopeSent,
 		Hash:  testHash,
 		Batch: testBatch,
 	})
 	s.Equal(EnvelopePosted, s.monitor.envelopes[testHash])
-	s.monitor.handleEvent(whispertypes.EnvelopeEvent{
-		Event: whispertypes.EventBatchAcknowledged,
+	s.monitor.handleEvent(types.EnvelopeEvent{
+		Event: types.EventBatchAcknowledged,
 		Batch: testBatch,
 		Peer:  types.EnodeID(node.ID()),
 	})
@@ -76,18 +75,18 @@ func (s *EnvelopesMonitorSuite) TestConfirmedWithAcknowledge() {
 }
 
 func (s *EnvelopesMonitorSuite) TestIgnored() {
-	s.monitor.handleEvent(whispertypes.EnvelopeEvent{
-		Event: whispertypes.EventEnvelopeSent,
+	s.monitor.handleEvent(types.EnvelopeEvent{
+		Event: types.EventEnvelopeSent,
 		Hash:  testHash,
 	})
 	s.NotContains(s.monitor.envelopes, testHash)
 }
 
 func (s *EnvelopesMonitorSuite) TestRemoved() {
-	s.monitor.Add(testIDs, testHash, whispertypes.NewMessage{})
+	s.monitor.Add(testIDs, testHash, types.NewMessage{})
 	s.Contains(s.monitor.envelopes, testHash)
-	s.monitor.handleEvent(whispertypes.EnvelopeEvent{
-		Event: whispertypes.EventEnvelopeExpired,
+	s.monitor.handleEvent(types.EnvelopeEvent{
+		Event: types.EventEnvelopeExpired,
 		Hash:  testHash,
 	})
 	s.NotContains(s.monitor.envelopes, testHash)
@@ -96,9 +95,9 @@ func (s *EnvelopesMonitorSuite) TestRemoved() {
 func (s *EnvelopesMonitorSuite) TestIgnoreNotFromMailserver() {
 	// enables filter in the tracker to drop confirmations from non-mailserver peers
 	s.monitor.mailServerConfirmation = true
-	s.monitor.Add(testIDs, testHash, whispertypes.NewMessage{})
-	s.monitor.handleEvent(whispertypes.EnvelopeEvent{
-		Event: whispertypes.EventEnvelopeSent,
+	s.monitor.Add(testIDs, testHash, types.NewMessage{})
+	s.monitor.handleEvent(types.EnvelopeEvent{
+		Event: types.EventEnvelopeSent,
 		Hash:  testHash,
 		Peer:  types.EnodeID{1}, // could be empty, doesn't impact test behaviour
 	})
@@ -109,10 +108,10 @@ func (s *EnvelopesMonitorSuite) TestReceived() {
 	s.monitor.isMailserver = func(peer types.EnodeID) bool {
 		return true
 	}
-	s.monitor.Add(testIDs, testHash, whispertypes.NewMessage{})
+	s.monitor.Add(testIDs, testHash, types.NewMessage{})
 	s.Contains(s.monitor.envelopes, testHash)
-	s.monitor.handleEvent(whispertypes.EnvelopeEvent{
-		Event: whispertypes.EventEnvelopeReceived,
+	s.monitor.handleEvent(types.EnvelopeEvent{
+		Event: types.EventEnvelopeReceived,
 		Hash:  testHash,
 	})
 	s.Require().Equal(EnvelopeSent, s.monitor.GetState(testHash))

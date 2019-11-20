@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	"github.com/status-im/status-eth-node/types"
-	whispertypes "github.com/status-im/status-eth-node/types/whisper"
 	"go.uber.org/zap"
 )
 
@@ -39,14 +38,14 @@ type EnvelopeEventsHandler interface {
 }
 
 // NewEnvelopesMonitor returns a pointer to an instance of the EnvelopesMonitor.
-func NewEnvelopesMonitor(w whispertypes.Whisper, config EnvelopesMonitorConfig) *EnvelopesMonitor {
+func NewEnvelopesMonitor(w types.Whisper, config EnvelopesMonitorConfig) *EnvelopesMonitor {
 	logger := config.Logger
 
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 
-	var whisperAPI whispertypes.PublicWhisperAPI
+	var whisperAPI types.PublicWhisperAPI
 	if w != nil {
 		whisperAPI = w.PublicWhisperAPI()
 	}
@@ -62,7 +61,7 @@ func NewEnvelopesMonitor(w whispertypes.Whisper, config EnvelopesMonitorConfig) 
 
 		// key is envelope hash (event.Hash)
 		envelopes:   map[types.Hash]EnvelopeState{},
-		messages:    map[types.Hash]*whispertypes.NewMessage{},
+		messages:    map[types.Hash]*types.NewMessage{},
 		attempts:    map[types.Hash]int{},
 		identifiers: make(map[types.Hash][][]byte),
 
@@ -73,8 +72,8 @@ func NewEnvelopesMonitor(w whispertypes.Whisper, config EnvelopesMonitorConfig) 
 
 // EnvelopesMonitor is responsible for monitoring whisper envelopes state.
 type EnvelopesMonitor struct {
-	w                      whispertypes.Whisper
-	whisperAPI             whispertypes.PublicWhisperAPI
+	w                      types.Whisper
+	whisperAPI             types.PublicWhisperAPI
 	handler                EnvelopeEventsHandler
 	mailServerConfirmation bool
 	maxAttempts            int
@@ -83,7 +82,7 @@ type EnvelopesMonitor struct {
 	envelopes map[types.Hash]EnvelopeState
 	batches   map[types.Hash]map[types.Hash]struct{}
 
-	messages    map[types.Hash]*whispertypes.NewMessage
+	messages    map[types.Hash]*types.NewMessage
 	attempts    map[types.Hash]int
 	identifiers map[types.Hash][][]byte
 
@@ -111,7 +110,7 @@ func (m *EnvelopesMonitor) Stop() {
 }
 
 // Add hash to a tracker.
-func (m *EnvelopesMonitor) Add(identifiers [][]byte, envelopeHash types.Hash, message whispertypes.NewMessage) {
+func (m *EnvelopesMonitor) Add(identifiers [][]byte, envelopeHash types.Hash, message types.NewMessage) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.envelopes[envelopeHash] = EnvelopePosted
@@ -132,7 +131,7 @@ func (m *EnvelopesMonitor) GetState(hash types.Hash) EnvelopeState {
 
 // handleEnvelopeEvents processes whisper envelope events
 func (m *EnvelopesMonitor) handleEnvelopeEvents() {
-	events := make(chan whispertypes.EnvelopeEvent, 100) // must be buffered to prevent blocking whisper
+	events := make(chan types.EnvelopeEvent, 100) // must be buffered to prevent blocking whisper
 	sub := m.w.SubscribeEnvelopeEvents(events)
 	defer func() {
 		close(events)
@@ -150,19 +149,19 @@ func (m *EnvelopesMonitor) handleEnvelopeEvents() {
 
 // handleEvent based on type of the event either triggers
 // confirmation handler or removes hash from tracker
-func (m *EnvelopesMonitor) handleEvent(event whispertypes.EnvelopeEvent) {
-	handlers := map[whispertypes.EventType]func(whispertypes.EnvelopeEvent){
-		whispertypes.EventEnvelopeSent:      m.handleEventEnvelopeSent,
-		whispertypes.EventEnvelopeExpired:   m.handleEventEnvelopeExpired,
-		whispertypes.EventBatchAcknowledged: m.handleAcknowledgedBatch,
-		whispertypes.EventEnvelopeReceived:  m.handleEventEnvelopeReceived,
+func (m *EnvelopesMonitor) handleEvent(event types.EnvelopeEvent) {
+	handlers := map[types.EventType]func(types.EnvelopeEvent){
+		types.EventEnvelopeSent:      m.handleEventEnvelopeSent,
+		types.EventEnvelopeExpired:   m.handleEventEnvelopeExpired,
+		types.EventBatchAcknowledged: m.handleAcknowledgedBatch,
+		types.EventEnvelopeReceived:  m.handleEventEnvelopeReceived,
 	}
 	if handler, ok := handlers[event.Event]; ok {
 		handler(event)
 	}
 }
 
-func (m *EnvelopesMonitor) handleEventEnvelopeSent(event whispertypes.EnvelopeEvent) {
+func (m *EnvelopesMonitor) handleEventEnvelopeSent(event types.EnvelopeEvent) {
 	if m.mailServerConfirmation {
 		if !m.isMailserver(event.Peer) {
 			return
@@ -193,7 +192,7 @@ func (m *EnvelopesMonitor) handleEventEnvelopeSent(event whispertypes.EnvelopeEv
 	}
 }
 
-func (m *EnvelopesMonitor) handleAcknowledgedBatch(event whispertypes.EnvelopeEvent) {
+func (m *EnvelopesMonitor) handleAcknowledgedBatch(event types.EnvelopeEvent) {
 	if m.mailServerConfirmation {
 		if !m.isMailserver(event.Peer) {
 			return
@@ -208,7 +207,7 @@ func (m *EnvelopesMonitor) handleAcknowledgedBatch(event whispertypes.EnvelopeEv
 		m.logger.Debug("batch is not found", zap.String("batch", event.Batch.String()))
 	}
 	m.logger.Debug("received a confirmation", zap.String("batch", event.Batch.String()), zap.String("peer", event.Peer.String()))
-	envelopeErrors, ok := event.Data.([]whispertypes.EnvelopeError)
+	envelopeErrors, ok := event.Data.([]types.EnvelopeError)
 	if event.Data != nil && !ok {
 		m.logger.Error("received unexpected data in the the confirmation event", zap.String("batch", event.Batch.String()))
 	}
@@ -220,7 +219,7 @@ func (m *EnvelopesMonitor) handleAcknowledgedBatch(event whispertypes.EnvelopeEv
 			m.logger.Warn("envelope that was posted by us is discarded", zap.String("hash", envelopeError.Hash.String()), zap.String("peer", event.Peer.String()), zap.String("error", envelopeError.Description))
 			var err error
 			switch envelopeError.Code {
-			case whispertypes.EnvelopeTimeNotSynced:
+			case types.EnvelopeTimeNotSynced:
 				err = errors.New("envelope wasn't delivered due to time sync issues")
 			}
 			m.handleEnvelopeFailure(envelopeError.Hash, err)
@@ -244,7 +243,7 @@ func (m *EnvelopesMonitor) handleAcknowledgedBatch(event whispertypes.EnvelopeEv
 	delete(m.batches, event.Batch)
 }
 
-func (m *EnvelopesMonitor) handleEventEnvelopeExpired(event whispertypes.EnvelopeEvent) {
+func (m *EnvelopesMonitor) handleEventEnvelopeExpired(event types.EnvelopeEvent) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.handleEnvelopeFailure(event.Hash, errors.New("envelope expired due to connectivity issues"))
@@ -288,7 +287,7 @@ func (m *EnvelopesMonitor) handleEnvelopeFailure(hash types.Hash, err error) {
 	}
 }
 
-func (m *EnvelopesMonitor) handleEventEnvelopeReceived(event whispertypes.EnvelopeEvent) {
+func (m *EnvelopesMonitor) handleEventEnvelopeReceived(event types.EnvelopeEvent) {
 	if m.mailServerConfirmation {
 		if !m.isMailserver(event.Peer) {
 			return

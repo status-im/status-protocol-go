@@ -7,20 +7,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/status-im/status-eth-node/crypto"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/status-im/status-eth-node/crypto"
+	"github.com/status-im/status-eth-node/types"
+	enstypes "github.com/status-im/status-eth-node/types/ens"
 	"github.com/status-im/status-protocol-go/encryption"
 	"github.com/status-im/status-protocol-go/encryption/multidevice"
 	"github.com/status-im/status-protocol-go/encryption/sharedsecret"
-	"github.com/status-im/status-protocol-go/ens"
 	"github.com/status-im/status-protocol-go/identity/alias"
 	"github.com/status-im/status-protocol-go/identity/identicon"
 	"github.com/status-im/status-protocol-go/sqlite"
 	transport "github.com/status-im/status-protocol-go/transport/whisper"
-	whispertypes "github.com/status-im/status-eth-node/types/whisper"
-  "github.com/status-im/status-eth-node/types"
 	protocol "github.com/status-im/status-protocol-go/v1"
 )
 
@@ -39,6 +38,7 @@ var (
 // Similarly, it needs to expose an interface to manage
 // mailservers because they can also be managed by the user.
 type Messenger struct {
+	node        types.Node
 	identity    *ecdsa.PrivateKey
 	persistence *sqlitePersistence
 	transport   *transport.WhisperServiceTransport
@@ -168,7 +168,7 @@ func WithEnvelopesMonitorConfig(emc *transport.EnvelopesMonitorConfig) Option {
 
 func NewMessenger(
 	identity *ecdsa.PrivateKey,
-	shh whispertypes.Whisper,
+	node types.Node,
 	installationID string,
 	opts ...Option,
 ) (*Messenger, error) {
@@ -254,6 +254,11 @@ func NewMessenger(
 		return nil, errors.Wrap(err, "failed to apply migrations")
 	}
 
+	shh, err := node.NewWhisper()
+	if err != nil {
+		return nil, err
+	}
+
 	// Initialize transport layer.
 	t, err := transport.NewWhisperServiceTransport(
 		shh,
@@ -292,6 +297,7 @@ func NewMessenger(
 	}
 
 	messenger = &Messenger{
+		node:                       node,
 		identity:                   identity,
 		persistence:                &sqlitePersistence{db: database},
 		transport:                  t,
@@ -404,7 +410,7 @@ func (m *Messenger) handleSharedSecrets(secrets []*sharedsecret.Secret) ([]*tran
 	var result []*transport.Filter
 	for _, secret := range secrets {
 		logger.Debug("received shared secret", zap.Binary("identity", crypto.FromECDSAPub(secret.Identity)))
-		fSecret := whispertypes.NegotiatedSecret{
+		fSecret := types.NegotiatedSecret{
 			PublicKey: secret.Identity,
 			Key:       secret.Key,
 		}
@@ -1082,9 +1088,9 @@ func Identicon(id string) (string, error) {
 	return identicon.GenerateBase64(id)
 }
 
-// VerifyENSName verifies that a registered ENS name matches the expected public key
-func (m *Messenger) VerifyENSNames(rpcEndpoint, contractAddress string, ensDetails []ens.ENSDetails) (map[string]ens.ENSResponse, error) {
-	verifier := ens.NewVerifier(m.logger)
+// VerifyENSNames verifies that a registered ENS name matches the expected public key
+func (m *Messenger) VerifyENSNames(rpcEndpoint, contractAddress string, ensDetails []enstypes.ENSDetails) (map[string]enstypes.ENSResponse, error) {
+	verifier := m.node.NewENSVerifier(m.logger)
 
 	ensResponse, err := verifier.CheckBatch(ensDetails, rpcEndpoint, contractAddress)
 	if err != nil {

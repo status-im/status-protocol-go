@@ -2,15 +2,15 @@ package gethbridge
 
 import (
 	"github.com/ethereum/go-ethereum/event"
-	whispertypes "github.com/status-im/status-eth-node/types/whisper"
+	"github.com/status-im/status-eth-node/types"
 )
 
 type gethSubscriptionWrapper struct {
 	subscription event.Subscription
 }
 
-// NewGethSubscriptionWrapper returns an object that wraps Geth's Subscription in a whispertypes interface
-func NewGethSubscriptionWrapper(subscription event.Subscription) whispertypes.Subscription {
+// NewGethSubscriptionWrapper returns an object that wraps Geth's Subscription in a types interface
+func NewGethSubscriptionWrapper(subscription event.Subscription) types.Subscription {
 	if subscription == nil {
 		panic("subscription cannot be nil")
 	}

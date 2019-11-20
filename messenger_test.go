@@ -11,14 +11,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/status-im/status-eth-node/crypto"
 	_ "github.com/mutecomm/go-sqlcipher" // require go-sqlcipher that overrides default implementation
 	gethbridge "github.com/status-im/status-eth-node/bridge/geth"
-	"github.com/status-im/status-protocol-go/ens"
-	"github.com/status-im/status-protocol-go/sqlite"
-	whispertypes "github.com/status-im/status-eth-node/types/whisper"
-	"github.com/status-im/status-protocol-go/tt"
+	"github.com/status-im/status-eth-node/crypto"
 	"github.com/status-im/status-eth-node/types"
+	enstypes "github.com/status-im/status-eth-node/types/ens"
+	"github.com/status-im/status-protocol-go/sqlite"
+	"github.com/status-im/status-protocol-go/tt"
 	protocol "github.com/status-im/status-protocol-go/v1"
 	whisper "github.com/status-im/whisper/whisperv6"
 	"github.com/stretchr/testify/suite"
@@ -46,9 +45,21 @@ type MessengerSuite struct {
 	privateKey *ecdsa.PrivateKey // private key for the main instance of Messenger
 	// If one wants to send messages between different instances of Messenger,
 	// a single Whisper service should be shared.
-	shh      whispertypes.Whisper
+	shh      types.Whisper
 	tmpFiles []*os.File // files to clean up
 	logger   *zap.Logger
+}
+
+type testNode struct {
+	shh types.Whisper
+}
+
+func (n *testNode) NewENSVerifier(_ *zap.Logger) enstypes.ENSVerifier {
+	panic("not implemented")
+}
+
+func (n *testNode) NewWhisper() (types.Whisper, error) {
+	return n.shh, nil
 }
 
 func (s *MessengerSuite) SetupTest() {
@@ -64,7 +75,7 @@ func (s *MessengerSuite) SetupTest() {
 	s.privateKey = s.m.identity
 }
 
-func (s *MessengerSuite) newMessenger(shh whispertypes.Whisper) *Messenger {
+func (s *MessengerSuite) newMessenger(shh types.Whisper) *Messenger {
 	tmpFile, err := ioutil.TempFile("", "")
 	s.Require().NoError(err)
 
@@ -81,7 +92,7 @@ func (s *MessengerSuite) newMessenger(shh whispertypes.Whisper) *Messenger {
 	}
 	m, err := NewMessenger(
 		privateKey,
-		shh,
+		&testNode{shh: shh},
 		"installation-1",
 		options...,
 	)
@@ -501,24 +512,24 @@ func (s *MessengerSuite) TestChatPersistencePrivateGroupChat() {
 		ChatType:  ChatTypePrivateGroupChat,
 		Timestamp: 10,
 		Members: []ChatMember{
-			ChatMember{
+			{
 				ID:     "1",
 				Admin:  false,
 				Joined: true,
 			},
-			ChatMember{
+			{
 				ID:     "2",
 				Admin:  true,
 				Joined: false,
 			},
-			ChatMember{
+			{
 				ID:     "3",
 				Admin:  true,
 				Joined: true,
 			},
 		},
 		MembershipUpdates: []ChatMembershipUpdate{
-			ChatMembershipUpdate{
+			{
 				ID:         "1",
 				Type:       "type-1",
 				Name:       "name-1",
@@ -528,7 +539,7 @@ func (s *MessengerSuite) TestChatPersistencePrivateGroupChat() {
 				Member:     "member-1",
 				Members:    []string{"member-1", "member-2"},
 			},
-			ChatMembershipUpdate{
+			{
 				ID:         "2",
 				Type:       "type-2",
 				Name:       "name-2",
@@ -567,12 +578,12 @@ func (s *MessengerSuite) TestBlockContact() {
 		LastUpdated: 20,
 		SystemTags:  []string{"1", "2"},
 		DeviceInfo: []ContactDeviceInfo{
-			ContactDeviceInfo{
+			{
 				InstallationID: "1",
 				Timestamp:      2,
 				FCMToken:       "token",
 			},
-			ContactDeviceInfo{
+			{
 				InstallationID: "2",
 				Timestamp:      3,
 				FCMToken:       "token-2",
@@ -626,7 +637,7 @@ func (s *MessengerSuite) TestBlockContact() {
 	contact.Name = "blocked"
 
 	messages := []*Message{
-		&Message{
+		{
 			ID:          "test-1",
 			ChatID:      chat2.ID,
 			ContentType: "content-type-1",
@@ -634,7 +645,7 @@ func (s *MessengerSuite) TestBlockContact() {
 			ClockValue:  1,
 			From:        contact.ID,
 		},
-		&Message{
+		{
 			ID:          "test-2",
 			ChatID:      chat2.ID,
 			ContentType: "content-type-2",
@@ -642,7 +653,7 @@ func (s *MessengerSuite) TestBlockContact() {
 			ClockValue:  2,
 			From:        contact.ID,
 		},
-		&Message{
+		{
 			ID:          "test-3",
 			ChatID:      chat2.ID,
 			ContentType: "content-type-3",
@@ -651,7 +662,7 @@ func (s *MessengerSuite) TestBlockContact() {
 			Seen:        false,
 			From:        "test",
 		},
-		&Message{
+		{
 			ID: "test-4",
 
 			ChatID:      chat2.ID,
@@ -661,7 +672,7 @@ func (s *MessengerSuite) TestBlockContact() {
 			Seen:        false,
 			From:        "test",
 		},
-		&Message{
+		{
 			ID:          "test-5",
 			ChatID:      chat2.ID,
 			ContentType: "content-type-5",
@@ -670,7 +681,7 @@ func (s *MessengerSuite) TestBlockContact() {
 			Seen:        true,
 			From:        "test",
 		},
-		&Message{
+		{
 			ID:          "test-6",
 			ChatID:      chat3.ID,
 			ContentType: "content-type-6",
@@ -679,7 +690,7 @@ func (s *MessengerSuite) TestBlockContact() {
 			Seen:        false,
 			From:        contact.ID,
 		},
-		&Message{
+		{
 			ID:          "test-7",
 			ChatID:      chat3.ID,
 			ContentType: "content-type-7",
@@ -740,12 +751,12 @@ func (s *MessengerSuite) TestContactPersistence() {
 		LastUpdated: 20,
 		SystemTags:  []string{"1", "2"},
 		DeviceInfo: []ContactDeviceInfo{
-			ContactDeviceInfo{
+			{
 				InstallationID: "1",
 				Timestamp:      2,
 				FCMToken:       "token",
 			},
-			ContactDeviceInfo{
+			{
 				InstallationID: "2",
 				Timestamp:      3,
 				FCMToken:       "token-2",
@@ -777,23 +788,23 @@ func (s *MessengerSuite) TestVerifyENSNames() {
 	pk3 := "044fee950d9748606da2f77d3c51bf16134a59bde4903aa68076a45d9eefbb54182a24f0c74b381bad0525a90e78770d11559aa02f77343d172f386e3b521c277a"
 	pk4 := "not a valid pk"
 
-	ensDetails := []ens.ENSDetails{
-		ens.ENSDetails{
+	ensDetails := []enstypes.ENSDetails{
+		{
 			Name:            "pedro.stateofus.eth",
 			PublicKeyString: pk1,
 		},
 		// Not matching pk -> name
-		ens.ENSDetails{
+		{
 			Name:            "pedro.stateofus.eth",
 			PublicKeyString: pk2,
 		},
 		// Not existing name
-		ens.ENSDetails{
+		{
 			Name:            "definitelynotpedro.stateofus.eth",
 			PublicKeyString: pk3,
 		},
 		// Malformed pk
-		ens.ENSDetails{
+		{
 			Name:            "pedro.stateofus.eth",
 			PublicKeyString: pk4,
 		},
@@ -850,12 +861,12 @@ func (s *MessengerSuite) TestContactPersistenceUpdate() {
 		LastUpdated: 20,
 		SystemTags:  []string{"1", "2"},
 		DeviceInfo: []ContactDeviceInfo{
-			ContactDeviceInfo{
+			{
 				InstallationID: "1",
 				Timestamp:      2,
 				FCMToken:       "token",
 			},
-			ContactDeviceInfo{
+			{
 				InstallationID: "2",
 				Timestamp:      3,
 				FCMToken:       "token-2",
@@ -991,11 +1002,11 @@ func (s *MessengerSuite) TestGroupChatMessages() {
 }
 
 type mockSendMessagesRequest struct {
-	whispertypes.Whisper
-	req whispertypes.MessagesRequest
+	types.Whisper
+	req types.MessagesRequest
 }
 
-func (m *mockSendMessagesRequest) SendMessagesRequest(peerID []byte, request whispertypes.MessagesRequest) error {
+func (m *mockSendMessagesRequest) SendMessagesRequest(peerID []byte, request types.MessagesRequest) error {
 	m.req = request
 	return nil
 }
