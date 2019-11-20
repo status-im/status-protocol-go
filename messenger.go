@@ -1121,19 +1121,19 @@ func (p *postProcessor) matchMessage(message *protocol.Message, chats []*Chat) (
 	}
 
 	switch {
-	case message.MessageType == int32(protobuf.ChatMessage_PUBLIC_GROUP):
+	case message.MessageType == protobuf.ChatMessage_PUBLIC_GROUP:
 		// For public messages, all outgoing and incoming messages have the same chatID
 		// equal to a public chat name.
-		chatID := message.Content.ChatID
+		chatID := message.ChatId
 		chat := findChatByID(chatID, chats)
 		if chat == nil {
 			return nil, errors.New("received a public message from non-existing chat")
 		}
 		return chat, nil
-	case message.MessageType == int32(protobuf.ChatMessage_ONE_TO_ONE) && isPubKeyEqual(message.SigPubKey, p.myPublicKey):
+	case message.MessageType == protobuf.ChatMessage_ONE_TO_ONE && isPubKeyEqual(message.SigPubKey, p.myPublicKey):
 		// It's a private message coming from us so we rely on Message.Content.ChatID.
 		// If chat does not exist, it should be created to support multidevice synchronization.
-		chatID := message.Content.ChatID
+		chatID := message.ChatId
 		chat := findChatByID(chatID, chats)
 		if chat == nil {
 			// TODO: this should be a three-word name used in the mobile client
@@ -1144,7 +1144,7 @@ func (p *postProcessor) matchMessage(message *protocol.Message, chats []*Chat) (
 			chat = &newChat
 		}
 		return chat, nil
-	case message.MessageType == int32(protobuf.ChatMessage_ONE_TO_ONE):
+	case message.MessageType == protobuf.ChatMessage_ONE_TO_ONE:
 		// It's an incoming private message. ChatID is calculated from the signature.
 		// If a chat does not exist, a new one is created and saved.
 		chatID := statusproto.EncodeHex(crypto.FromECDSAPub(message.SigPubKey))
@@ -1158,10 +1158,10 @@ func (p *postProcessor) matchMessage(message *protocol.Message, chats []*Chat) (
 			chat = &newChat
 		}
 		return chat, nil
-	case message.MessageType == int32(protobuf.ChatMessage_PRIVATE_GROUP):
+	case message.MessageType == protobuf.ChatMessage_PRIVATE_GROUP:
 		// In the case of a group message, ChatID is the same for all messages belonging to a group.
 		// It needs to be verified if the signature public key belongs to the chat.
-		chatID := message.Content.ChatID
+		chatID := message.ChatId
 		chat := findChatByID(chatID, chats)
 		if chat == nil {
 			return nil, errors.New("received group chat message for non-existing chat")

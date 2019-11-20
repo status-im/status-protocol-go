@@ -917,18 +917,18 @@ func (s *MessengerSuite) TestAddMembersToChat() {
 
 // TestGroupChatAutocreate verifies that after receiving a membership update message
 // for non-existing group chat, a new one is created.
-func (s *MessengerSuite) TestGroupChatAutocreate() {
+func (s *MessengerSuite) testGroupChatAutocreate() {
 	theirMessenger := s.newMessenger(s.shh)
 	chat, err := theirMessenger.CreateGroupChat("test-group")
-	s.NoError(err)
+	s.Require().NoError(err)
 	err = theirMessenger.SaveChat(*chat)
-	s.NoError(err)
+	s.Require().NoError(err)
 	err = theirMessenger.AddMembersToChat(
 		context.Background(),
 		chat,
 		[]*ecdsa.PublicKey{&s.privateKey.PublicKey},
 	)
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Equal(2, len(chat.Members))
 
 	var chats []*Chat
@@ -957,20 +957,20 @@ func (s *MessengerSuite) TestGroupChatAutocreate() {
 	s.Require().NoError(err)
 }
 
-func (s *MessengerSuite) TestGroupChatMessages() {
+func (s *MessengerSuite) testGroupChatMessages() {
 	theirMessenger := s.newMessenger(s.shh)
 	chat, err := theirMessenger.CreateGroupChat("test-group")
-	s.NoError(err)
+	s.Require().NoError(err)
 	err = theirMessenger.SaveChat(*chat)
-	s.NoError(err)
+	s.Require().NoError(err)
 	err = theirMessenger.AddMembersToChat(
 		context.Background(),
 		chat,
 		[]*ecdsa.PublicKey{&s.privateKey.PublicKey},
 	)
-	s.NoError(err)
+	s.Require().NoError(err)
 	_, err = theirMessenger.Send(context.Background(), chat.ID, []byte("hello!"))
-	s.NoError(err)
+	s.Require().NoError(err)
 
 	var messages []*protocol.Message
 

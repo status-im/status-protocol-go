@@ -38,16 +38,16 @@ type MessageProcessorSuite struct {
 }
 
 func (s *MessageProcessorSuite) SetupTest() {
-	s.testMessage = protocol.Message{
-		Text:        "abc123",
-		ContentType: 0,
-		MessageType: 2,
-		Clock:       154593077368201,
-		Timestamp:   1545930773682,
-		Content: protocol.Content{
-			ChatID: "testing-adamb",
-			Text:   "abc123",
-		},
+	s.testMessage = protocol.Message{}
+	s.testMessage.Text = "abc123"
+	s.testMessage.ChatId = "testing-adamb"
+	s.testMessage.ContentType = 0
+	s.testMessage.MessageType = 2
+	s.testMessage.Clock = 154593077368201
+	s.testMessage.Timestamp = 1545930773682
+	s.testMessage.Content = protocol.Content{
+		ChatID: "testing-adamb",
+		Text:   "abc123",
 	}
 
 	var err error
