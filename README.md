@@ -1,6 +1,6 @@
-# status-protocol-go
+# Description
 
-This is the Status Protocol implementation in Go.
+This is a __LEGACY__ Status Protocol implementation in Go.
 
-
-TBD
+It has been moved to `status-go` repo under the `protocol` folder:
+https://github.com/status-im/status-go/tree/develop/protocol
