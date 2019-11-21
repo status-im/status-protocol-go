@@ -36,9 +36,6 @@ func (messageValueEncoder) IsStringable(reflect.Value) bool {
 
 func (messageValueEncoder) Encode(e transit.Encoder, value reflect.Value, asString bool) error {
 	switch message := value.Interface().(type) {
-	case Message:
-		taggedValue := encodeMessageToTaggedValue(message)
-		return e.EncodeInterface(taggedValue, false)
 	case PairMessage:
 		taggedValue := transit.TaggedValue{
 			Tag: pairMessageTag,
@@ -86,9 +83,6 @@ func (messageValueEncoder) Encode(e transit.Encoder, value reflect.Value, asStri
 			message.ChatID,
 			updatesList,
 		}
-		if message.Message != nil {
-			value = append(value, encodeMessageToTaggedValue(*message.Message))
-		}
 		taggedValue := transit.TaggedValue{
 			Tag:   membershipUpdateTag,
 			Value: value,
@@ -97,21 +91,4 @@ func (messageValueEncoder) Encode(e transit.Encoder, value reflect.Value, asStri
 	}
 
 	return errors.New("unknown message type to encode")
-}
-
-func encodeMessageToTaggedValue(m Message) transit.TaggedValue {
-	return transit.TaggedValue{
-		Tag: messageTag,
-		Value: []interface{}{
-			m.Text,
-			m.ContentType,
-			m.MessageType,
-			m.Clock,
-			m.Timestamp,
-			map[interface{}]interface{}{
-				transit.Keyword("chat-id"): m.Content.ChatID,
-				transit.Keyword("text"):    m.Content.Text,
-			},
-		},
-	}
 }

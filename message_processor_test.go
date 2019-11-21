@@ -45,10 +45,6 @@ func (s *MessageProcessorSuite) SetupTest() {
 	s.testMessage.MessageType = 2
 	s.testMessage.Clock = 154593077368201
 	s.testMessage.Timestamp = 1545930773682
-	s.testMessage.Content = protocol.Content{
-		ChatID: "testing-adamb",
-		Text:   "abc123",
-	}
 
 	var err error
 

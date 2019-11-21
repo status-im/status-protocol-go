@@ -9,7 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/status-im/status-protocol-go/protobuf"
 	"github.com/status-im/status-protocol-go/sqlite"
+	protocol "github.com/status-im/status-protocol-go/v1"
 	"github.com/stretchr/testify/require"
 )
 
@@ -84,19 +86,28 @@ func TestMessageByChatID(t *testing.T) {
 	var messages []*Message
 	for i := 0; i < count; i++ {
 		messages = append(messages, &Message{
-			ID:         strconv.Itoa(i),
-			ChatID:     chatID,
-			From:       "me",
-			ClockValue: uint64(i),
+			ID: strconv.Itoa(i),
+			Message: &protocol.Message{
+				LocalChatID: chatID,
+				ChatMessage: protobuf.ChatMessage{
+					Clock: uint64(i),
+				},
+			},
+			From: "me",
 		})
 
 		// Add some other chats.
 		if count%5 == 0 {
 			messages = append(messages, &Message{
-				ID:         strconv.Itoa(count + i),
-				ChatID:     "other-chat",
-				From:       "me",
-				ClockValue: uint64(i),
+				ID: strconv.Itoa(count + i),
+				Message: &protocol.Message{
+					LocalChatID: "other-chat",
+					ChatMessage: protobuf.ChatMessage{
+						Clock: uint64(i),
+					},
+				},
+
+				From: "me",
 			})
 		}
 	}
@@ -106,10 +117,15 @@ func TestMessageByChatID(t *testing.T) {
 	allCount := count + outOfOrderCount
 	for i := 0; i < pageSize+1; i++ {
 		messages = append(messages, &Message{
-			ID:         strconv.Itoa(count*2 + i),
-			ChatID:     chatID,
-			From:       "me",
-			ClockValue: uint64(i), // use very old clock values
+			ID: strconv.Itoa(count*2 + i),
+			Message: &protocol.Message{
+				LocalChatID: chatID,
+				ChatMessage: protobuf.ChatMessage{
+					Clock: uint64(i),
+				},
+			},
+
+			From: "me",
 		})
 	}
 
@@ -143,7 +159,7 @@ func TestMessageByChatID(t *testing.T) {
 		t,
 		// Verify descending order.
 		sort.SliceIsSorted(result, func(i, j int) bool {
-			return result[i].ClockValue > result[j].ClockValue
+			return result[i].Clock > result[j].Clock
 		}),
 	)
 }
@@ -154,28 +170,40 @@ func TestMessageReplies(t *testing.T) {
 	p := sqlitePersistence{db: db}
 	chatID := "super-chat"
 	message1 := &Message{
-		ID:         "id-1",
-		ChatID:     chatID,
-		Content:    "content-1",
-		From:       "1",
-		ClockValue: uint64(1),
+		ID: "id-1",
+		Message: &protocol.Message{
+			LocalChatID: chatID,
+			ChatMessage: protobuf.ChatMessage{
+				Text:  "content-1",
+				Clock: uint64(1),
+			},
+		},
 	}
 	message2 := &Message{
-		ID:         "id-2",
-		ChatID:     chatID,
-		Content:    "content-2",
-		From:       "2",
-		ClockValue: uint64(2),
-		ReplyTo:    "id-1",
+		ID: "id-2",
+		Message: &protocol.Message{
+			LocalChatID: chatID,
+			ChatMessage: protobuf.ChatMessage{
+				Text:       "content-2",
+				Clock:      uint64(2),
+				ResponseTo: "id-1",
+			},
+		},
+
+		From: "2",
 	}
 
 	message3 := &Message{
-		ID:         "id-3",
-		ChatID:     chatID,
-		Content:    "content-3",
-		From:       "3",
-		ClockValue: uint64(3),
-		ReplyTo:    "non-existing",
+		ID: "id-3",
+		Message: &protocol.Message{
+			LocalChatID: chatID,
+			ChatMessage: protobuf.ChatMessage{
+				Text:       "content-3",
+				Clock:      uint64(3),
+				ResponseTo: "non-existing",
+			},
+		},
+		From: "3",
 	}
 
 	messages := []*Message{message1, message2, message3}
@@ -186,17 +214,17 @@ func TestMessageReplies(t *testing.T) {
 	retrievedMessages, _, err := p.MessageByChatID(chatID, "", 10)
 	require.NoError(t, err)
 
-	require.Equal(t, "non-existing", retrievedMessages[0].ReplyTo)
+	require.Equal(t, "non-existing", retrievedMessages[0].ResponseTo)
 	require.Nil(t, retrievedMessages[0].QuotedMessage)
 
-	require.Equal(t, "id-1", retrievedMessages[1].ReplyTo)
+	require.Equal(t, "id-1", retrievedMessages[1].ResponseTo)
 	require.Equal(t, &QuotedMessage{From: "1", Content: "content-1"}, retrievedMessages[1].QuotedMessage)
 
-	require.Equal(t, "", retrievedMessages[2].ReplyTo)
+	require.Equal(t, "", retrievedMessages[2].ResponseTo)
 	require.Nil(t, retrievedMessages[2].QuotedMessage)
 }
 
-func TestMessageByChatIDWithTheSameClockValues(t *testing.T) {
+func TestMessageByChatIDWithTheSameClocks(t *testing.T) {
 	db, err := openTestDB()
 	require.NoError(t, err)
 	p := sqlitePersistence{db: db}
@@ -209,10 +237,14 @@ func TestMessageByChatIDWithTheSameClockValues(t *testing.T) {
 
 	for i, clock := range clockValues {
 		messages = append(messages, &Message{
-			ID:         strconv.Itoa(i),
-			ChatID:     chatID,
-			From:       "me",
-			ClockValue: clock,
+			ID: strconv.Itoa(i),
+			Message: &protocol.Message{
+				LocalChatID: chatID,
+				ChatMessage: protobuf.ChatMessage{
+					Clock: clock,
+				},
+			},
+			From: "me",
 		})
 	}
 
@@ -242,16 +274,16 @@ func TestMessageByChatIDWithTheSameClockValues(t *testing.T) {
 	require.Empty(t, cursor) // for loop should exit because of cursor being empty
 	require.Len(t, result, count)
 	// Verify the order.
-	expectedClockValues := make([]uint64, len(clockValues))
-	copy(expectedClockValues, clockValues)
-	sort.Slice(expectedClockValues, func(i, j int) bool {
-		return expectedClockValues[i] > expectedClockValues[j]
+	expectedClocks := make([]uint64, len(clockValues))
+	copy(expectedClocks, clockValues)
+	sort.Slice(expectedClocks, func(i, j int) bool {
+		return expectedClocks[i] > expectedClocks[j]
 	})
-	resultClockValues := make([]uint64, 0, len(clockValues))
+	resultClocks := make([]uint64, 0, len(clockValues))
 	for _, m := range result {
-		resultClockValues = append(resultClockValues, m.ClockValue)
+		resultClocks = append(resultClocks, m.Clock)
 	}
-	require.EqualValues(t, expectedClockValues, resultClockValues)
+	require.EqualValues(t, expectedClocks, resultClocks)
 }
 
 func TestDeleteMessageByID(t *testing.T) {
@@ -402,8 +434,11 @@ func openTestDB() (*sql.DB, error) {
 
 func insertMinimalMessage(p sqlitePersistence, id string) error {
 	return p.SaveMessagesLegacy([]*Message{&Message{
-		ID:     id,
-		ChatID: "chat-id",
-		From:   "me",
+		ID: id,
+		Message: &protocol.Message{
+			LocalChatID: "chat-id",
+		},
+
+		From: "me",
 	}})
 }

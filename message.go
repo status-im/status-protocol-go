@@ -2,9 +2,17 @@ package statusproto
 
 import (
 	"database/sql/driver"
+	"encoding/json"
 
+	"github.com/gomarkdown/markdown"
+	"github.com/gomarkdown/markdown/ast"
 	"github.com/pkg/errors"
+	"github.com/status-im/status-protocol-go/protobuf"
 	statusproto "github.com/status-im/status-protocol-go/types"
+	sendmessage "github.com/status-im/status-protocol-go/v1"
+	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 type hexutilSQL statusproto.HexBytes
@@ -40,6 +48,8 @@ type QuotedMessage struct {
 // Encoding and decoding of byte blobs should be performed
 // using hexutil package.
 type Message struct {
+	*sendmessage.Message
+
 	// ID calculated as keccak256(compressedAuthorPubKey, data) where data is unencrypted payload.
 	ID string `json:"id"`
 	// WhisperTimestamp is a timestamp of a Whisper envelope.
@@ -52,20 +62,53 @@ type Message struct {
 	Identicon string `json:"identicon"`
 	// To is a public key of the recipient unless it's a public message then it's empty.
 	To hexutilSQL `json:"to,omitempty"`
-	// BEGIN: fields from protocol.Message.
-	Content     string `json:"content"`
-	ContentType int32  `json:"contentType"`
-	Timestamp   uint64 `json:"timestamp"`
-	ChatID      string `json:"chatId"`
-	MessageType int32  `json:"messageType,omitempty"`
-	ClockValue  uint64 `json:"clockValue"`
-	// END
-	Username       string `json:"username,omitempty"`
+
 	RetryCount     int    `json:"retryCount"`
-	Show           bool   `json:"show"` // default true
 	Seen           bool   `json:"seen"`
 	OutgoingStatus string `json:"outgoingStatus,omitempty"`
-	// MessageID of the replied message
-	ReplyTo       string         `json:"replyTo"`
+
 	QuotedMessage *QuotedMessage `json:"quotedMessage"`
+
+	// Computed fields
+	RTL        bool     `json:"rtl"`
+	ParsedText ast.Node `json:"parsedText"`
+	LineCount  int      `json:"lineCount"`
+}
+
+func (m *Message) MarshalJSON() ([]byte, error) {
+	type MessageAlias Message
+	item := struct {
+		*MessageAlias
+		ChatId      string                           `json:"chatId"`
+		ResponseTo  string                           `json:"responseTo"`
+		EnsName     string                           `json:"ensName"`
+		Sticker     *protobuf.StickerMessage         `json:"sticker"`
+		ContentType protobuf.ChatMessage_ContentType `json:"contentType"`
+	}{
+		MessageAlias: (*MessageAlias)(m),
+		ChatId:       m.ChatId,
+		ResponseTo:   m.ResponseTo,
+		EnsName:      m.EnsName,
+		Sticker:      m.GetSticker(),
+		ContentType:  m.ContentType,
+	}
+
+	return json.Marshal(item)
+}
+
+// Check if the first character is Hebrew or Arabic or the RTL character
+func isRTL(s string) bool {
+	first, _ := utf8.DecodeRuneInString(s)
+	return unicode.Is(unicode.Hebrew, first) ||
+		unicode.Is(unicode.Arabic, first) ||
+		// RTL character
+		first == '\u200f'
+}
+
+// PrepareContent return the parsed content of the message, the line-count and whether
+// is a right-to-left message
+func (m *Message) PrepareContent() {
+	m.ParsedText = markdown.Parse([]byte(m.Text), nil)
+	m.LineCount = strings.Count(m.Text, "\n")
+	m.RTL = isRTL(m.Text)
 }

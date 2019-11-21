@@ -15,6 +15,7 @@ import (
 	_ "github.com/mutecomm/go-sqlcipher" // require go-sqlcipher that overrides default implementation
 	gethbridge "github.com/status-im/status-protocol-go/bridge/geth"
 	"github.com/status-im/status-protocol-go/ens"
+	"github.com/status-im/status-protocol-go/protobuf"
 	"github.com/status-im/status-protocol-go/sqlite"
 	whispertypes "github.com/status-im/status-protocol-go/transport/whisper/types"
 	"github.com/status-im/status-protocol-go/tt"
@@ -304,12 +305,12 @@ func (s *MessengerSuite) TestRetrieveOwnPublicRaw() {
 
 	for _, v := range messages {
 		s.Len(v, 1)
-		textMessage, ok := v[0].ParsedMessage.(protocol.Message)
+		textMessage, ok := v[0].ParsedMessage.(*Message)
 		s.Require().True(ok)
-		s.Equal(textMessage.Content.Text, text)
-		s.NotNil(textMessage.Content.ParsedText)
-		s.True(textMessage.Content.RTL)
-		s.Equal(1, textMessage.Content.LineCount)
+		s.Equal(textMessage.Text, text)
+		s.NotNil(textMessage.ParsedText)
+		s.True(textMessage.RTL)
+		s.Equal(1, textMessage.LineCount)
 	}
 }
 
@@ -627,66 +628,93 @@ func (s *MessengerSuite) TestBlockContact() {
 
 	messages := []*Message{
 		&Message{
-			ID:          "test-1",
-			ChatID:      chat2.ID,
-			ContentType: 1,
-			Content:     "test-1",
-			ClockValue:  1,
-			From:        contact.ID,
+			ID: "test-1",
+			Message: &protocol.Message{
+				LocalChatID: chat2.ID,
+				ChatMessage: protobuf.ChatMessage{
+					ContentType: 1,
+					Text:        "test-1",
+					Clock:       1,
+				},
+			},
+			From: contact.ID,
 		},
 		&Message{
-			ID:          "test-2",
-			ChatID:      chat2.ID,
-			ContentType: 2,
-			Content:     "test-2",
-			ClockValue:  2,
-			From:        contact.ID,
+			ID: "test-2",
+			Message: &protocol.Message{
+				LocalChatID: chat2.ID,
+				ChatMessage: protobuf.ChatMessage{
+					ContentType: 2,
+					Text:        "test-2",
+					Clock:       2,
+				},
+			},
+			From: contact.ID,
 		},
 		&Message{
-			ID:          "test-3",
-			ChatID:      chat2.ID,
-			ContentType: 3,
-			Content:     "test-3",
-			ClockValue:  3,
-			Seen:        false,
-			From:        "test",
+			ID: "test-3",
+			Message: &protocol.Message{
+				LocalChatID: chat2.ID,
+				ChatMessage: protobuf.ChatMessage{
+					ContentType: 3,
+					Text:        "test-3",
+					Clock:       3,
+				},
+			},
+			Seen: false,
+			From: contact.ID,
 		},
 		&Message{
 			ID: "test-4",
-
-			ChatID:      chat2.ID,
-			ContentType: 4,
-			Content:     "test-4",
-			ClockValue:  4,
-			Seen:        false,
-			From:        "test",
+			Message: &protocol.Message{
+				LocalChatID: chat2.ID,
+				ChatMessage: protobuf.ChatMessage{
+					ContentType: 4,
+					Text:        "test-4",
+					Clock:       4,
+				},
+			},
+			Seen: false,
+			From: contact.ID,
 		},
 		&Message{
-			ID:          "test-5",
-			ChatID:      chat2.ID,
-			ContentType: 5,
-			Content:     "test-5",
-			ClockValue:  5,
-			Seen:        true,
-			From:        "test",
+			ID: "test-5",
+			Message: &protocol.Message{
+				LocalChatID: chat2.ID,
+				ChatMessage: protobuf.ChatMessage{
+					ContentType: 5,
+					Text:        "test-5",
+					Clock:       5,
+				},
+			},
+			Seen: true,
+			From: contact.ID,
 		},
 		&Message{
-			ID:          "test-6",
-			ChatID:      chat3.ID,
-			ContentType: 6,
-			Content:     "test-6",
-			ClockValue:  6,
-			Seen:        false,
-			From:        contact.ID,
+			ID: "test-6",
+			Message: &protocol.Message{
+				LocalChatID: chat3.ID,
+				ChatMessage: protobuf.ChatMessage{
+					ContentType: 6,
+					Text:        "test-6",
+					Clock:       6,
+				},
+			},
+			Seen: false,
+			From: contact.ID,
 		},
 		&Message{
-			ID:          "test-7",
-			ChatID:      chat3.ID,
-			ContentType: 7,
-			Content:     "test-7",
-			ClockValue:  7,
-			Seen:        false,
-			From:        "test",
+			ID: "test-7",
+			Message: &protocol.Message{
+				LocalChatID: chat3.ID,
+				ChatMessage: protobuf.ChatMessage{
+					ContentType: 7,
+					Text:        "test-7",
+					Clock:       7,
+				},
+			},
+			Seen: false,
+			From: "test",
 		},
 	}
 
@@ -1124,14 +1152,14 @@ func (s *PostProcessorSuite) TestRun() {
 			message := tc.Message
 			message.SigPubKey = tc.SigPubKey
 			// ChatID is not set at the beginning.
-			s.Empty(message.ChatID)
+			s.Empty(message.LocalChatID)
 
 			message.ID = []byte(strconv.Itoa(idx)) // manually set the ID because messages does not go through messageProcessor
 			messages, err := s.postProcessor.Run([]*protocol.Message{&message})
 			s.NoError(err)
 			s.Require().Len(messages, len(tc.ExpectedChatIDs))
 			if len(tc.ExpectedChatIDs) != 0 {
-				s.Equal(tc.ExpectedChatIDs[0], message.ChatID)
+				s.Equal(tc.ExpectedChatIDs[0], message.LocalChatID)
 				s.EqualValues(&message, messages[0])
 			}
 		})

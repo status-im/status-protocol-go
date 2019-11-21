@@ -52,12 +52,11 @@ const (
 // Message is a chat message sent by an user.
 type Message struct {
 	protobuf.ChatMessage
-	Content Content `json:"content"`
 
-	Flags     Flags            `json:"-"`
-	ID        []byte           `json:"-"`
-	SigPubKey *ecdsa.PublicKey `json:"-"`
-	ChatID    string           `json:"-"` // reference to Chat.ID; not connected to Content.ChatID which is set by sender
+	Flags       Flags            `json:"-"`
+	ID          []byte           `json:"-"`
+	SigPubKey   *ecdsa.PublicKey `json:"-"`
+	LocalChatID string           `json:"-"` // reference to Chat.ID; not connected to Content.ChatID which is set by sender
 }
 
 func (m *Message) MarshalJSON() ([]byte, error) {
@@ -110,7 +109,6 @@ func createTextMessage(data []byte, lastClock int64, chatID string, messageType 
 	message.MessageType = messageType
 	message.Clock = uint64(clock)
 	message.Timestamp = uint64(ts)
-	message.Content = Content{ChatID: chatID, Text: text}
 	message.ChatId = chatID
 	return message
 }

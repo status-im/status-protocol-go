@@ -153,13 +153,7 @@ func (m *StatusMessage) HandleApplication() error {
 		log.Printf("[message::DecodeMessage] could not decode protobuf message: %#x, err: %v", m.Hash, err.Error())
 	} else {
 		m.MessageType = MessageT
-		message.Content = Content{
-			Text:       message.Text,
-			Name:       message.EnsName,
-			ChatID:     message.ChatId,
-			ResponseTo: message.ResponseTo,
-		}
-		m.ParsedMessage = *message
+		m.ParsedMessage = message
 
 		return nil
 	}

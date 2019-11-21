@@ -442,8 +442,8 @@ func (db sqlitePersistence) Messages(from, to time.Time) (result []*protocol.Mes
 		SELECT
 			id,
 			chat_id,
-			content_type, 
-			message_type, 
+			content_type,
+			message_type,
 			text,
 			clock,
 			timestamp,
@@ -452,7 +452,7 @@ func (db sqlitePersistence) Messages(from, to time.Time) (result []*protocol.Mes
 			public_key,
 			flags
 		FROM user_messages
-		WHERE timestamp >= ? AND timestamp <= ? 
+		WHERE timestamp >= ? AND timestamp <= ?
 		ORDER BY timestamp`,
 		protocol.TimestampInMsFromTime(from),
 		protocol.TimestampInMsFromTime(to),
@@ -463,13 +463,11 @@ func (db sqlitePersistence) Messages(from, to time.Time) (result []*protocol.Mes
 	defer rows.Close()
 
 	for rows.Next() {
-		msg := protocol.Message{
-			Content: protocol.Content{},
-		}
+		msg := protocol.Message{}
 		var pkey []byte
 		err = rows.Scan(
-			&msg.ID, &msg.ChatID, &msg.ContentType, &msg.MessageType, &msg.Text, &msg.Clock,
-			&msg.Timestamp, &msg.Content.ChatID, &msg.Content.Text, &pkey, &msg.Flags,
+			&msg.ID, &msg.LocalChatID, &msg.ContentType, &msg.MessageType, &msg.Text, &msg.Clock,
+			&msg.Timestamp, &msg.ChatId, &msg.Text, &pkey, &msg.Flags,
 		)
 		if err != nil {
 			return
@@ -502,8 +500,8 @@ func (db sqlitePersistence) SaveMessages(messages []*protocol.Message) (last int
 	stmt, err := tx.Prepare(`
 		INSERT OR IGNORE INTO user_messages(
 			id,
-			chat_id, 
-			content_type, 
+			chat_id,
+			content_type,
 			message_type,
 			text,
 			clock,
@@ -526,8 +524,8 @@ func (db sqlitePersistence) SaveMessages(messages []*protocol.Message) (last int
 			pkey = crypto.FromECDSAPub(msg.SigPubKey)
 		}
 		rst, err = stmt.Exec(
-			msg.ID, msg.ChatID, msg.ContentType, msg.MessageType, msg.Text, msg.Clock, msg.Timestamp,
-			msg.Content.ChatID, msg.Content.Text, pkey, msg.Flags,
+			msg.ID, msg.LocalChatID, msg.ContentType, msg.MessageType, msg.Text, msg.Clock, msg.Timestamp,
+			msg.ChatId, msg.Text, pkey, msg.Flags,
 		)
 		if err != nil {
 			return

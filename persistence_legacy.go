@@ -18,7 +18,7 @@ func (db sqlitePersistence) tableUserMessagesLegacyAllFields() string {
     		whisper_timestamp,
     		source,
     		destination,
-    		content,
+    		text,
     		content_type,
     		username,
     		timestamp,
@@ -26,10 +26,9 @@ func (db sqlitePersistence) tableUserMessagesLegacyAllFields() string {
     		retry_count,
     		message_type,
     		clock_value,
-    		show,
     		seen,
     		outgoing_status,
-		reply_to`
+		response_to`
 }
 
 func (db sqlitePersistence) tableUserMessagesLegacyAllFieldsJoin() string {
@@ -37,7 +36,7 @@ func (db sqlitePersistence) tableUserMessagesLegacyAllFieldsJoin() string {
     		m1.whisper_timestamp,
     		m1.source,
     		m1.destination,
-    		m1.content,
+    		m1.text,
     		m1.content_type,
     		m1.username,
     		m1.timestamp,
@@ -45,12 +44,11 @@ func (db sqlitePersistence) tableUserMessagesLegacyAllFieldsJoin() string {
     		m1.retry_count,
     		m1.message_type,
     		m1.clock_value,
-    		m1.show,
     		m1.seen,
     		m1.outgoing_status,
-		m1.reply_to,
+		m1.response_to,
 		m2.source,
-		m2.content,
+		m2.text,
 		c.alias,
 		c.identicon`
 }
@@ -73,18 +71,17 @@ func (db sqlitePersistence) tableUserMessagesLegacyScanAllFields(row scanner, me
 		&message.WhisperTimestamp,
 		&message.From, // source in table
 		&message.To,   // destination in table
-		&message.Content,
+		&message.Text,
 		&message.ContentType,
 		&message.Alias,
 		&message.Timestamp,
-		&message.ChatID,
+		&message.LocalChatID,
 		&message.RetryCount,
 		&message.MessageType,
-		&message.ClockValue,
-		&message.Show,
+		&message.Clock,
 		&message.Seen,
 		&message.OutgoingStatus,
-		&message.ReplyTo,
+		&message.ResponseTo,
 		&quotedFrom,
 		&quotedContent,
 		&alias,
@@ -113,18 +110,17 @@ func (db sqlitePersistence) tableUserMessagesLegacyAllValues(message *Message) [
 		message.WhisperTimestamp,
 		message.From, // source in table
 		message.To,   // destination in table
-		message.Content,
+		message.Text,
 		message.ContentType,
 		message.Alias,
 		message.Timestamp,
-		message.ChatID,
+		message.LocalChatID,
 		message.RetryCount,
 		message.MessageType,
-		message.ClockValue,
-		message.Show,
+		message.Clock,
 		message.Seen,
 		message.OutgoingStatus,
-		message.ReplyTo,
+		message.ResponseTo,
 	}
 }
 
@@ -141,7 +137,7 @@ func (db sqlitePersistence) MessageByID(id string) (*Message, error) {
 			LEFT JOIN
 				user_messages_legacy m2
 			ON
-			m1.reply_to = m2.id
+			m1.response_to = m2.id
 
 			LEFT JOIN
 			        contacts c
@@ -220,7 +216,7 @@ func (db sqlitePersistence) MessageByChatID(chatID string, currCursor string, li
 			LEFT JOIN
 				user_messages_legacy m2
 			ON
-			m1.reply_to = m2.id
+			m1.response_to = m2.id
 
 			LEFT JOIN
 			      contacts c
@@ -372,12 +368,7 @@ func (db sqlitePersistence) BlockContact(contact Contact) (chats []*Chat, err er
 	_, err = tx.Exec(`
 		UPDATE chats
 		SET
-			unviewed_message_count = (SELECT COUNT(1) FROM user_messages_legacy WHERE seen = 0 AND chat_id = chats.id),
-			last_message_content = (SELECT content from user_messages_legacy WHERE chat_id = chats.id ORDER BY clock_value DESC LIMIT 1),
-			last_message_timestamp = (SELECT timestamp from user_messages_legacy WHERE chat_id = chats.id ORDER BY clock_value DESC LIMIT 1),
-			last_message_clock_value = (SELECT clock_value from user_messages_legacy WHERE chat_id = chats.id ORDER BY clock_value DESC LIMIT 1),
-			last_message_content_type = (SELECT content_type from user_messages_legacy WHERE chat_id = chats.id ORDER BY clock_value DESC LIMIT 1)
-	`)
+			unviewed_message_count = (SELECT COUNT(1) FROM user_messages_legacy WHERE seen = 0 AND chat_id = chats.id)`)
 	if err != nil {
 		return
 	}

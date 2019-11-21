@@ -5,7 +5,6 @@ import (
 	"crypto/ecdsa"
 	"database/sql"
 	"encoding/hex"
-	"encoding/json"
 	"strings"
 	"time"
 
@@ -631,14 +630,10 @@ func (m *Messenger) SendChatMessage(ctx context.Context, message *protocol.Messa
 	message.Timestamp = timestamp
 
 	responseMessage := &Message{
+		Message:          message,
 		From:             hex.EncodeToString(crypto.FromECDSAPub(&m.identity.PublicKey)),
 		WhisperTimestamp: timestamp,
-		Timestamp:        timestamp,
-		ContentType:      int32(message.ContentType),
-		ChatID:           message.ChatId,
-		ClockValue:       clock,
 		Seen:             true,
-		ReplyTo:          message.ResponseTo,
 		OutgoingStatus:   "sending",
 	}
 
@@ -649,7 +644,6 @@ func (m *Messenger) SendChatMessage(ctx context.Context, message *protocol.Messa
 		publicKey := crypto.FromECDSAPub(chat.PublicKey)
 		logger.Debug("sending private message", zap.Binary("publicKey", publicKey))
 		message.MessageType = protobuf.ChatMessage_ONE_TO_ONE
-		responseMessage.MessageType = int32(message.MessageType)
 		responseMessage.To = publicKey
 		encodedMessage, err := proto.Marshal(message)
 		if err != nil {
@@ -664,7 +658,6 @@ func (m *Messenger) SendChatMessage(ctx context.Context, message *protocol.Messa
 	case ChatTypePublic:
 		logger.Debug("sending public message", zap.String("chatName", chat.Name))
 		message.MessageType = protobuf.ChatMessage_PUBLIC_GROUP
-		responseMessage.MessageType = int32(message.MessageType)
 		encodedMessage, err := proto.Marshal(message)
 		if err != nil {
 			return nil, err
@@ -678,7 +671,6 @@ func (m *Messenger) SendChatMessage(ctx context.Context, message *protocol.Messa
 	case ChatTypePrivateGroupChat:
 		logger.Debug("sending public message", zap.String("chatName", chat.Name))
 		message.MessageType = protobuf.ChatMessage_PRIVATE_GROUP
-		responseMessage.MessageType = int32(message.MessageType)
 		encodedMessage, err := proto.Marshal(message)
 		if err != nil {
 			return nil, err
@@ -700,14 +692,8 @@ func (m *Messenger) SendChatMessage(ctx context.Context, message *protocol.Messa
 	if err := m.SaveChat(*chat); err != nil {
 		return nil, err
 	}
-	content, err := json.Marshal(protocol.PrepareContent(protocol.Content{
-		Text: message.Text,
-	}))
-	if err != nil {
-		return nil, err
-	}
 
-	responseMessage.Content = string(content)
+	responseMessage.PrepareContent()
 
 	response.Chats = []*Chat{chat}
 	response.Messages = []*Message{responseMessage}
@@ -781,7 +767,7 @@ func (m *Messenger) cacheOwnMessage(chatID string, id []byte, message *protocol.
 	// Save our message because it won't be received from the transport layer.
 	message.ID = id // a Message need ID to be properly stored in the db
 	message.SigPubKey = &m.identity.PublicKey
-	message.ChatID = chatID
+	message.LocalChatID = chatID
 
 	if m.messagesPersistenceEnabled {
 		_, err := m.persistence.SaveMessages([]*protocol.Message{message})
@@ -907,9 +893,12 @@ func (m *Messenger) RetrieveRawAll() (map[transport.Filter][]*protocol.StatusMes
 
 			for _, msg := range statusMessages {
 				if msg.ParsedMessage != nil {
-					if textMessage, ok := msg.ParsedMessage.(protocol.Message); ok {
-						textMessage.Content = protocol.PrepareContent(textMessage.Content)
-						msg.ParsedMessage = textMessage
+					if textMessage, ok := msg.ParsedMessage.(*protocol.Message); ok {
+						receivedMessage := &Message{
+							Message: textMessage,
+						}
+						receivedMessage.PrepareContent()
+						msg.ParsedMessage = receivedMessage
 					}
 				}
 
@@ -1056,9 +1045,6 @@ func (p *postProcessor) Run(messages []*protocol.Message) ([]*protocol.Message, 
 	if p.config.MatchChat {
 		fns = append(fns, p.matchMessages)
 	}
-	if p.config.Parse {
-		fns = append(fns, p.parseMessages)
-	}
 	if p.config.Persist {
 		fns = append(fns, p.saveMessages)
 	}
@@ -1081,14 +1067,6 @@ func (p *postProcessor) saveMessages(messages []*protocol.Message) ([]*protocol.
 	return messages, nil
 }
 
-func (p *postProcessor) parseMessages(messages []*protocol.Message) ([]*protocol.Message, error) {
-	for _, m := range messages {
-		m.Content = protocol.PrepareContent(m.Content)
-	}
-
-	return messages, nil
-}
-
 func (p *postProcessor) matchMessages(messages []*protocol.Message) ([]*protocol.Message, error) {
 	chats, err := p.persistence.Chats()
 	if err != nil {
@@ -1102,7 +1080,7 @@ func (p *postProcessor) matchMessages(messages []*protocol.Message) ([]*protocol
 			p.logger.Error("failed to match a chat to a message", zap.Error(err))
 			continue
 		}
-		message.ChatID = chat.ID
+		message.LocalChatID = chat.ID
 		result = append(result, message)
 	}
 	return result, nil
@@ -1222,9 +1200,4 @@ func (m *Messenger) VerifyENSNames(rpcEndpoint, contractAddress string, ensDetai
 // GenerateAlias name returns the generated name given a public key hex encoded prefixed with 0x
 func GenerateAlias(id string) (string, error) {
 	return alias.GenerateFromPublicKeyString(id)
-}
-
-// PrepareContent parses the content of a message and returns the parsed version
-func (m *Messenger) PrepareContent(content protocol.Content) protocol.Content {
-	return protocol.PrepareContent(content)
 }
