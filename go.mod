@@ -5,7 +5,7 @@ go 1.13
 require (
 	github.com/aristanetworks/goarista v0.0.0-20190704150520-f44d68189fd7 // indirect
 	github.com/cenkalti/backoff/v3 v3.0.0
-	github.com/ethereum/go-ethereum v1.9.5
+	github.com/ethereum/go-ethereum v1.9.6
 	github.com/golang/protobuf v1.3.2
 	github.com/gomarkdown/markdown v0.0.0-20191113114344-af599402d015
 	github.com/google/uuid v1.1.1
