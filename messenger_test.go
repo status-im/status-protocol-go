@@ -380,7 +380,7 @@ func (s *MessengerSuite) TestChatPersistencePublic() {
 		LastClockValue:         20,
 		DeletedAtClockValue:    30,
 		UnviewedMessagesCount:  40,
-		LastMessageContentType: "something",
+		LastMessageContentType: 2,
 		LastMessageContent:     "something-else",
 	}
 
@@ -407,7 +407,7 @@ func (s *MessengerSuite) TestDeleteChat() {
 		LastClockValue:         20,
 		DeletedAtClockValue:    30,
 		UnviewedMessagesCount:  40,
-		LastMessageContentType: "something",
+		LastMessageContentType: 2,
 		LastMessageContent:     "something-else",
 	}
 
@@ -433,7 +433,7 @@ func (s *MessengerSuite) TestChatPersistenceUpdate() {
 		LastClockValue:         20,
 		DeletedAtClockValue:    30,
 		UnviewedMessagesCount:  40,
-		LastMessageContentType: "something",
+		LastMessageContentType: 2,
 		LastMessageContent:     "something-else",
 	}
 
@@ -471,7 +471,7 @@ func (s *MessengerSuite) TestChatPersistenceOneToOne() {
 		LastClockValue:         20,
 		DeletedAtClockValue:    30,
 		UnviewedMessagesCount:  40,
-		LastMessageContentType: "something",
+		LastMessageContentType: 2,
 		LastMessageContent:     "something-else",
 	}
 	publicKeyBytes, err := hex.DecodeString(pkStr[2:])
@@ -542,7 +542,7 @@ func (s *MessengerSuite) TestChatPersistencePrivateGroupChat() {
 		LastClockValue:         20,
 		DeletedAtClockValue:    30,
 		UnviewedMessagesCount:  40,
-		LastMessageContentType: "something",
+		LastMessageContentType: 3,
 		LastMessageContent:     "something-else",
 	}
 	s.Require().NoError(s.m.SaveChat(chat))
@@ -629,7 +629,7 @@ func (s *MessengerSuite) TestBlockContact() {
 		&Message{
 			ID:          "test-1",
 			ChatID:      chat2.ID,
-			ContentType: "content-type-1",
+			ContentType: 1,
 			Content:     "test-1",
 			ClockValue:  1,
 			From:        contact.ID,
@@ -637,7 +637,7 @@ func (s *MessengerSuite) TestBlockContact() {
 		&Message{
 			ID:          "test-2",
 			ChatID:      chat2.ID,
-			ContentType: "content-type-2",
+			ContentType: 2,
 			Content:     "test-2",
 			ClockValue:  2,
 			From:        contact.ID,
@@ -645,7 +645,7 @@ func (s *MessengerSuite) TestBlockContact() {
 		&Message{
 			ID:          "test-3",
 			ChatID:      chat2.ID,
-			ContentType: "content-type-3",
+			ContentType: 3,
 			Content:     "test-3",
 			ClockValue:  3,
 			Seen:        false,
@@ -655,7 +655,7 @@ func (s *MessengerSuite) TestBlockContact() {
 			ID: "test-4",
 
 			ChatID:      chat2.ID,
-			ContentType: "content-type-4",
+			ContentType: 4,
 			Content:     "test-4",
 			ClockValue:  4,
 			Seen:        false,
@@ -664,7 +664,7 @@ func (s *MessengerSuite) TestBlockContact() {
 		&Message{
 			ID:          "test-5",
 			ChatID:      chat2.ID,
-			ContentType: "content-type-5",
+			ContentType: 5,
 			Content:     "test-5",
 			ClockValue:  5,
 			Seen:        true,
@@ -673,7 +673,7 @@ func (s *MessengerSuite) TestBlockContact() {
 		&Message{
 			ID:          "test-6",
 			ChatID:      chat3.ID,
-			ContentType: "content-type-6",
+			ContentType: 6,
 			Content:     "test-6",
 			ClockValue:  6,
 			Seen:        false,
@@ -682,7 +682,7 @@ func (s *MessengerSuite) TestBlockContact() {
 		&Message{
 			ID:          "test-7",
 			ChatID:      chat3.ID,
-			ContentType: "content-type-7",
+			ContentType: 7,
 			Content:     "test-7",
 			ClockValue:  7,
 			Seen:        false,
@@ -705,8 +705,8 @@ func (s *MessengerSuite) TestBlockContact() {
 	s.Require().Equal("test-5", response[1].LastMessageContent)
 
 	// The new message content-type is updated
-	s.Require().Equal("content-type-7", response[0].LastMessageContentType)
-	s.Require().Equal("content-type-5", response[1].LastMessageContentType)
+	s.Require().Equal(int32(7), response[0].LastMessageContentType)
+	s.Require().Equal(int32(5), response[1].LastMessageContentType)
 
 	// The contact is updated
 	savedContacts, err := s.m.Contacts()
@@ -917,18 +917,18 @@ func (s *MessengerSuite) TestAddMembersToChat() {
 
 // TestGroupChatAutocreate verifies that after receiving a membership update message
 // for non-existing group chat, a new one is created.
-func (s *MessengerSuite) TestGroupChatAutocreate() {
+func (s *MessengerSuite) testGroupChatAutocreate() {
 	theirMessenger := s.newMessenger(s.shh)
 	chat, err := theirMessenger.CreateGroupChat("test-group")
-	s.NoError(err)
+	s.Require().NoError(err)
 	err = theirMessenger.SaveChat(*chat)
-	s.NoError(err)
+	s.Require().NoError(err)
 	err = theirMessenger.AddMembersToChat(
 		context.Background(),
 		chat,
 		[]*ecdsa.PublicKey{&s.privateKey.PublicKey},
 	)
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Equal(2, len(chat.Members))
 
 	var chats []*Chat
@@ -957,20 +957,20 @@ func (s *MessengerSuite) TestGroupChatAutocreate() {
 	s.Require().NoError(err)
 }
 
-func (s *MessengerSuite) TestGroupChatMessages() {
+func (s *MessengerSuite) testGroupChatMessages() {
 	theirMessenger := s.newMessenger(s.shh)
 	chat, err := theirMessenger.CreateGroupChat("test-group")
-	s.NoError(err)
+	s.Require().NoError(err)
 	err = theirMessenger.SaveChat(*chat)
-	s.NoError(err)
+	s.Require().NoError(err)
 	err = theirMessenger.AddMembersToChat(
 		context.Background(),
 		chat,
 		[]*ecdsa.PublicKey{&s.privateKey.PublicKey},
 	)
-	s.NoError(err)
+	s.Require().NoError(err)
 	_, err = theirMessenger.Send(context.Background(), chat.ID, []byte("hello!"))
-	s.NoError(err)
+	s.Require().NoError(err)
 
 	var messages []*protocol.Message
 
